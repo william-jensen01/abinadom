@@ -1,0 +1,287 @@
+CURRENT_DIR: C:\Users\wbjen\OneDrive\Documents\LDS MCP\db
+============================================================
+PHASE 1: Setup and Initialization
+============================================================
+Connecting to gc.db: ./db/gc.db
+Connecting to core.db: C:\Users\wbjen\OneDrive\Documents\LDS MCP\db\core.52.db
+Connecting to content.db: C:\Users\wbjen\OneDrive\Documents\LDS MCP\db\content.52.db
+Validating gc.db schema...
+Loading existing JSON files...
+  - sessions.json: 167 conferences
+  - conference_topics.json: 333 topics
+  - talk_metadata.json: 4006 talks
+  - talk_previews.json: 34 previews
+
+============================================================
+PHASE 2: Extract Conference Metadata
+============================================================
+Conference URI: /general-conference/2025/10
+Conference Key: 2025-10
+Conference Title: Oct 2025
+Full Title: October 2025 general conference
+
+============================================================
+PHASE 3: Process Sessions (sessions.json)
+============================================================
+Found 5 session entries
+  - Saturday Morning Session
+  - Saturday Afternoon Session
+  - Saturday Evening Session
+  - Sunday Morning Session
+  - Sunday Afternoon Session
+
+Updated api/sessions.json with 5 sessions
+
+============================================================
+PHASE 4: Build Talk Matching Map
+============================================================
+Found 35 talks in gc.db
+
+Matching talks...
+  ✓ Introduction (ID: 8801, method: uri)
+  ✗ Sustaining of General Authorities, Area Seventies, and General Officers (no match in core.db)
+  ✓ Blessed Are the Peacemakers (ID: 8802, method: uri)
+  ✓ Tune Your Heart to Jesus Christ: The Sacred Gift of Primary Music (ID: 8803, method: uri)
+  ✓ The Lord Looketh on the Heart (ID: 8804, method: uri)
+  ✓ Know Who You Really Are (ID: 8805, method: uri)
+  ✓ Be Reconciled to God (ID: 8806, method: uri)
+  ✓ Do Your Part with All Your Heart (ID: 8807, method: uri)
+  ✓ The Family Proclamation—Words from God (ID: 8808, method: uri)
+  ✓ That All May Be Edified (ID: 8809, method: uri)
+  ✓ Humble Souls at Altars Kneel (ID: 8810, method: uri)
+  ✓ The Eternal Gift of Testimony (ID: 8811, method: uri)
+  ✓ No One Sits Alone (ID: 8812, method: uri)
+  ✓ Simplicity in Christ (ID: 8813, method: uri)
+  ✓ The Lord Is Hastening His Work (ID: 8814, method: uri)
+  ✓ Jesus Christ and Your New Beginning (ID: 8815, method: uri)
+  ✓ Cheering Each Other On (ID: 8816, method: uri)
+  ✓ “Lovest Thou Me?” (ID: 8817, method: uri)
+  ✓ Remembering the Sheep (ID: 8818, method: uri)
+  ✓ The Atoning Love of Jesus Christ (ID: 8819, method: uri)
+  ✓ And Now I See (ID: 8820, method: uri)
+  ✓ Go and Do Likewise (ID: 8821, method: uri)
+  ✓ Adorned with the Virtue of Temperance (ID: 8822, method: uri)
+  ✓ The Power of Ministering to the One (ID: 8823, method: uri)
+  ✓ Look to God and Live (ID: 8824, method: uri)
+  ✓ Prophets of God (ID: 8825, method: uri)
+  ✓ Proved and Strengthened in Christ (ID: 8826, method: uri)
+  ✓ They Are Their Own Judges (ID: 8827, method: uri)
+  ✓ The Name by Which Ye Are Called (ID: 8828, method: uri)
+  ✓ Forsake Not Your Own Mercy (ID: 8829, method: uri)
+  ✓ Smiling Faces and Grateful Hearts (ID: 8830, method: uri)
+  ✓ Taking on the Name of Jesus Christ (ID: 8831, method: uri)
+  ✓ The Good News Recipe (ID: 8832, method: uri)
+  ✓ The Book of Mormon—an Immeasurable Treasure on Our Journey (ID: 8833, method: uri)
+  ✓ The Family-Centered Gospel of Jesus Christ (ID: 8834, method: uri)
+
+Matching complete:
+  - Matched: 34
+  - Unmatched: 1
+
+============================================================
+PHASE 5: Update core.talk Table
+============================================================
+  Found existing role: President of the Quorum of the Twelve Apostles (ID: 53)
+  ✓ Updated talk ID 8801: Introduction
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  ✓ Updated talk ID 8802: Blessed Are the Peacemakers
+  Found existing role: Second Counselor in the Primary General Presidency (ID: 79)
+  ✓ Updated talk ID 8803: Tune Your Heart to Jesus Christ: The Sacred Gift of Primary Music
+  Found existing role: Of the Seventy (ID: 46)
+  ✓ Updated talk ID 8804: The Lord Looketh on the Heart
+  Found existing role: Of the Seventy (ID: 46)
+  ✓ Updated talk ID 8805: Know Who You Really Are
+  Found existing role: Of the Seventy (ID: 46)
+  ✓ Updated talk ID 8806: Be Reconciled to God
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  ✓ Updated talk ID 8807: Do Your Part with All Your Heart
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  ✓ Updated talk ID 8808: The Family Proclamation—Words from God
+  Found existing role: First Counselor in the Sunday School General Presidency (ID: 20)
+  ✓ Updated talk ID 8809: That All May Be Edified
+  Found existing role: Of the Seventy (ID: 46)
+  ✓ Updated talk ID 8810: Humble Souls at Altars Kneel
+  Found existing role: Of the Seventy (ID: 46)
+  ✓ Updated talk ID 8811: The Eternal Gift of Testimony
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  ✓ Updated talk ID 8812: No One Sits Alone
+  Found existing role: Of the Seventy (ID: 46)
+  ✓ Updated talk ID 8813: Simplicity in Christ
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  ✓ Updated talk ID 8814: The Lord Is Hastening His Work
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  ✓ Updated talk ID 8815: Jesus Christ and Your New Beginning
+  Found existing role: First Counselor in the Relief Society General Presidency (ID: 19)
+  ✓ Updated talk ID 8816: Cheering Each Other On
+  Found existing role: Of the Seventy (ID: 46)
+  ✓ Updated talk ID 8817: “Lovest Thou Me?”
+  Found existing role: Of the Seventy (ID: 46)
+  ✓ Updated talk ID 8818: Remembering the Sheep
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  ✓ Updated talk ID 8819: The Atoning Love of Jesus Christ
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  ✓ Updated talk ID 8820: And Now I See
+  Found existing role: Of the Seventy (ID: 46)
+  ✓ Updated talk ID 8821: Go and Do Likewise
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  ✓ Updated talk ID 8822: Adorned with the Virtue of Temperance
+  Found existing role: Of the Seventy (ID: 46)
+  ✓ Updated talk ID 8823: The Power of Ministering to the One
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  ✓ Updated talk ID 8824: Look to God and Live
+  Found existing role: Second Counselor in the Young Women General Presidency (ID: 83)
+  ✓ Updated talk ID 8825: Prophets of God
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  ✓ Updated talk ID 8826: Proved and Strengthened in Christ
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  ✓ Updated talk ID 8827: They Are Their Own Judges
+  Found existing role: Of the Seventy (ID: 46)
+  ✓ Updated talk ID 8828: The Name by Which Ye Are Called
+  Found existing role: Of the Seventy (ID: 46)
+  ✓ Updated talk ID 8829: Forsake Not Your Own Mercy
+  Found existing role: Of the Seventy (ID: 46)
+  ✓ Updated talk ID 8830: Smiling Faces and Grateful Hearts
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  ✓ Updated talk ID 8831: Taking on the Name of Jesus Christ
+  Found existing role: Of the Seventy (ID: 46)
+  ✓ Updated talk ID 8832: The Good News Recipe
+  Found existing role: Of the Seventy (ID: 46)
+  ✓ Updated talk ID 8833: The Book of Mormon—an Immeasurable Treasure on Our Journey
+  Found existing role: President of the Quorum of the Twelve Apostles (ID: 53)
+  ✓ Updated talk ID 8834: The Family-Centered Gospel of Jesus Christ
+
+Updated 34 talks in core.talk
+
+============================================================
+PHASE 6: Add TextPreview Column to talkbody Table
+============================================================
+✓ Added TextPreview column to talkbody table
+✓ Added 34 previews to database
+✓ Updated talk_previews.json (34 total entries)
+
+============================================================
+PHASE 7: Update talk_topic and conference_topic Tables
+============================================================
+Found 150 topic-talk relationships in gc.db
+  Found existing topic: adversity (ID: 70)
+  Found existing topic: agency (ID: 71)
+  Found existing topic: anger (ID: 73)
+  Found existing topic: Atonement (ID: 4)
+  Found existing topic: belonging (ID: 84)
+  Found existing topic: Book of Mormon (ID: 6)
+  Found existing topic: charity (ID: 90)
+  Found existing topic: children (ID: 92)
+  Found existing topic: Church callings (ID: 12)
+  Found existing topic: Church doctrine (ID: 13)
+  Found existing topic: Church growth (ID: 14)
+  Found existing topic: Church leaders (ID: 16)
+  Found existing topic: commandments (ID: 94)
+  Found existing topic: contention (ID: 102)
+  Found existing topic: conversion (ID: 103)
+  Found existing topic: covenants (ID: 108)
+  Found existing topic: discipleship (ID: 119)
+  Found existing topic: divine nature (ID: 124)
+  Found existing topic: endurance (ID: 130)
+  Found existing topic: Fall (ID: 25)
+  Found existing topic: family (ID: 139)
+  Found existing topic: fear (ID: 144)
+  Found existing topic: fellowshipping (ID: 145)
+  Found existing topic: forgiveness (ID: 148)
+  Found existing topic: friendship (ID: 150)
+  Found existing topic: general conference (ID: 153)
+  Found existing topic: gifts of the Spirit (ID: 155)
+  Found existing topic: God the Father (ID: 28)
+  Found existing topic: gratitude (ID: 161)
+  Found existing topic: happiness (ID: 164)
+  Found existing topic: healing (ID: 165)
+  Found existing topic: Holy Ghost (ID: 34)
+  Found existing topic: humility (ID: 179)
+  Found existing topic: individual worth (ID: 183)
+  Found existing topic: Jesus Christ (ID: 36)
+  Found existing topic: joy (ID: 187)
+  Found existing topic: judging (ID: 188)
+  Found existing topic: kindness (ID: 190)
+  Found existing topic: learning (ID: 197)
+  Found existing topic: love (ID: 202)
+  Found existing topic: marriage (ID: 204)
+  Found existing topic: mercy (ID: 209)
+  Found existing topic: ministering (ID: 211)
+  Found existing topic: missionary service (ID: 214)
+  Found existing topic: music (ID: 220)
+  Found existing topic: obedience (ID: 224)
+  Found existing topic: parents (ID: 231)
+  Found existing topic: patience (ID: 232)
+  Found existing topic: peace (ID: 235)
+  Found existing topic: peacemaking (ID: 236)
+  Found existing topic: plan of salvation (ID: 241)
+  Found existing topic: prayer (ID: 245)
+  Found existing topic: priesthood authority (ID: 251)
+  Found existing topic: priesthood power (ID: 254)
+  Found existing topic: Primary (ID: 44)
+  Found existing topic: prophets (ID: 261)
+  Found existing topic: repentance (ID: 266)
+  Found existing topic: revelation (ID: 269)
+  Found existing topic: sacrament (ID: 272)
+  Found existing topic: scripture study (ID: 277)
+  Found existing topic: scriptures (ID: 278)
+  Found existing topic: service (ID: 285)
+  Found existing topic: talents (ID: 303)
+  Found existing topic: teaching (ID: 304)
+  Found existing topic: temples (ID: 307)
+  Found existing topic: testimony (ID: 309)
+  Found existing topic: truth (ID: 315)
+  Found existing topic: unity (ID: 317)
+  Found existing topic: worship (ID: 329)
+  Found existing topic: youth (ID: 333)
+
+✓ Added 0 new topics
+✓ Added 150 talk-topic relationships
+
+============================================================
+PHASE 8: Update conference_topics.json
+============================================================
+✓ Added 0 new entries to conference_topics.json
+  Total topics: 333
+
+============================================================
+PHASE 9: Update talk_metadata.json
+============================================================
+✓ Updated talk_metadata.json with 34 entries
+  Total entries: 4006
+
+
+============================================================
+UPDATE COMPLETE - Summary Statistics
+============================================================
+Conference: 2025-10 (Oct 2025)
+
+Talk Matching:
+  - Matched: 34
+  - Unmatched: 1
+
+Database Updates:
+  - Talks updated: 34
+  - Speaker roles created: 0
+  - Topics added: 0
+  - Talk-topic relationships added: 150
+  - Previews added: 34
+
+JSON Files Updated:
+  - api/sessions.json
+  - db/one-off-migration/conference_topics.json
+  - db/one-off-migration/talk_metadata.json
+  - db/one-off-migration/talk_previews.json
+============================================================
+
+============================================================
+INCONSISTENCY REPORT - Unmatched Talks
+============================================================
+Found 1 talks in gc.db with no match in core.db
+
+1. Sustaining of General Authorities, Area Seventies, and General Officers
+   Speaker: Henry B. Eyring
+   URI: /general-conference/2025/10/11eyring
+   Data-Aid: 168178365
+
+Full report saved to: ./unmatched_talks_2025-10.json
+============================================================

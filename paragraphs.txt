@@ -1,0 +1,121 @@
+2025 Oct
+<div class="body-block">
+	*everything except for <section>?*
+	<p data-aid="168180671" id="p_oSZnb">
+	<section id ="sec_tjtZj">
+		<header>
+			<h2 data-aid="168180679" id="p_reo58">I.</h2>
+		</header>
+		<p data-aid="168180687" id="p_iBcHl">
+	</section>
+	<section>
+		<header>
+			<h2 data-aid="168180713" id="p_rTB0K">II.</h2>
+		</header>
+		<p data-aid="168180721" id="p_wzVBV">
+	</section>
+</div>
+
+2020 Oct
+<div class="body-block">
+	<p data-aid="144620494" id="p1">
+	<p data-aid="144620543" id="p10"
+</div>
+
+2010 Oct
+<div id="primary">
+	<p uri="/ensign/2011/11/until-we-meet-again.p4" class="">
+	<p uri="/ensign/2011/11/until-we-meet-again.p5" class="">
+	<p uri="/ensign/2011/11/until-we-meet-again.p20 class="">
+</div>
+
+2000 Oct
+<div id="primary">
+	<p uri="/ensign/2000/11/your-greatest-challenge-mother.p5" class="">
+	<p uri="/ensign/2000/11/your-greatest-challenge-mother.p27" class="">
+	<p uri="/ensign/2000/11/your-greatest-challenge-mother.p54" class="">
+</div>
+
+1990 Oct
+<div id="primary">
+	Note: ignore first element: <blockquote class="intro dontHighlight">
+	<p uri="/ensign/1990/11/the-lighthouse-of-the-lord.p4" class="">
+
+	Own paragraph:
+	<div class="figure" or class="poetry">
+		<div class="stanza">
+			<div class="line">
+			<div class="line">
+			...
+		</div>
+		<div class="citationInfo">
+			<p uri="/ensign/1990/11/the-lighthouse-of-the-lord.p10" class="">
+		</div>
+	</div>
+
+	<p uri="/ensign/1990/11/the-lighthouse-of-the-lord.p11" class="">
+	<p uri="/ensign/1990/11/the-lighthouse-of-the-lord.p31" class="">
+
+	<div class="figure">
+		<ol>
+			<li>
+				<span class="label">
+					<span class="emphasis">1.</span>
+				</span>
+				<div>
+					<h2>Dating</h2>
+					<p uri="/ensign/1990/11/the-lighthouse-of-the-lord.p33" class="">
+					<p uri="/ensign/1990/11/the-lighthouse-of-the-lord.p34 class="">
+				</div>
+			</li>
+			<li>
+				<span class="label">
+					<span class="emphasis">12.</span>
+				</span>
+				<div>
+					<h2>Repentence</h2>
+					<p uri="/ensign/1990/11/the-lighthouse-of-the-lord.p76" class="">
+					<p uri="/ensign/1990/11/the-lighthouse-of-the-lord.p90" class="">
+					Own paragraph:
+					<div class="figure" or class="poetry">
+						<div class="stanza" id="">
+							<div class="line" id="">
+							<div class="line" id="">
+						</div>
+						<div class="citationInfo">
+							<p uri="/ensign/1990/11/the-lighthouse-of-the-lord.p99">
+						</div>
+					</div>
+					<p uri="/ensign/1990/11/the-lighthouse-of-the-lord.p101" class="">
+				</div>
+			</li>
+		</ol>
+	</div>
+</div>
+
+1980 Oct
+<div class="primary">
+	<p uri="/ensign/1980/11/the-circle-of-sisters.p4">
+	<p uri="/ensign/1980/11/the-circle-of-sisters.p52">
+</div>
+
+1970 Oct
+<div class="gcbody">
+	" My dear brethren and sisters: As we conclude another great conference of the Church, I desire to leave my blessings upon you. "
+	<p></p>
+	<p><b>The power to bless</b></p>
+	<p></p>
+	<p>In the name of the Lord Jesus Christ. Amen.</p>
+</div>
+
+1960 Oct
+<div class="gcbody">
+	<p></p>
+	<p></p>
+</div>
+
+1950 Oct
+<div class="gcbody">
+	<p></p>
+	<p></p>
+</div>

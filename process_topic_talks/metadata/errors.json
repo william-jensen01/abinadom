@@ -1,0 +1,123 @@
+{
+	"http_error": [],
+	"missing_data_aid": [
+		{
+			"talkID": 3090,
+			"uri": "/general-conference/1978/04/living-the-gospel-in-the-home",
+			"db_title": "Living the Gospel in the Home",
+			"reason": "No h1 element with data-aid found in HTML",
+			"solution": "added ensign uri"
+		},
+		{
+			"talkID": 3385,
+			"uri": "/general-conference/1980/04/remarks",
+			"db_title": "Remarks",
+			"reason": "No h1 element with data-aid found in HTML",
+			"solution": "added ensign uri"
+		},
+		{
+			"talkID": 3462,
+			"uri": "/general-conference/1980/10/president-kimball-speaks-out-on-morality",
+			"db_title": "President Kimball Speaks Out on Morality",
+			"reason": "No h1 element with data-aid found in HTML",
+			"solution": "Added ensign uri"
+		},
+		{
+			"talkID": 5183,
+			"uri": "/general-conference/1992/04/charity-never-faileth",
+			"db_title": "Charity Never Faileth",
+			"reason": "No h1 element with data-aid found in HTML",
+			"topic": "charity"
+		},
+		{
+			"talkID": 5264,
+			"uri": "/general-conference/1992/04/a-worldwide-sisterhood",
+			"db_title": "A Worldwide Sisterhood",
+			"reason": "No h1 element with data-aid found in HTML"
+		},
+		{
+			"talkID": 5265,
+			"uri": "/general-conference/1992/04/a-worldwide-sisterhood",
+			"db_title": "A Worldwide Sisterhood",
+			"reason": "No h1 element with data-aid found in HTML"
+		},
+		{
+			"talkID": 5263,
+			"uri": "/general-conference/1992/04/a-worldwide-sisterhood",
+			"db_title": "A Worldwide Sisterhood",
+			"reason": "No h1 element with data-aid found in HTML"
+		},
+		{
+			"talkID": 5266,
+			"uri": "/general-conference/1992/04/a-worldwide-sisterhood",
+			"db_title": "A Worldwide Sisterhood",
+			"reason": "No h1 element with data-aid found in HTML"
+		},
+		{
+			"talkID": 6293,
+			"uri": "/general-conference/1999/04/priesthood-power",
+			"db_title": "Priesthood Power",
+			"reason": "No h1 element with data-aid found in HTML"
+		},
+		{
+			"talkID": 6743,
+			"uri": "/general-conference/2002/10/ill-go-where-you-want-me-to-go",
+			"db_title": "I\u2019ll Go Where You Want Me to Go",
+			"reason": "No h1 element with data-aid found in HTML"
+		},
+		{
+			"talkID": 7518,
+			"uri": "/general-conference/2007/10/the-power-to-change",
+			"db_title": "The Power to Change",
+			"reason": "No h1 element with data-aid found in HTML"
+		},
+		{
+			"talkID": 7625,
+			"uri": "/general-conference/1992/04/a-worldwide-sisterhood",
+			"db_title": "A Worldwide Sisterhood",
+			"reason": "No h1 element with data-aid found in HTML"
+		},
+		{
+			"talkID": 7758,
+			"uri": "/general-conference/2010/10/cleansing-the-inner-temple",
+			"db_title": "Cleansing the Inner Temple",
+			"reason": "No h1 element with data-aid found in HTML"
+		},
+		{
+			"talkID": 8196,
+			"uri": "/general-conference/2016/04/valiant-in-the-testimony-of-jesus",
+			"db_title": "Valiant in the Testimony of Jesus",
+			"reason": "No h1 element with data-aid found in HTML"
+		},
+		{
+			"talkID": 8206,
+			"uri": "/general-conference/2016/04/principles-and-promises",
+			"db_title": "Principles and Promises",
+			"reason": "No h1 element with data-aid found in HTML"
+		},
+		{
+			"talkID": 8216,
+			"uri": "/general-conference/2016/04/the-doctrine-of-christ",
+			"db_title": "The Doctrine of Christ",
+			"reason": "No h1 element with data-aid found in HTML"
+		},
+		{
+			"talkID": 8385,
+			"uri": "/general-conference/2019/04/come-follow-me",
+			"db_title": "\u201cCome, Follow Me\u201d",
+			"reason": "No h1 element with data-aid found in HTML"
+		},
+		{
+			"talkID": 8392,
+			"uri": "/general-conference/2019/04/closing-remarks",
+			"db_title": "Closing Remarks",
+			"reason": "No h1 element with data-aid found in HTML"
+		},
+		{
+			"talkID": 8506,
+			"uri": "/general-conference/2021/04/hope-in-christ",
+			"db_title": "Hope in Christ",
+			"reason": "No h1 element with data-aid found in HTML"
+		}
+	]
+}

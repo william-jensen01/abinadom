@@ -1,0 +1,164 @@
+[
+	{
+		"uri": "/general-conference/1975/10/why-cant-we",
+		"TalkID": 2698,
+		"gc": true,
+		"correct_uri": "/general-conference/1975/10/why-can-t-we"
+	},
+	{
+		"uri": "/general-conference/1975/10/we-cant-do-it-alone",
+		"TalkID": 2709,
+		"gc": true,
+		"correct_uri": "/general-conference/1975/10/we-can-t-do-it-alone"
+	},
+	{
+		"uri": "/general-conference/1977/10/seeing-the-five-as",
+		"TalkID": 2987,
+		"gc": true,
+		"correct_uri": "/general-conference/1977/10/seeing-the-five-a-s"
+	},
+	{
+		"uri": "/general-conference/1977/10/they-didnt-give-up",
+		"TalkID": 3000,
+		"gc": true,
+		"correct_uri": "/general-conference/1977/10/they-didn-t-give-up"
+	},
+	{
+		"uri": "/general-conference/1978/04/living-the-gospel-in-the-home",
+		"TalkID": 3090,
+		"gc": false,
+		"correct_uri": "/ensign/1978/05/living-the-gospel-in-the-home"
+	},
+	{
+		"uri": "/general-conference/1980/04/remarks",
+		"TalkID": 3385,
+		"gc": false,
+		"correct_uri": "/ensign/1980/05/remarks"
+	},
+	{
+		"uri": "/general-conference/1980/10/president-kimball-speaks-out-on-morality",
+		"TalkID": 3462,
+		"gc": false,
+		"correct_uri": "/ensign/1980/11/president-kimball-speaks-out-on-morality"
+	},
+	{
+		"uri": "/general-conference/1987/10/theyre-not-really-happy",
+		"TalkID": 4487,
+		"gc": true,
+		"correct_uri": "/general-conference/1987/10/they-re-not-really-happy"
+	},
+	{
+		"uri": "/general-conference/1992/10/by-way-of-invitation-alma-562",
+		"TalkID": 5252,
+		"gc": true,
+		"correct_uri": "/general-conference/1992/10/by-way-of-invitation-alma-5-62"
+	},
+	{
+		"uri": "/general-conference/1992/04/a-worldwide-sisterhood",
+		"TalkID": 5263,
+		"gc": false,
+		"correct_uri": "/ensign/1992/05/a-worldwide-sisterhood/bless-the-individual-woman"
+	},
+	{
+		"uri": "/general-conference/1992/04/a-worldwide-sisterhood",
+		"TalkID": 5264,
+		"gc": false,
+		"correct_uri": "/ensign/1992/05/a-worldwide-sisterhood/strengthen-families"
+	},
+	{
+		"uri": "/general-conference/1992/04/a-worldwide-sisterhood",
+		"TalkID": 5265,
+		"gc": false,
+		"correct_uri": "/ensign/1992/05/a-worldwide-sisterhood/develop-and-exercise-charity"
+	},
+	{
+		"uri": "/general-conference/1992/04/a-worldwide-sisterhood",
+		"TalkID": 5266,
+		"gc": false,
+		"correct_uri": "/ensign/1992/05/a-worldwide-sisterhood/enjoy-a-unified-sisterhood"
+	},
+	{
+		"uri": "/general-conference/1993/04/behold-the-enemy-is-combined-dc-3812",
+		"TalkID": 5324,
+		"gc": true,
+		"correct_uri": "/general-conference/1993/04/behold-the-enemy-is-combined-d-c-38-12"
+	},
+	{
+		"uri": "/general-conference/1994/10/dont-drop-the-ball",
+		"TalkID": 5542,
+		"gc": true,
+		"correct_uri": "/general-conference/1994/10/don-t-drop-the-ball"
+	},
+	{
+		"uri": "/general-conference/1999/04/repent-of-our-selfishness-dc-568",
+		"TalkID": 6206,
+		"gc": true,
+		"correct_uri": "/general-conference/1999/04/repent-of-our-selfishness-d-c-56-8"
+	},
+	{
+		"uri": "/general-conference/2001/04/you-cant-pet-a-rattlesnake",
+		"TalkID": 6513,
+		"gc": true,
+		"correct_uri": "/general-conference/2001/04/you-can-t-pet-a-rattlesnake"
+	},
+	{
+		"uri": "/general-conference/2002/04/it-cant-happen-to-me",
+		"TalkID": 6665,
+		"gc": true,
+		"correct_uri": "/general-conference/2002/04/it-can-t-happen-to-me"
+	},
+	{
+		"uri": "/general-conference/2002/04/ill-go-where-you-want-me-to-go",
+		"TalkID": 6680,
+		"gc": true,
+		"correct_uri": "/general-conference/2002/04/i-ll-go-where-you-want-me-to-go"
+	},
+	{
+		"uri": "/general-conference/2002/10/ill-go-where-you-want-me-to-go",
+		"TalkID": 6743,
+		"gc": true,
+		"correct_uri": "/general-conference/2002/10/i-ll-go-where-you-want-me-to-go"
+	},
+	{
+		"uri": "/general-conference/2007/04/its-true-isnt-it-then-what-else-matters",
+		"TalkID": 7422,
+		"gc": true,
+		"correct_uri": "/general-conference/2007/04/its-true-isn-t-it-then-what-else-matters"
+	},
+	{
+		"uri": "/general-conference/2007/10/dont-leave-for-tomorrow-what-you-can-do-today",
+		"TalkID": 7500,
+		"gc": true,
+		"correct_uri": "/general-conference/2007/10/don-t-leave-for-tomorrow-what-you-can-do-today"
+	},
+	{
+		"uri": "/general-conference/2007/10/the-power-to-change",
+		"TalkID": 7518,
+		"gc": false,
+		"correct_uri": "/ensign/2007/11/the-power-to-change"
+	},
+	{
+		"uri": "/general-conference/1992/04/a-worldwide-sisterhood",
+		"TalkID": 7625,
+		"gc": false,
+		"correct_uri": "/ensign/1992/05/a-worldwide-sisterhood/build-personal-testimony"
+	},
+	{
+		"uri": "/general-conference/2012/04/abide-in-the-lords-territory!",
+		"TalkID": 7860,
+		"gc": true,
+		"correct_uri": "/general-conference/2012/04/abide-in-the-lords-territory"
+	},
+	{
+		"uri": "/general-conference/2012/04/now-is-the-time-to-arise-and-shine!",
+		"TalkID": 7885,
+		"gc": true,
+		"correct_uri": "/general-conference/2012/04/now-is-the-time-to-arise-and-shine"
+	},
+	{
+		"uri": null,
+		"TalkID": 7758,
+		"gc": true,
+		"correct_uri": "/general-conference/2010/10/cleansing-the-inner-vessel"
+	}
+]

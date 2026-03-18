@@ -1,0 +1,1 @@
+download new dbs -> run various scripts sci db, ie. generate_uri_variants.py -> get TalkID using uri from church db

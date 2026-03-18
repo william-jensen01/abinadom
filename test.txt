@@ -1,0 +1,401 @@
+Create a plan for a new script that will update everything with data from a new database. I will pass the path when running the file directly using python and we will refer to it as gc. We are updating some json files "conference_topics.json", "talk_metadata.json", "sessions.json" and our db core.52.db. The script will reside in /UPDATE.py and both db files are in /db/*.db. gc db is for a specific conference session and has talks, the schema for our interested tables is attached at the bottom. The primary objective is to retrieve the topics associated with each talk and note any inconsistencies or discrepancies between talks in core and gc.
+
+WE WILL NOT BE ADDING ENTRIES TO core.talk, RATHER UPATING COLUMNS speaker_role_id, URI_GC, URI_L, data_aid.
+WE WILL ADD ENTRIES TO core.talk_topic
+NEW TABLE on core talk_preview with columns "TalkID" and "preview" where TalkID is primary key UNIQUE constraint and preview comes from gc.nav_item.preview THIS MEANS WE'LL NEED TO CREATE A "talk_previews.json" for migration and storing previous conference session previews. It'll be a long list of talk object/dictionaries so talkID, title, uri, preview.
+
+If you need any additional information prior to planning, ask away.
+
+sessions.json
+{"*year-month*": [{"content": {uri, title, subtitle}}, ...]}
+Example:
+{"1971-04": [
+    {
+      "content": {
+        "uri": "/general-conference/1971/04/out-of-the-darkness",
+        "title": "Out of the Darkness",
+        "subtitle": "Joseph Fielding Smith"
+      }
+    }, ...}
+
+Breakdown:
+uri: gc.subitem.uri OR gc.nav_item.uri
+title: gc.subitem.title OR gc.nav_item.title
+subtitle: gc.nav_item.subtitle
+
+
+conference_topics.json
+[{topic, entries: [{type, src, title, meta, secondaryMeta, uri, subtype},...]},...]
+Example:
+[{"topic": "Aaronic Priesthood", "entries": [{
+"type": item",
+"src": "https://www.churchofjesuschrist.org/imgs/...",
+"title": "Divine Authority, Sublime Young Men",
+"meta": "Apr 2025",
+"secondaryMeta": "Steven J. Lund",
+"uri": "/general-conference/2025/04/22lund",
+"subtype": "secondary"
+}]}]
+
+Breakdown:
+type: always "item"
+src: gc.nav_item.image_renditions but it has to be formatted from
+768x432,url
+192x108,url
+and just use the url
+title: gc.subitem.title OR gc.nav_item.title
+meta: gc.metadata.title formatted where month is abbreviated and remove "general conference"
+secondaryMeta: gc.nav_item.subtitle,
+subtype: "secondary"
+
+talk_metadata.json
+[{talkID, title,uri, speaker_role, data_aid},...]
+Example: 
+[{
+    "talkID": 2000,
+    "title": "Out of the Darkness",
+    "uri": "/general-conference/1971/04/out-of-the-darkness",
+    "speaker_role": "President of the Church",
+    "data_aid": "28716947"
+},...]
+
+Breakdown
+talkID: core.talk.ID
+title: gc.subitem.title OR gc.nav_item.title
+uri: gc.subitem.uri OR gc.nav_item.uri
+speaker_role: parse html within gc.subitem_content.content_html looking for <p class="author-role">
+data_aid: gc.subitem.id
+
+
+Database Schema: gc.db
+================================================================================
+
+Table: Topic
+----------------------------------------
+Columns:
+  - id: INTEGER (PRIMARY KEY, NOT NULL)
+  - name: TEXT (NOT NULL)
+  - topicId: TEXT
+Row count: 82
+Sample data (up to 5 rows):
+  Row 1:
+    id: 1
+    name: 'children'
+    topicId: 'children'
+  Row 2:
+    id: 2
+    name: 'Jesus Christ'
+    topicId: 'jesus-christ'
+
+Table: TopicSubitem
+----------------------------------------
+Columns:
+  - topicId: INTEGER (PRIMARY KEY)
+  - subitemId: TEXT (PRIMARY KEY)
+Row count: 165
+Sample data (up to 5 rows):
+  Row 1:
+    topicId: 1
+    subitemId: '165187833'
+
+Table: metadata
+----------------------------------------
+Columns:
+  - key: TEXT (PRIMARY KEY, NOT NULL)
+  - value: TEXT (NOT NULL)
+Row count: 13
+Sample data (up to 15 rows):
+  Row 1:
+    key: 'iso639_3'
+    value: 'eng'
+  Row 2:
+    key: 'schemaVersion'
+    value: '4'
+  Row 3:
+    key: 'uri'
+    value: '/general-conference/2025/04'
+  Row 4:
+    key: 'item_id'
+    value: '165040988'
+  Row 5:
+    key: 'item_external_id'
+    value: '_general-conference_2025_04_000'
+  Row 6:
+    key: 'itemPackageVersion'
+    value: '57'
+  Row 7:
+    key: 'title'
+    value: 'April 2025 general conference'
+  Row 8:
+    key: 'languageID'
+    value: '1'
+  Row 9:
+    key: 'englishLanguageName'
+    value: 'English'
+  Row 10:
+    key: 'imageRenditions'
+    value: '60x80,https://www.churchofjesuschrist.org/imgs/1hsgsztu81qrzo6i6u7l0g7d8zvop7dg9...'
+  Row 11:
+    key: 'imageAssetId'
+    value: '1hsgsztu81qrzo6i6u7l0g7d8zvop7dg93ctfug4'
+  Row 12:
+    key: 'categoryID'
+    value: '3'
+  Row 13:
+    key: 'categoryName'
+    value: 'General Conference'
+
+Table: nav_item
+----------------------------------------
+Columns:
+  - id: INTEGER (PRIMARY KEY, NOT NULL)
+  - nav_section_id: INTEGER (NOT NULL)
+  - position: INTEGER (NOT NULL)
+  - image_renditions: TEXT
+  - imageAssetId: TEXT
+  - collation_title: TEXT
+  - short_title: TEXT
+  - title: TEXT (NOT NULL)
+  - primary_title: TEXT (NOT NULL)
+  - title_number: TEXT
+  - number: TEXT
+  - subtitle: TEXT
+  - preview: TEXT
+  - uri: TEXT (NOT NULL)
+  - subitem_id: TEXT (NOT NULL)
+  - start_date: DATE
+  - end_date: DATE
+  - startDate: DATE
+  - endDate: DATE
+Row count: 39
+Sample data (up to 5 rows):
+  Row 1:
+    id: 1
+    nav_section_id: 1
+    position: 3
+    image_renditions: '768x432,https://www.churchofjesuschrist.org/imgs/0uiankirsfcjbr49rict5vmlhuom309...'
+    imageAssetId: '882xpy2kbzn2vgopmzxz67hdoznswgav8bh95o05'
+    collation_title: 'NULL'
+    short_title: 'NULL'
+    title: 'Saturday Morning Session'
+    primary_title: 'Saturday Morning Session'
+    title_number: 'NULL'
+    number: 'NULL'
+    subtitle: 'NULL'
+    preview: 'The Saturday morning session of the 195th annual general conference of The Churc...'
+    uri: '/general-conference/2025/04/saturday-morning-session'
+    subitem_id: '165027888'
+    start_date: 'NULL'
+    end_date: 'NULL'
+    startDate: 'NULL'
+    endDate: 'NULL'
+   Row 4:
+    id: 4
+    nav_section_id: 2
+    position: 7
+    image_renditions: '768x432,https://www.churchofjesuschrist.org/imgs/e6v6f8eosyr3myvwoxy5hre4yro0kic...'
+    imageAssetId: 'tqzajh3a5obew96pozwm0lekratrz87p10jam8xr'
+    collation_title: 'NULL'
+    short_title: 'NULL'
+    title: 'As a Little Child'
+    primary_title: 'As a Little Child'
+    title_number: 'NULL'
+    number: 'NULL'
+    subtitle: 'Jeffrey R. Holland'
+    preview: 'President Holland teaches the importance of becoming like a little child in orde...'
+    uri: '/general-conference/2025/04/13holland'
+    subitem_id: '165187833'
+    start_date: 'NULL'
+    end_date: 'NULL'
+    startDate: 'NULL'
+    endDate: 'NULL'
+  Row 5:
+    id: 5
+    nav_section_id: 2
+    position: 8
+    image_renditions: '768x432,https://www.churchofjesuschrist.org/imgs/oj63l5mrqyhm8750e16ihe6m0es9xuv...'
+    imageAssetId: 'le35ju6y11kz8chjy9tozla0mjtanlfzi48tzf0f'
+    collation_title: 'NULL'
+    short_title: 'NULL'
+    title: 'Spiritually Whole in Him'
+    primary_title: 'Spiritually Whole in Him'
+    title_number: 'NULL'
+    number: 'NULL'
+    subtitle: 'Camille N. Johnson'
+    preview: 'President Johnson teaches that we can be spiritually whole as we wait for physic...'
+    uri: '/general-conference/2025/04/14johnson'
+    subitem_id: '165187834'
+    start_date: 'NULL'
+    end_date: 'NULL'
+    startDate: 'NULL'
+    endDate: 'NULL'
+
+Table: subitem
+----------------------------------------
+Columns:
+  - id: TEXT (PRIMARY KEY, NOT NULL)
+  - uri: TEXT (NOT NULL)
+  - position: INTEGER (NOT NULL)
+  - title: TEXT (NOT NULL)
+  - number: TEXT
+  - version: INTEGER (NOT NULL)
+  - type: TEXT (NOT NULL)
+  - publicationDate: DATE
+Row count: 39
+Sample data (up to 5 rows):
+  Row 1:
+    id: '165027888'
+    uri: '/general-conference/2025/04/saturday-morning-session'
+    position: 0
+    title: 'Saturday Morning Session'
+    number: 'NULL'
+    version: 3
+    type: 'conferenceSession'
+    publicationDate: '2025-04-05T00:00:00.000'
+  Row 4:
+    id: '165187833'
+    uri: '/general-conference/2025/04/13holland'
+    position: 3
+    title: 'As a Little Child'
+    number: 'NULL'
+    version: 2
+    type: 'default'
+    publicationDate: '2025-04-05T00:00:00.000'
+  Row 5:
+    id: '165187834'
+    uri: '/general-conference/2025/04/14johnson'
+    position: 4
+    title: 'Spiritually Whole in Him'
+    number: 'NULL'
+    version: 2
+    type: 'default'
+    publicationDate: '2025-04-05T00:00:00.000'
+
+Table: subitem_content
+----------------------------------------
+Columns:
+  - subitem_id: TEXT (PRIMARY KEY, NOT NULL)
+  - content_html: TEXT (NOT NULL)
+Row count: 39
+Sample data (up to 5 rows):
+  Row 1:
+    subitem_id: '165027888'
+    content_html: '<!DOCTYPE html> <html xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" data...'
+
+Database Schema: core.52.db
+================================================================================
+
+Table: talk
+----------------------------------------
+Columns:
+  - ID: int (PRIMARY KEY)
+  - Corpus: text
+  - URL: text
+  - Title: text
+  - Date: text
+  - SpeakerID: int
+  - AudioUrl: text
+  - VideoLowUrl: text
+  - VideoMedUrl: text
+  - VideoHighUrl: text
+  - URI_L: TEXT
+  - URI_GC: TEXT
+  - speaker_role_id: INTEGER
+  - data_aid: TEXT
+Row count: 7659
+Sample data (up to 5 rows):
+  Row 1:
+    ID: 1
+    Corpus: 'E'
+    URL: 'NULL'
+    Title: 'Personal Testimony of the Lord’s Providence'
+    Date: '1942-04-04'
+    SpeakerID: 1313
+    AudioUrl: 'NULL'
+    VideoLowUrl: 'NULL'
+    VideoMedUrl: 'NULL'
+    VideoHighUrl: 'NULL'
+    URI_L: 'NULL'
+    URI_GC: 'NULL'
+    speaker_role_id: 'NULL'
+    data_aid: 'NULL'
+
+Table: speaker
+----------------------------------------
+Columns:
+  - ID: int
+  - GivenNames: text
+  - LastNames: text
+  - Abbr: text
+  - Info: text
+  - NameSort: text
+Row count: 643
+Sample data (up to 2 rows):
+  Row 1:
+    ID: 1001
+    GivenNames: 'Angel'
+    LastNames: 'Abrea'
+    Abbr: 'AA'
+    Info: 'NULL'
+    NameSort: 'Abrea, Angel'
+  Row 2:
+    ID: 1524
+    GivenNames: 'Reyna I.'
+    LastNames: 'Aburto'
+    Abbr: 'RIA'
+    Info: 'NULL'
+    NameSort: 'Aburto, Reyna I.'
+
+Table: conference_topic
+----------------------------------------
+Columns:
+  - id: INTEGER (PRIMARY KEY)
+  - name: TEXT (NOT NULL)
+  - slug: TEXT (NOT NULL)
+Row count: 333
+Sample data (up to 2 rows):
+  Row 1:
+    id: 1
+    name: 'Aaronic Priesthood'
+    slug: 'aaronic-priesthood'
+  Row 2:
+    id: 2
+    name: 'abortion'
+    slug: 'abortion'
+
+Table: talk_topic
+----------------------------------------
+Columns:
+  - id: INTEGER (PRIMARY KEY)
+  - topic_id: INTEGER (NOT NULL)
+  - talk_id: INTEGER (NOT NULL)
+  - content_identifier: TEXT (NOT NULL)
+Row count: 16162
+Sample data (up to 2 rows):
+  Row 1:
+    id: 1
+    topic_id: 1
+    talk_id: 8776
+    content_identifier: '/general-conference/2025/04/22lund'
+  Row 2:
+    id: 2
+    topic_id: 1
+    talk_id: 8375
+    content_identifier: '/general-conference/2019/04/32cook'
+
+Table: speaker_role
+----------------------------------------
+Columns:
+  - id: INTEGER (PRIMARY KEY)
+  - role: TEXT (NOT NULL)
+  - slug: TEXT (NOT NULL)
+Row count: 90
+Sample data (up to 2 rows):
+  Row 1:
+    id: 1
+    role: 'Acting President of the Council of the Twelve'
+    slug: 'acting-president-of-the-council-of-the-twelve'
+  Row 2:
+    id: 2
+    role: 'Acting President of the Quorum of the Twelve Apostles'
+    slug: 'acting-president-of-the-quorum-of-the-twelve-apostles'

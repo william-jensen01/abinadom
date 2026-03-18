@@ -1,0 +1,121 @@
+-----
+/#:t1059:g89b
+1985/10 Self Mastery, Russel M. Nelson
+
+db has 55 citations
+34 normal citations
+21 footnote citations
+
+VALID FOOTNOTE (source exists)
+<sup class="noteMarker">
+<span class="footnote">
+	<span class="ccontainer lbrack rsemi"><span class="citation" id="37054">Matt. 10:22</span></span>
+	<span class="ccontainer rsemi"><span class="citation" id="37079">Matt. 24:13</span></span>
+	<span class="ccontainer rsemi"><span class="citation" id="33353">Mark 13:13</span></span>
+	<span class="ccontainer rsemi"><span class="citation id="1834">1 Ne. 13:37</span></span>
+	<span class="ccontainer rsemi"><span class="citation" id="1841">1 Ne. 22:31</span></span>
+	<span class="ccontainer rsemi"><span class="citation" id="4136">2 Ne. 9:24</span></span>
+	<span class="ccontainer rsemi"><span class="citation" id="4149">2 Ne. 31:15–16, 20</span></span>
+	<span class="ccontainer rsemi"><span class="citation" id="4153">2 Ne. 33:4</span></span>
+	<span class="ccontainer rsemi"><span class="citation" id="41188">Omni 1:26</span></span>
+	<span class="ccontainer rsemi"><span class="citation" id="9466">Alma 32:13, 15</span></span>
+	<span class="ccontainer rsemi"><span class="citation" id="9486">Alma 38:2</span></span>
+	<span class="ccontainer rsemi"><span class="citation" id="5998">3 Ne. 15:9</span></span>
+	<span class="ccontainer rsemi"><span class="citation" id="6009">3 Ne. 27:6, 16–17</span></span>
+	<span class="ccontainer rsemi"><span class="citation" id="38064">Morm. 9:29</span></span>
+	<span class="ccontainer rsemi"><span class="citation" id="38498">Moro. 8:26</span></span>
+	<span class="ccontainer rsemi"><span class="citation" id="18232">D&C 10:69</span></span>
+	<span class="ccontainer rsemi"><span class="citation" id="18236">D&C 14:7</span></span>
+	<span class="ccontainer rsemi"><span class="citation" id="18240">D&C 18:22</span></span>
+	<span class="ccontainer rsemi"><span class="citation" id="18248">D&C 20:25</span></span>
+	<span class="ccontainer rsemi"><span class="citation" id="18249">D&C 20:29</span></span>
+	<span class="ccontainer rdotbrack"><span class="citation" id="18275">D&C 53:7</span></span>
+</span>
+</sup>
+
+FOOTNOTE SECTION
+<div id="references">
+<ol>
+	<li class="footnote" id="-03193_000_013">
+		<a name="-03193_000_013">&nbsp;</a>
+		<span class="label"><a name="footnoteSTAR-03193_000_013">*</a></span>
+		<p>
+			<span class="ccontainer rsemi"><span class="citation" id="37054">Matt. 10:22</span></span>
+			<span class="ccontainer rsemi"><span class="citation" id="37079">Matt. 24:13</span></span>
+			<span class="ccontainer rsemi"><span class="citation" id="33353">Mark 13:13</span></span>
+			<span class="ccontainer rsemi"><span class="citation id="1834">1 Ne. 13:37</span></span>
+			<span class="ccontainer rsemi"><span class="citation" id="1841">1 Ne. 22:31</span></span>
+			<span class="ccontainer rsemi"><span class="citation" id="4136">2 Ne. 9:24</span></span>
+			<span class="ccontainer rsemi"><span class="citation" id="4149">2 Ne. 31:15–16, 20</span></span>
+			<span class="ccontainer rsemi"><span class="citation" id="4153">2 Ne. 33:4</span></span>
+			<span class="ccontainer rsemi"><span class="citation" id="41188">Omni 1:26</span></span>
+			<span class="ccontainer rsemi"><span class="citation" id="9466">Alma 32:13, 15</span></span>
+			<span class="ccontainer rsemi"><span class="citation" id="9486">Alma 38:2</span></span>
+			<span class="ccontainer rsemi"><span class="citation" id="5998">3 Ne. 15:9</span></span>
+			<span class="ccontainer rsemi"><span class="citation" id="6009">3 Ne. 27:6, 16–17</span></span>
+			<span class="ccontainer rsemi"><span class="citation" id="38064">Morm. 9:29</span></span>
+			<span class="ccontainer rsemi"><span class="citation" id="38498">Moro. 8:26</span></span>
+			<span class="ccontainer rsemi"><span class="citation" id="18232">D&C 10:69</span></span>
+			<span class="ccontainer rsemi"><span class="citation" id="18236">D&C 14:7</span></span>
+			<span class="ccontainer rsemi"><span class="citation" id="18240">D&C 18:22</span></span>
+			<span class="ccontainer rsemi"><span class="citation" id="18248">D&C 20:25</span></span>
+			<span class="ccontainer rsemi"><span class="citation" id="18249">D&C 20:29</span></span>
+			<span class="ccontainer rdot"><span class="citation" id="18275">D&C 53:7</span></span>
+		</p>
+	</li>
+</ol>
+</div>
+
+.citation#id = db table "citation" column "ID"
+
+-----------------------------------------------
+/#:t2282:g8c3
+2025/10 The Family-Centered Gospel of Jesus Christ, Dallin H. Oaks
+
+INVALID FOOTNOTE (source unavailable)
+<sup class="noteMarker">
+<span class="footnote long">
+<span class="note-p">"The Family: A Proclamation to the World," Gospel Library.</span>
+</span>
+</span>
+</sup>
+
+<sup class="noteMarker">
+<span class="footnote long">
+<span class="note-p">Russell M. Nelson, “Faith and Families” (Brigham Young University fireside, Feb. 6, 2005), 3, speeches.byu.edu.</span>
+</span>
+</span>
+</sup>
+
+
+VALID CITATION (source available)
+<span class="ccontainer rparendot">
+	<span class="citation" id="145538">Doctrine and Covenants 68:25</span
+</span
+
+<span class="ccontainer lparen rparendot">
+	<span class="citation" id="145539">2 Nephi 2:2</span>
+</span
+
+<span class="citation" id="145540">Doctrine and Covenants 138:57-59</span>
+
+<span class="ccontainer rparendot>
+	<span class="citation" id="145541">Doctrine and Covenants 110:13-16</span>
+</span>
+
+FOOTNOTE SECTION
+<footer class="notes">
+<ol>
+	<li id="note1"><p data-aid="168180874" id="p_vssam">"The Family: A Proclamation to the World," Gospel Library.</p></li>
+	<li id="note2"><p data-aid="168180879" id="p_h3QqX">Russell M. Nelson, “Faith and Families” (Brigham Young University fireside, Feb. 6, 2005), 3, speeches.byu.edu.</p></li>
+</ol>
+</footer>
+
+
+------------------
+/#:t2278:g8c3
+2025/10 Look to God and Live, D. Todd Christofferson
+
+INVALID FOOTNOTE
+<sup class="noteMarker"><a href="#note13">13</a><span class="footnote long">[<span class="note-p">We can see around us the fruits of looking to God and having His Spirit to be with us. For example, research has found that “spiritual development is associated with protection against depression and substance abuse, and with setting young adults up for healthier relationships, more purposeful work, and greater emotional resilience” (Cornelia Powers, “The New Spiritual Leader on Campus,” <em>Atlantic</em>, May&nbsp;18, 2025, theatlantic.com).</span>
+<span class="note-p">Levels of chronic loneliness, emotional isolation, and anxiety in the general population contrast with broadly healthier lifestyles, physical and mental vitality, higher levels of education, and positive outlooks based in faith among Latter-day Saints. It’s not that we, as a people, never experience the challenges that commonly exist in the world. Rather, it is that in looking to Jesus Christ, we can prevail.</span>]</span></sup>

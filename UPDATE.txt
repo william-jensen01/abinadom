@@ -1,0 +1,621 @@
+CURRENT_DIR: C:\Users\wbjen\OneDrive\Documents\LDS MCP\db
+============================================================
+PHASE 1: Setup and Initialization
+============================================================
+Connecting to gc.db: ./db/gc.db
+Connecting to core.db: C:\Users\wbjen\OneDrive\Documents\LDS MCP\db\core.52.db
+Validating gc.db schema...
+Loading existing JSON files...
+  - sessions.json: 167 conferences
+  - conference_topics.json: 333 topics
+  - talk_metadata.json: 4006 talks
+  - talk_previews.json: 0 previews
+
+============================================================
+PHASE 2: Extract Conference Metadata
+============================================================
+Conference URI: /general-conference/2025/04
+Conference Key: 2025-04
+Conference Title: Apr 2025
+Full Title: April 2025 general conference
+
+============================================================
+PHASE 3: Process Sessions (sessions.json)
+============================================================
+Found 5 session entries
+  - Saturday Morning Session
+  - Saturday Afternoon Session
+  - Saturday Evening Session
+  - Sunday Morning Session
+  - Sunday Afternoon Session
+
+[DRY RUN] Would update api/sessions.json with 5 sessions
+
+============================================================
+PHASE 4: Build Talk Matching Map
+============================================================
+Found 34 talks in gc.db
+
+Matching talks...
+  ✗ Sustaining of General Authorities, Area Seventies, and General Officers (no match in core.db)
+  ✗ Church Auditing Department Report, 2024 (no match in core.db)
+  ✓ As a Little Child (ID: 8769, method: uri)
+  ✓ Spiritually Whole in Him (ID: 8770, method: uri)
+  ✓ Right Before Our Eyes (ID: 8771, method: uri)
+  ✓ The Atonement of Jesus Christ Provides the Ultimate Rescue (ID: 8772, method: uri)
+  ✓ My Love for the Savior Is My “Why” (ID: 8773, method: uri)
+  ✓ “Draw Near unto Me” (ID: 8774, method: uri)
+  ✓ Cherishing Life (ID: 8775, method: uri)
+  ✓ Divine Authority, Sublime Young Men (ID: 8776, method: uri)
+  ✓ “Return unto Me … That I May Heal You” (ID: 8777, method: uri)
+  ✓ Faith: A Bond of Trust and Loyalty (ID: 8778, method: uri)
+  ✓ Personal Preparation to Meet the Savior (ID: 8779, method: uri)
+  ✓ True to the Faith That Our Parents Have Cherished (ID: 8780, method: uri)
+  ✓ “By This All Will Know That You Are My Disciples” (ID: 8781, method: uri)
+  ✓ And We Talk of Christ (ID: 8782, method: uri)
+  ✓ Thou Art the Christ (ID: 8783, method: uri)
+  ✓ The Plan of Mercy (ID: 8784, method: uri)
+  ✓ Our Heavenly Guidance System (ID: 8785, method: uri)
+  ✓ Worship (ID: 8786, method: uri)
+  ✓ The Times of Restitution of All Things (ID: 8787, method: uri)
+  ✓ Participate to Prepare for Christ’s Return (ID: 8788, method: uri)
+  ✓ Your Repentance Doesn’t Burden Jesus Christ; It Brightens His Joy (ID: 8789, method: uri)
+  ✓ Compensating Blessings (ID: 8790, method: uri)
+  ✓ Eternity’s Great Gifts: Jesus Christ’s Atonement, Resurrection, Restoration (ID: 8791, method: uri)
+  ✓ Joy Through Covenant Discipleship (ID: 8792, method: uri)
+  ✓ Divine Helps for Mortality (ID: 8793, method: uri)
+  ✓ Reverence for Sacred Things (ID: 8794, method: uri)
+  ✓ Charity—a Sign of True Discipleship (ID: 8795, method: uri)
+  ✓ Beware the Second Temptation (ID: 8796, method: uri)
+  ✓ Harden Not Your Heart (ID: 8797, method: uri)
+  ✓ Receive His Gift (ID: 8798, method: uri)
+  ✓ The Love of God (ID: 8799, method: uri)
+  ✓ Confidence in the Presence of God (ID: 8800, method: uri)
+
+Matching complete:
+  - Matched: 32
+  - Unmatched: 2
+
+============================================================
+PHASE 5: Update core.talk Table
+============================================================
+  Found existing role: Acting President of the Quorum of the Twelve Apostles (ID: 2)
+  [DRY RUN] Would update talk ID 8769:
+    Title: As a Little Child
+    Speaker Role: Acting President of the Quorum of the Twelve Apostles
+    URI: /general-conference/2025/04/13holland
+    Data-Aid: 165187833
+  Found existing role: Relief Society General President (ID: 76)
+  [DRY RUN] Would update talk ID 8770:
+    Title: Spiritually Whole in Him
+    Speaker Role: Relief Society General President
+    URI: /general-conference/2025/04/14johnson
+    Data-Aid: 165187834
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  [DRY RUN] Would update talk ID 8771:
+    Title: Right Before Our Eyes
+    Speaker Role: Of the Quorum of the Twelve Apostles
+    URI: /general-conference/2025/04/15rasband
+    Data-Aid: 165187838
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  [DRY RUN] Would update talk ID 8772:
+    Title: The Atonement of Jesus Christ Provides the Ultimate Rescue
+    Speaker Role: Of the Quorum of the Twelve Apostles
+    URI: /general-conference/2025/04/16cook
+    Data-Aid: 165187841
+  Found existing role: Of the Seventy (ID: 46)
+  [DRY RUN] Would update talk ID 8773:
+    Title: My Love for the Savior Is My “Why”
+    Speaker Role: Of the Seventy
+    URI: /general-conference/2025/04/17gimenez
+    Data-Aid: 165187893
+  Found existing role: Second Counselor in the First Presidency (ID: 77)
+  [DRY RUN] Would update talk ID 8774:
+    Title: “Draw Near unto Me”
+    Speaker Role: Second Counselor in the First Presidency
+    URI: /general-conference/2025/04/18eyring
+    Data-Aid: 165188469
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  [DRY RUN] Would update talk ID 8775:
+    Title: Cherishing Life
+    Speaker Role: Of the Quorum of the Twelve Apostles
+    URI: /general-conference/2025/04/21andersen
+    Data-Aid: 165188470
+  Found existing role: Young Men General President (ID: 89)
+  [DRY RUN] Would update talk ID 8776:
+    Title: Divine Authority, Sublime Young Men
+    Speaker Role: Young Men General President
+    URI: /general-conference/2025/04/22lund
+    Data-Aid: 165187979
+  Found existing role: Of the Presidency of the Seventy (ID: 40)
+  [DRY RUN] Would update talk ID 8777:
+    Title: “Return unto Me … That I May Heal You”
+    Speaker Role: Of the Presidency of the Seventy
+    URI: /general-conference/2025/04/23palmer
+    Data-Aid: 165188538
+  Found existing role: Of the Seventy (ID: 46)
+  [DRY RUN] Would update talk ID 8778:
+    Title: Faith: A Bond of Trust and Loyalty
+    Speaker Role: Of the Seventy
+    URI: /general-conference/2025/04/24roman
+    Data-Aid: 165188028
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  [DRY RUN] Would update talk ID 8779:
+    Title: Personal Preparation to Meet the Savior
+    Speaker Role: Of the Quorum of the Twelve Apostles
+    URI: /general-conference/2025/04/25renlund
+    Data-Aid: 165188608
+  Found existing role: Of the Seventy (ID: 46)
+  [DRY RUN] Would update talk ID 8780:
+    Title: True to the Faith That Our Parents Have Cherished
+    Speaker Role: Of the Seventy
+    URI: /general-conference/2025/04/26boom
+    Data-Aid: 165188067
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  [DRY RUN] Would update talk ID 8781:
+    Title: “By This All Will Know That You Are My Disciples”
+    Speaker Role: Of the Quorum of the Twelve Apostles
+    URI: /general-conference/2025/04/27uchtdorf
+    Data-Aid: 165188693
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  [DRY RUN] Would update talk ID 8782:
+    Title: And We Talk of Christ
+    Speaker Role: Of the Quorum of the Twelve Apostles
+    URI: /general-conference/2025/04/31stevenson
+    Data-Aid: 165188695
+  Found existing role: First Counselor in the Primary General Presidency (ID: 18)
+  [DRY RUN] Would update talk ID 8783:
+    Title: Thou Art the Christ
+    Speaker Role: First Counselor in the Primary General Presidency
+    URI: /general-conference/2025/04/32wright
+    Data-Aid: 165188701
+  Found existing role: Of the Seventy (ID: 46)
+  [DRY RUN] Would update talk ID 8784:
+    Title: The Plan of Mercy
+    Speaker Role: Of the Seventy
+    URI: /general-conference/2025/04/33rasband
+    Data-Aid: 165188101
+  Found existing role: Of the Seventy (ID: 46)
+  [DRY RUN] Would update talk ID 8785:
+    Title: Our Heavenly Guidance System
+    Speaker Role: Of the Seventy
+    URI: /general-conference/2025/04/34vargas
+    Data-Aid: 165188118
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  [DRY RUN] Would update talk ID 8786:
+    Title: Worship
+    Speaker Role: Of the Quorum of the Twelve Apostles
+    URI: /general-conference/2025/04/35christofferson
+    Data-Aid: 165188761
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  [DRY RUN] Would update talk ID 8787:
+    Title: The Times of Restitution of All Things
+    Speaker Role: Of the Quorum of the Twelve Apostles
+    URI: /general-conference/2025/04/41bednar
+    Data-Aid: 165188119
+  Found existing role: Of the Seventy (ID: 46)
+  [DRY RUN] Would update talk ID 8788:
+    Title: Participate to Prepare for Christ’s Return
+    Speaker Role: Of the Seventy
+    URI: /general-conference/2025/04/42shumway
+    Data-Aid: 165188793
+  Found existing role: First Counselor in the Young Women General Presidency (ID: 22)
+  [DRY RUN] Would update talk ID 8789:
+    Title: Your Repentance Doesn’t Burden Jesus Christ; It Brightens His Joy
+    Speaker Role: First Counselor in the Young Women General Presidency
+    URI: /general-conference/2025/04/43runia
+    Data-Aid: 165188153
+  Found existing role: Presiding Bishop (ID: 59)
+  [DRY RUN] Would update talk ID 8790:
+    Title: Compensating Blessings
+    Speaker Role: Presiding Bishop
+    URI: /general-conference/2025/04/44causse
+    Data-Aid: 165188897
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  [DRY RUN] Would update talk ID 8791:
+    Title: Eternity’s Great Gifts: Jesus Christ’s Atonement, Resurrection, Restoration
+    Speaker Role: Of the Quorum of the Twelve Apostles
+    URI: /general-conference/2025/04/45gong
+    Data-Aid: 165188173
+  Found existing role: Of the Seventy (ID: 46)
+  [DRY RUN] Would update talk ID 8792:
+    Title: Joy Through Covenant Discipleship
+    Speaker Role: Of the Seventy
+    URI: /general-conference/2025/04/46mccune
+    Data-Aid: 165189010
+  Found existing role: First Counselor in the First Presidency (ID: 16)
+  [DRY RUN] Would update talk ID 8793:
+    Title: Divine Helps for Mortality
+    Speaker Role: First Counselor in the First Presidency
+    URI: /general-conference/2025/04/47oaks
+    Data-Aid: 165189013
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  [DRY RUN] Would update talk ID 8794:
+    Title: Reverence for Sacred Things
+    Speaker Role: Of the Quorum of the Twelve Apostles
+    URI: /general-conference/2025/04/51soares
+    Data-Aid: 165188194
+  Found existing role: Of the Seventy (ID: 46)
+  [DRY RUN] Would update talk ID 8795:
+    Title: Charity—a Sign of True Discipleship
+    Speaker Role: Of the Seventy
+    URI: /general-conference/2025/04/52strong
+    Data-Aid: 165189165
+  Found existing role: Of the Seventy (ID: 46)
+  [DRY RUN] Would update talk ID 8796:
+    Title: Beware the Second Temptation
+    Speaker Role: Of the Seventy
+    URI: /general-conference/2025/04/53whiting
+    Data-Aid: 165189166
+  Found existing role: Of the Seventy (ID: 46)
+  [DRY RUN] Would update talk ID 8797:
+    Title: Harden Not Your Heart
+    Speaker Role: Of the Seventy
+    URI: /general-conference/2025/04/54kim
+    Data-Aid: 165188221
+  Found existing role: Of the Quorum of the Twelve Apostles (ID: 43)
+  [DRY RUN] Would update talk ID 8798:
+    Title: Receive His Gift
+    Speaker Role: Of the Quorum of the Twelve Apostles
+    URI: /general-conference/2025/04/55kearon
+    Data-Aid: 165189259
+  Found existing role: Of the Seventy (ID: 46)
+  [DRY RUN] Would update talk ID 8799:
+    Title: The Love of God
+    Speaker Role: Of the Seventy
+    URI: /general-conference/2025/04/56tai
+    Data-Aid: 165189264
+  Found existing role: President of the Church of Jesus Christ of Latter-day Saints (ID: 51)
+  [DRY RUN] Would update talk ID 8800:
+    Title: Confidence in the Presence of God
+    Speaker Role: President of The Church of Jesus Christ of Latter-day Saints
+    URI: /general-conference/2025/04/57nelson
+    Data-Aid: 165189271
+
+Updated 32 talks in core.talk
+
+============================================================
+PHASE 6: Create and Populate talk_preview Table
+============================================================
+  [DRY RUN] Would insert preview for talk ID 8769
+  [DRY RUN] Would insert preview for talk ID 8770
+  [DRY RUN] Would insert preview for talk ID 8771
+  [DRY RUN] Would insert preview for talk ID 8772
+  [DRY RUN] Would insert preview for talk ID 8773
+  [DRY RUN] Would insert preview for talk ID 8774
+  [DRY RUN] Would insert preview for talk ID 8775
+  [DRY RUN] Would insert preview for talk ID 8776
+  [DRY RUN] Would insert preview for talk ID 8777
+  [DRY RUN] Would insert preview for talk ID 8778
+  [DRY RUN] Would insert preview for talk ID 8779
+  [DRY RUN] Would insert preview for talk ID 8780
+  [DRY RUN] Would insert preview for talk ID 8781
+  [DRY RUN] Would insert preview for talk ID 8782
+  [DRY RUN] Would insert preview for talk ID 8783
+  [DRY RUN] Would insert preview for talk ID 8784
+  [DRY RUN] Would insert preview for talk ID 8785
+  [DRY RUN] Would insert preview for talk ID 8786
+  [DRY RUN] Would insert preview for talk ID 8787
+  [DRY RUN] Would insert preview for talk ID 8788
+  [DRY RUN] Would insert preview for talk ID 8789
+  [DRY RUN] Would insert preview for talk ID 8790
+  [DRY RUN] Would insert preview for talk ID 8791
+  [DRY RUN] Would insert preview for talk ID 8792
+  [DRY RUN] Would insert preview for talk ID 8793
+  [DRY RUN] Would insert preview for talk ID 8794
+  [DRY RUN] Would insert preview for talk ID 8795
+  [DRY RUN] Would insert preview for talk ID 8796
+  [DRY RUN] Would insert preview for talk ID 8797
+  [DRY RUN] Would insert preview for talk ID 8798
+  [DRY RUN] Would insert preview for talk ID 8799
+  [DRY RUN] Would insert preview for talk ID 8800
+[DRY RUN] Would add 32 previews
+
+============================================================
+PHASE 7: Update talk_topic and conference_topic Tables
+============================================================
+Found 165 topic-talk relationships in gc.db
+  Found existing topic: Aaronic Priesthood (ID: 1)
+    [DRY RUN] Would link talk 8776 to topic Aaronic Priesthood
+  Found existing topic: abortion (ID: 2)
+    [DRY RUN] Would link talk 8775 to topic abortion
+  Found existing topic: activation (ID: 5)
+    [DRY RUN] Would link talk 8777 to topic activation
+  Found existing topic: Adam and Eve (ID: 6)
+    [DRY RUN] Would link talk 8796 to topic Adam and Eve
+  Found existing topic: adversity (ID: 8)
+    [DRY RUN] Would link talk 8772 to topic adversity
+    [DRY RUN] Would link talk 8778 to topic adversity
+    [DRY RUN] Would link talk 8790 to topic adversity
+  Found existing topic: agency (ID: 9)
+    [DRY RUN] Would link talk 8793 to topic agency
+  Found existing topic: Atonement (ID: 19)
+    [DRY RUN] Would link talk 8772 to topic Atonement
+    [DRY RUN] Would link talk 8791 to topic Atonement
+    [DRY RUN] Would link talk 8793 to topic Atonement
+    [DRY RUN] Would link talk 8796 to topic Atonement
+  Found existing topic: balance (ID: 22)
+    [DRY RUN] Would link talk 8771 to topic balance
+  Found existing topic: belonging (ID: 24)
+    [DRY RUN] Would link talk 8781 to topic belonging
+  Found existing topic: blessings (ID: 27)
+    [DRY RUN] Would link talk 8790 to topic blessings
+  Found existing topic: Book of Mormon (ID: 28)
+    [DRY RUN] Would link talk 8784 to topic Book of Mormon
+    [DRY RUN] Would link talk 8787 to topic Book of Mormon
+    [DRY RUN] Would link talk 8797 to topic Book of Mormon
+  Found existing topic: charity (ID: 33)
+    [DRY RUN] Would link talk 8795 to topic charity
+    [DRY RUN] Would link talk 8800 to topic charity
+  Found existing topic: children (ID: 35)
+    [DRY RUN] Would link talk 8769 to topic children
+    [DRY RUN] Would link talk 8775 to topic children
+    [DRY RUN] Would link talk 8783 to topic children
+  Found existing topic: Church callings (ID: 41)
+    [DRY RUN] Would link talk 8788 to topic Church callings
+  Found existing topic: Church growth (ID: 43)
+    [DRY RUN] Would link talk 8771 to topic Church growth
+  Found existing topic: commandments (ID: 50)
+    [DRY RUN] Would link talk 8793 to topic commandments
+  Found existing topic: compassion (ID: 53)
+    [DRY RUN] Would link talk 8795 to topic compassion
+  Found existing topic: confidence (ID: 54)
+    [DRY RUN] Would link talk 8800 to topic confidence
+  Found existing topic: conversion (ID: 59)
+    [DRY RUN] Would link talk 8770 to topic conversion
+  Found existing topic: covenants (ID: 64)
+    [DRY RUN] Would link talk 8783 to topic covenants
+    [DRY RUN] Would link talk 8792 to topic covenants
+    [DRY RUN] Would link talk 8793 to topic covenants
+  Found existing topic: discipleship (ID: 76)
+    [DRY RUN] Would link talk 8794 to topic discipleship
+    [DRY RUN] Would link talk 8774 to topic discipleship
+    [DRY RUN] Would link talk 8781 to topic discipleship
+    [DRY RUN] Would link talk 8783 to topic discipleship
+    [DRY RUN] Would link talk 8792 to topic discipleship
+    [DRY RUN] Would link talk 8795 to topic discipleship
+  Found existing topic: dispensations (ID: 79)
+    [DRY RUN] Would link talk 8787 to topic dispensations
+  Found existing topic: divine nature (ID: 81)
+    [DRY RUN] Would link talk 8785 to topic divine nature
+    [DRY RUN] Would link talk 8798 to topic divine nature
+  Found existing topic: Easter (ID: 85)
+    [DRY RUN] Would link talk 8791 to topic Easter
+    [DRY RUN] Would link talk 8782 to topic Easter
+  Found existing topic: education (ID: 86)
+    [DRY RUN] Would link talk 8771 to topic education
+  Found existing topic: endurance (ID: 89)
+    [DRY RUN] Would link talk 8780 to topic endurance
+    [DRY RUN] Would link talk 8785 to topic endurance
+  Found existing topic: eternal life (ID: 91)
+    [DRY RUN] Would link talk 8785 to topic eternal life
+  Found existing topic: faith (ID: 97)
+    [DRY RUN] Would link talk 8770 to topic faith
+    [DRY RUN] Would link talk 8778 to topic faith
+    [DRY RUN] Would link talk 8780 to topic faith
+    [DRY RUN] Would link talk 8777 to topic faith
+    [DRY RUN] Would link talk 8783 to topic faith
+    [DRY RUN] Would link talk 8799 to topic faith
+  Found existing topic: family (ID: 100)
+    [DRY RUN] Would link talk 8780 to topic family
+    [DRY RUN] Would link talk 8775 to topic family
+  Found existing topic: fear (ID: 105)
+    [DRY RUN] Would link talk 8779 to topic fear
+  Found existing topic: First Vision (ID: 109)
+    [DRY RUN] Would link talk 8787 to topic First Vision
+  Found existing topic: forgiveness (ID: 111)
+    [DRY RUN] Would link talk 8789 to topic forgiveness
+  Found existing topic: goals (ID: 119)
+    [DRY RUN] Would link talk 8773 to topic goals
+  Found existing topic: God the Father (ID: 120)
+    [DRY RUN] Would link talk 8786 to topic God the Father
+    [DRY RUN] Would link talk 8792 to topic God the Father
+    [DRY RUN] Would link talk 8798 to topic God the Father
+    [DRY RUN] Would link talk 8799 to topic God the Father
+  Found existing topic: gratitude (ID: 127)
+    [DRY RUN] Would link talk 8786 to topic gratitude
+  Found existing topic: healing (ID: 132)
+    [DRY RUN] Would link talk 8770 to topic healing
+  Found existing topic: Holy Ghost (ID: 140)
+    [DRY RUN] Would link talk 8797 to topic Holy Ghost
+    [DRY RUN] Would link talk 8793 to topic Holy Ghost
+  Found existing topic: hope (ID: 146)
+    [DRY RUN] Would link talk 8770 to topic hope
+    [DRY RUN] Would link talk 8778 to topic hope
+    [DRY RUN] Would link talk 8789 to topic hope
+  Found existing topic: humility (ID: 150)
+    [DRY RUN] Would link talk 8769 to topic humility
+    [DRY RUN] Would link talk 8797 to topic humility
+  Found existing topic: individual worth (ID: 154)
+    [DRY RUN] Would link talk 8789 to topic individual worth
+  Found existing topic: Jesus Christ (ID: 158)
+    [DRY RUN] Would link talk 8769 to topic Jesus Christ
+    [DRY RUN] Would link talk 8770 to topic Jesus Christ
+    [DRY RUN] Would link talk 8771 to topic Jesus Christ
+    [DRY RUN] Would link talk 8772 to topic Jesus Christ
+    [DRY RUN] Would link talk 8773 to topic Jesus Christ
+    [DRY RUN] Would link talk 8778 to topic Jesus Christ
+    [DRY RUN] Would link talk 8785 to topic Jesus Christ
+    [DRY RUN] Would link talk 8789 to topic Jesus Christ
+    [DRY RUN] Would link talk 8791 to topic Jesus Christ
+    [DRY RUN] Would link talk 8797 to topic Jesus Christ
+    [DRY RUN] Would link talk 8774 to topic Jesus Christ
+    [DRY RUN] Would link talk 8777 to topic Jesus Christ
+    [DRY RUN] Would link talk 8779 to topic Jesus Christ
+    [DRY RUN] Would link talk 8782 to topic Jesus Christ
+    [DRY RUN] Would link talk 8783 to topic Jesus Christ
+    [DRY RUN] Would link talk 8786 to topic Jesus Christ
+    [DRY RUN] Would link talk 8792 to topic Jesus Christ
+    [DRY RUN] Would link talk 8793 to topic Jesus Christ
+    [DRY RUN] Would link talk 8795 to topic Jesus Christ
+    [DRY RUN] Would link talk 8798 to topic Jesus Christ
+    [DRY RUN] Would link talk 8799 to topic Jesus Christ
+  Found existing topic: Joseph Smith (ID: 159)
+    [DRY RUN] Would link talk 8787 to topic Joseph Smith
+  Found existing topic: joy (ID: 160)
+    [DRY RUN] Would link talk 8789 to topic joy
+    [DRY RUN] Would link talk 8794 to topic joy
+    [DRY RUN] Would link talk 8792 to topic joy
+  Found existing topic: Light of Christ (ID: 171)
+    [DRY RUN] Would link talk 8782 to topic Light of Christ
+    [DRY RUN] Would link talk 8793 to topic Light of Christ
+  Found existing topic: love (ID: 176)
+    [DRY RUN] Would link talk 8773 to topic love
+    [DRY RUN] Would link talk 8789 to topic love
+    [DRY RUN] Would link talk 8774 to topic love
+    [DRY RUN] Would link talk 8775 to topic love
+    [DRY RUN] Would link talk 8781 to topic love
+    [DRY RUN] Would link talk 8792 to topic love
+    [DRY RUN] Would link talk 8795 to topic love
+    [DRY RUN] Would link talk 8798 to topic love
+    [DRY RUN] Would link talk 8799 to topic love
+  Found existing topic: loyalty (ID: 177)
+    [DRY RUN] Would link talk 8778 to topic loyalty
+  Found existing topic: mental health (ID: 182)
+    [DRY RUN] Would link talk 8770 to topic mental health
+  Found existing topic: mercy (ID: 184)
+    [DRY RUN] Would link talk 8784 to topic mercy
+  Found existing topic: missionary service (ID: 189)
+    [DRY RUN] Would link talk 8771 to topic missionary service
+    [DRY RUN] Would link talk 8780 to topic missionary service
+  Found existing topic: obedience (ID: 201)
+    [DRY RUN] Would link talk 8789 to topic obedience
+  Found existing topic: ordinances (ID: 206)
+    [DRY RUN] Would link talk 8793 to topic ordinances
+  Found existing topic: parables (ID: 207)
+    [DRY RUN] Would link talk 8779 to topic parables
+  Found existing topic: parents (ID: 209)
+    [DRY RUN] Would link talk 8780 to topic parents
+  Found existing topic: peacemaking (ID: 215)
+    [DRY RUN] Would link talk 8800 to topic peacemaking
+  Found existing topic: pioneers (ID: 219)
+    [DRY RUN] Would link talk 8772 to topic pioneers
+  Found existing topic: plan of salvation (ID: 220)
+    [DRY RUN] Would link talk 8784 to topic plan of salvation
+    [DRY RUN] Would link talk 8793 to topic plan of salvation
+  Found existing topic: prayer (ID: 224)
+    [DRY RUN] Would link talk 8778 to topic prayer
+    [DRY RUN] Would link talk 8799 to topic prayer
+  Found existing topic: preparation (ID: 227)
+    [DRY RUN] Would link talk 8779 to topic preparation
+    [DRY RUN] Would link talk 8788 to topic preparation
+  Found existing topic: priesthood (ID: 229)
+    [DRY RUN] Would link talk 8787 to topic priesthood
+  Found existing topic: priesthood authority (ID: 230)
+    [DRY RUN] Would link talk 8776 to topic priesthood authority
+  Found existing topic: purity (ID: 242)
+    [DRY RUN] Would link talk 8769 to topic purity
+  Found existing topic: repentance (ID: 249)
+    [DRY RUN] Would link talk 8789 to topic repentance
+    [DRY RUN] Would link talk 8797 to topic repentance
+    [DRY RUN] Would link talk 8777 to topic repentance
+    [DRY RUN] Would link talk 8796 to topic repentance
+  Found existing topic: Restoration (ID: 252)
+    [DRY RUN] Would link talk 8787 to topic Restoration
+    [DRY RUN] Would link talk 8791 to topic Restoration
+  Found existing topic: Resurrection (ID: 253)
+    [DRY RUN] Would link talk 8791 to topic Resurrection
+    [DRY RUN] Would link talk 8774 to topic Resurrection
+    [DRY RUN] Would link talk 8782 to topic Resurrection
+  Found existing topic: reverence (ID: 255)
+    [DRY RUN] Would link talk 8794 to topic reverence
+  Found existing topic: Sabbath (ID: 258)
+    [DRY RUN] Would link talk 8786 to topic Sabbath
+  Found existing topic: sacrament (ID: 259)
+    [DRY RUN] Would link talk 8776 to topic sacrament
+  Found existing topic: sacrifice (ID: 262)
+    [DRY RUN] Would link talk 8780 to topic sacrifice
+  Found existing topic: Second Coming (ID: 269)
+    [DRY RUN] Would link talk 8779 to topic Second Coming
+    [DRY RUN] Would link talk 8788 to topic Second Coming
+  Found existing topic: service (ID: 275)
+    [DRY RUN] Would link talk 8776 to topic service
+    [DRY RUN] Would link talk 8774 to topic service
+    [DRY RUN] Would link talk 8779 to topic service
+    [DRY RUN] Would link talk 8788 to topic service
+    [DRY RUN] Would link talk 8799 to topic service
+  Found existing topic: sin (ID: 278)
+    [DRY RUN] Would link talk 8796 to topic sin
+  Found existing topic: spiritual growth (ID: 286)
+    [DRY RUN] Would link talk 8794 to topic spiritual growth
+  Found existing topic: temple work (ID: 300)
+    [DRY RUN] Would link talk 8790 to topic temple work
+  Found existing topic: temples (ID: 301)
+    [DRY RUN] Would link talk 8771 to topic temples
+    [DRY RUN] Would link talk 8772 to topic temples
+    [DRY RUN] Would link talk 8784 to topic temples
+    [DRY RUN] Would link talk 8800 to topic temples
+  Found existing topic: temptation (ID: 302)
+    [DRY RUN] Would link talk 8796 to topic temptation
+  Found existing topic: testimony (ID: 303)
+    [DRY RUN] Would link talk 8780 to topic testimony
+  Found existing topic: traditions (ID: 308)
+    [DRY RUN] Would link talk 8773 to topic traditions
+  Found existing topic: trust (ID: 309)
+    [DRY RUN] Would link talk 8778 to topic trust
+    [DRY RUN] Would link talk 8797 to topic trust
+  Found existing topic: unity (ID: 313)
+    [DRY RUN] Would link talk 8781 to topic unity
+  Found existing topic: virtue (ID: 316)
+    [DRY RUN] Would link talk 8800 to topic virtue
+  Found existing topic: worship (ID: 327)
+    [DRY RUN] Would link talk 8786 to topic worship
+  Found existing topic: youth (ID: 332)
+    [DRY RUN] Would link talk 8776 to topic youth
+
+✓ Added 0 new topics
+✓ Added 165 talk-topic relationships
+
+============================================================
+PHASE 8: Update conference_topics.json
+============================================================
+[DRY RUN] Would add 0 entries to conference_topics.json
+
+============================================================
+PHASE 9: Update talk_metadata.json
+============================================================
+[DRY RUN] Would update talk_metadata.json with 32 entries
+
+
+============================================================
+UPDATE COMPLETE - Summary Statistics
+============================================================
+Conference: 2025-04 (Apr 2025)
+
+*** DRY RUN MODE - No changes were written ***
+
+Talk Matching:
+  - Matched: 32
+  - Unmatched: 2
+
+Database Updates:
+  - Talks updated: 32
+  - Speaker roles created: 0
+  - Topics added: 0
+  - Talk-topic relationships added: 165
+  - Previews added: 32
+
+JSON Files Updated:
+  - api/sessions.json
+  - db/one-off-migration/conference_topics.json
+  - db/one-off-migration/talk_metadata.json
+  - talk_previews.json
+============================================================
+
+============================================================
+INCONSISTENCY REPORT - Unmatched Talks
+============================================================
+Found 2 talks in gc.db with no match in core.db
+
+1. Sustaining of General Authorities, Area Seventies, and General Officers
+   Speaker: Dallin H. Oaks
+   URI: /general-conference/2025/04/11oaks
+   Data-Aid: 165187784
+
+2. Church Auditing Department Report, 2024
+   Speaker: Jared B. Larson
+   URI: /general-conference/2025/04/12larson
+   Data-Aid: 165188457
+
+[DRY RUN] Would save report to: unmatched_talks_2025-04.json
+============================================================
