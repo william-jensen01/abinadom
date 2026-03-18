@@ -247,7 +247,7 @@ def get_default_value(schema: Dict[str, Dict[str, Any]], field_name: str) -> Any
 
 PARAGRAPH_CONFIG = {
     # HTML parsing
-    "html_parser": "html.parser",  # Lenient parser with fallback
+    "html_parser": "html5lib",  # Standards-compliant parser
     # Minimum paragraph length (chars) to include
     "min_paragraph_length": 10,
     # Text cleaning
