@@ -30,18 +30,19 @@ All 7,659 General Conference talks processed through Phases 1-6 with verified re
 **Goal:** Restructure metadata storage so Phase 1 reads enriched fields from a dedicated `talk_metadata` table instead of scattered `talks` columns.
 **Requirements:** ENRCH-01, ENRCH-02, ENRCH-03, ENRCH-04, ENRCH-05, ENRCH-06
 **Depends on:** --
-**Plans:** 3 plans
+**Plans:** 4 plans
 
 Plans:
+- [ ] 01-00-PLAN.md -- Wave 0: create test stubs for enrichment requirements (ENRCH-01, ENRCH-02, ENRCH-04, ENRCH-05, ENRCH-06)
 - [ ] 01-01-PLAN.md -- Create talk_metadata table DDL and migrate backfill scripts to write there (ENRCH-01, ENRCH-02, ENRCH-06)
 - [ ] 01-02-PLAN.md -- Build and run Church API preview fetcher to populate talk_previews.json (ENRCH-03)
 - [ ] 01-03-PLAN.md -- Run backfills to populate talk_metadata, update Phase 1 extractor with LEFT JOIN (ENRCH-04, ENRCH-05)
 
 **Acceptance criteria:**
-- [ ] `talk_metadata` table exists with columns `speaker_role`, `uri_l`, `uri_gc`, `kicker`, `talk_preview`, `data_aid` and has one row per GC talk
+- [ ] `talk_metadata` table exists with columns `speaker_role_id`, `uri_l`, `uri_gc`, `kicker`, `talk_preview`, `data_aid` and has one row per GC talk
 - [ ] No backfill script in `db/one-off-migration/` writes to the `talks` table directly -- all target `talk_metadata`
 - [ ] `talk_previews.json` contains preview text for all available GC talks from the Church API
-- [ ] Phase 1 extractor output includes enriched fields (`speaker_role`, `kicker`, `talk_preview`) when present in `talk_metadata`
+- [ ] Phase 1 extractor output includes enriched fields (`speaker_role_id`, `kicker`, `talk_preview`) when present in `talk_metadata`
 - [ ] `talk_topic` and `conference_topic` tables are untouched
 
 ---
@@ -229,7 +230,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|---------------|--------|-----------|
-| 1. DB Enrichment | 0/3 | Planning complete | - |
+| 1. DB Enrichment | 0/4 | Planning complete | - |
 | 2. Code Quality | 0/3 | Not started | - |
 | 3. Bug Audit & Fixes | 0/3 | Not started | - |
 | 4. Test Coverage | 0/3 | Not started | - |

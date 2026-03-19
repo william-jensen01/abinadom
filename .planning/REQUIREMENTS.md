@@ -33,7 +33,7 @@ These requirements are satisfied by the current codebase and are preserved as-is
 
 | ID | Requirement |
 |----|-------------|
-| ENRCH-01 | `talk_metadata` table created (1:1 with `talks`, GC entries only) with columns: `speaker_role`, `uri_l`, `uri_gc`, `kicker`, `talk_preview`, `data_aid` |
+| ENRCH-01 | `talk_metadata` table created (1:1 with `talks`, GC entries only) with columns: `speaker_role_id`, `uri_l`, `uri_gc`, `kicker`, `talk_preview`, `data_aid` |
 | ENRCH-02 | All existing backfill scripts in `db/one-off-migration/` updated to write to `talk_metadata` instead of `talks` columns |
 | ENRCH-03 | Talk preview collection script completed: fetches all GC previews from Church API, saves to `talk_previews.json` |
 | ENRCH-04 | All backfill scripts re-run to populate `talk_metadata` with current data |
