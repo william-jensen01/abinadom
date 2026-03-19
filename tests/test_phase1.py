@@ -425,6 +425,82 @@ class TestEdgeCases(unittest.TestCase):
         self.assertEqual(result["speaker_name"], "Unknown Speaker")
 
 
+@unittest.skip("Wave 0 stub -- filled by Plan 01-01")
+class TestTalkMetadataDDL(unittest.TestCase):
+    """Stubs for talk_metadata table DDL validation."""
+
+    def test_talk_metadata_table_exists(self):
+        """talk_metadata table should exist in core.52.db after DDL runs."""
+        self.fail("Stub -- implement after Plan 01-01 creates the table")
+
+    def test_talk_metadata_has_expected_columns(self):
+        """talk_metadata should have 7 columns: talk_id, speaker_role_id, uri_l, uri_gc, kicker, talk_preview, data_aid."""
+        self.fail("Stub")
+
+    def test_talk_metadata_has_indexes(self):
+        """talk_metadata should have indexes on data_aid and uri_gc."""
+        self.fail("Stub")
+
+
+@unittest.skip("Wave 0 stub -- filled by Plan 01-01")
+class TestBackfillTargets(unittest.TestCase):
+    """Stubs for backfill script target validation."""
+
+    def test_backfill_scripts_use_upsert_helper(self):
+        """All 5 backfill scripts should import upsert_talk_metadata."""
+        self.fail("Stub")
+
+    def test_no_direct_writes_to_talks_table(self):
+        """Backfill scripts (except Title in backfill_talk_metadata) should not UPDATE talk SET."""
+        self.fail("Stub")
+
+
+@unittest.skip("Wave 0 stub -- filled by Plan 01-03")
+class TestEnrichedFields(unittest.TestCase):
+    """Stubs for enriched field coverage in Phase 1."""
+
+    def test_talk_metadata_has_kicker_field(self):
+        """TalkMetadata dataclass should have kicker: Optional[str]."""
+        self.fail("Stub")
+
+    def test_talk_metadata_has_talk_preview_field(self):
+        """TalkMetadata dataclass should have talk_preview: Optional[str]."""
+        self.fail("Stub")
+
+    def test_kicker_in_document_summary(self):
+        """Document summary should include kicker when present."""
+        self.fail("Stub")
+
+    def test_talk_preview_in_document_summary(self):
+        """Document summary should include talk_preview when present."""
+        self.fail("Stub")
+
+    def test_enriched_fields_optional(self):
+        """kicker and talk_preview should default to None."""
+        self.fail("Stub")
+
+    def test_query_has_left_join(self):
+        """Phase 1 query should LEFT JOIN talk_metadata."""
+        self.fail("Stub")
+
+    def test_transform_db_row_includes_enriched_fields(self):
+        """transform_db_row_to_metadata should map kicker and talk_preview."""
+        self.fail("Stub")
+
+
+@unittest.skip("Wave 0 stub -- filled by Plan 01-03")
+class TestTopicTablesUnchanged(unittest.TestCase):
+    """Stubs for topic table smoke test."""
+
+    def test_conference_topic_count_unchanged(self):
+        """conference_topic row count should not change after backfills."""
+        self.fail("Stub")
+
+    def test_talk_topic_count_unchanged(self):
+        """talk_topic row count should not change after backfills."""
+        self.fail("Stub")
+
+
 def run_tests():
     """Run all tests."""
     unittest.main(argv=[""], verbosity=2, exit=False)
