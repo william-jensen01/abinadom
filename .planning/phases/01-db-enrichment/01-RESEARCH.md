@@ -128,13 +128,35 @@ tm.data_aid AS enriched_data_aid
 ```
 
 ### Pattern 3: Church API Preview Fetcher
-**What:** Script that fetches talk previews from the Church API for all conferences.
+**What:** Script that fetches talk previews from the Church API for all GC talks using a two-level fetch.
 **When to use:** For ENRCH-03.
-**Key insight:** The existing `api/extract_conference_sections.py` already fetches conference data from the API endpoint `https://www.churchofjesuschrist.org/study/api/v3/language-pages/type/dynamic?lang=eng&uri=`. The response JSON contains `toc.entries[].section.entries[]` where each entry has a `preview` field. The fetcher needs to:
+**Key insight:** The Church API requires two levels of requests:
+
+**Level 1 — Conference endpoint** (get list of talk URIs per conference):
+```
+GET https://www.churchofjesuschrist.org/study/api/v3/language-pages/type/dynamic?lang=eng&uri=/general-conference/{year}/{month}
+```
+Response structure:
+- `api_response.toc.entries[0]` — NOT a session (skip it)
+- `api_response.toc.entries[1:]` — sessions (each is a session object)
+- Each session: `session.section.entries[]` — list of talks
+- Each talk in the session has ONLY: `uri`, `title`, `subtitle` (speaker name)
+- **`preview` and `data_aid` are NOT present in this response**
+
+**Level 2 — Individual talk endpoint** (get preview and data_aid per talk):
+```
+GET https://www.churchofjesuschrist.org/study/api/v3/language-pages/type/dynamic?lang=eng&uri={talk_uri}
+```
+- Preview is at: `api_response.content.content.head['page-meta-social'].pageMeta.description`
+- `data_aid` is also available per-talk (not per-conference)
+
+**Important:** `api/extract_conference_sections.py` targets a different response format and does NOT correctly reflect the current API structure. Do not use it as a reference for preview or `data_aid` extraction.
+
+The fetcher needs to:
 1. Iterate all conferences from `core.52.db`
-2. Fetch each conference's API data
-3. Extract `preview` from each talk entry
-4. Match to `talk_id` using URI or `data_aid`
+2. Fetch each conference's API data to get the list of talk URIs (skip `toc.entries[0]`, iterate `toc.entries[1:]`, then `session.section.entries[]`)
+3. For each talk URI, fetch the individual talk endpoint to get preview and data_aid
+4. Match to `talk_id` using `uri_gc` from the `talk` table
 5. Save to `talk_previews.json`
 
 ### Anti-Patterns to Avoid
@@ -146,8 +168,8 @@ tm.data_aid AS enriched_data_aid
 
 | Problem | Don't Build | Use Instead | Why |
 |---------|-------------|-------------|-----|
-| HTTP caching for Church API | Custom caching logic | `requests_cache` (already used) | Already configured in `api/extract_conference_sections.py` with SQLite backend |
-| Talk ID matching (URI to talk_id) | Manual string matching | Existing DB lookups by `URI_GC` or `data_aid` | Pattern already established in `backfill_topics.py` and `Update_GC_PLAN.md` |
+| HTTP caching for Church API | Custom caching logic | `requests_cache` (already used) | Already used in the project with SQLite backend (`expire_after=NEVER_EXPIRE`) |
+| Talk ID matching (URI to talk_id) | Manual string matching | Existing DB lookups by `uri_gc` from `talk` table | Pattern established in `backfill_topics.py` and `Update_GC_PLAN.md`; match on path portion of URI |
 | Speaker role normalization | Custom title casing | `title_case_role()` and `slugify()` from `backfill_talk_metadata.py` | Already handles edge cases like articles/prepositions |
 | Kicker extraction from HTML | New HTML parsing | `extract_kicker()` from `backfill_talk_kicker.py` | Already handles 4 era-specific patterns |
 
@@ -165,19 +187,25 @@ tm.data_aid AS enriched_data_aid
 **How to avoid:** The `Database` class in `db/__init__.py` does not enable foreign keys. Add `PRAGMA foreign_keys = ON` to the DDL script or the connection setup if FK enforcement is desired. For this phase, the FK on `talk_id` is mostly documentation since all `talk_id` values come from existing `talks.ID`.
 **Warning signs:** Rows in `talk_metadata` with `talk_id` values that don't exist in `talks`.
 
-### Pitfall 3: Preview Coverage Gap
+### Pitfall 3: data_aid and preview are NOT in the conference response
+**What goes wrong:** Trying to extract `data_aid` or `preview` from the conference-level API response (`/general-conference/{year}/{month}`).
+**Why it happens:** The conference endpoint's `toc.entries[1:][*].section.entries[*]` objects contain only `content.uri`, `content.title`, and `content.subtitle`. No `preview`, no `id`/`data_aid` field. Also, `toc.entries[0]` is NOT a session and must be skipped.
+**How to avoid:** Use a two-level fetch: (1) conference endpoint to get talk URIs, (2) individual talk endpoint (`/general-conference/{year}/{month}/{slug}`) to get preview (`content.content.head['page-meta-social'].pageMeta.description`) and data_aid. Match talks back to DB using `uri_gc` from the `talk` table.
+**Warning signs:** Trying to read `entry["preview"]` or `entry["id"]` from the conference response yields KeyError or None for all entries.
+
+### Pitfall 4: Preview Coverage Gap
 **What goes wrong:** The Church API may not have preview data for older conferences (pre-1971 or early era talks).
-**Why it happens:** The API endpoint `/general-conference/{year}/{month}` may return empty results for very old conferences, or entries may lack the `preview` field.
+**Why it happens:** Older conference endpoints may return empty results or the individual talk endpoint may not have `pageMeta.description`.
 **How to avoid:** Handle NULL/missing previews gracefully. Log coverage statistics. Accept that `talk_preview` will be NULL for many older talks.
 **Warning signs:** Only a fraction of 7,659 talks end up with previews.
 
-### Pitfall 4: Backfill Script Ordering
+### Pitfall 5: Backfill Script Ordering
 **What goes wrong:** Running backfill scripts before creating the `talk_metadata` table causes errors.
 **Why it happens:** Scripts are independent and don't create the table themselves.
 **How to avoid:** DDL for `talk_metadata` must run first. Each backfill script should use `CREATE TABLE IF NOT EXISTS` or assume the table exists.
 **Warning signs:** `sqlite3.OperationalError: no such table: talk_metadata`.
 
-### Pitfall 5: Windows Encoding Issues
+### Pitfall 6: Windows Encoding Issues
 **What goes wrong:** JSON files with non-ASCII characters fail to load on Windows.
 **Why it happens:** Python on Windows defaults to cp1252 encoding, not UTF-8.
 **How to avoid:** Always specify `encoding='utf-8'` when opening JSON files. The existing `backfill_talk_kicker.py` already handles this with `sys.stdout.reconfigure(encoding="utf-8")`.
@@ -263,30 +291,44 @@ query = """
 """
 ```
 
-### Church API Preview Response Structure
+### Church API Response Structures
+
+**Level 1 — Conference endpoint:**
 ```python
-# Source: api/extract_conference_sections.py and api/sessions.json
-# API endpoint: https://www.churchofjesuschrist.org/study/api/v3/language-pages/type/dynamic?lang=eng&uri=/general-conference/{year}/{month}
-# Response structure:
+# GET .../general-conference/{year}/{month}
+# toc.entries[0] — NOT a session; skip it
+# toc.entries[1:] — sessions
 # {
 #   "toc": {
 #     "entries": [
-#       {
+#       {},  // index 0 — skip
+#       {    // index 1+ — each is a session
 #         "section": {
 #           "entries": [
 #             {
-#               "uri": "/general-conference/2025/10/12stevenson",
-#               "title": "Blessed Are the Peacemakers",
-#               "preview": "Elder Stevenson teaches us to follow...",
-#               "id": "12stevenson",   <-- this is the data_aid
-#               ...
-#             }
+#               "content": {
+#                 "uri": "/general-conference/2025/10/19oaks",
+#                 "title": "Introduction",
+#                 "subtitle": "Dallin H. Oaks"   <-- speaker name
+#               }
+#             },
+#             ...
 #           ]
 #         }
-#       }
+#       },
+#       ...
 #     ]
 #   }
 # }
+# NOTE: NO "preview" field. NO "id"/data_aid field. Only uri, title, subtitle.
+```
+
+**Level 2 — Individual talk endpoint:**
+```python
+# GET .../general-conference/2025/10/19oaks  (uri from Level 1)
+# Preview is at:
+# api_response["content"]["content"]["head"]["page-meta-social"]["pageMeta"]["description"]
+# data_aid is also retrievable per-talk (not available in conference response)
 ```
 
 ## State of the Art
@@ -372,7 +414,7 @@ query = """
 - `db/one-off-migration/backfill_talk_metadata_role_extraction.py` -- HTML-based role extraction
 - `db/one-off-migration/backfill_talk_preview.py` -- Preview backfill pattern (currently targets content.52.db)
 - `db/one-off-migration/backfill_topics.py` -- Topic backfill (DO NOT TOUCH)
-- `api/extract_conference_sections.py` -- Church API fetch pattern
+- `api/extract_conference_sections.py` -- **NOTE: Different endpoint/format.** Useful only for `requests_cache` setup and `get_conferences()` DB query pattern. Do NOT use as reference for response structure or preview/data_aid extraction.
 - `docs/update/Update_GC_PLAN.md` -- UPDATE.py plan showing talk matching and preview collection approach
 - `scripts/db_schema_extractor.py` output -- Current `talks` table schema (15 columns, 7659 rows)
 
