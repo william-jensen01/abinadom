@@ -15,7 +15,7 @@ All 7,659 General Conference talks processed through Phases 1-6 with verified re
 
 | Phase | Name | Status | Requirements |
 |-------|------|--------|--------------|
-| 1 | DB Enrichment | Not Started | ENRCH-01, ENRCH-02, ENRCH-03, ENRCH-04, ENRCH-05, ENRCH-06 |
+| 1 | DB Enrichment | Planning Complete | ENRCH-01, ENRCH-02, ENRCH-03, ENRCH-04, ENRCH-05, ENRCH-06 |
 | 2 | Code Quality | Not Started | QUAL-01, QUAL-02, QUAL-03, QUAL-07, QUAL-08, QUAL-09 |
 | 3 | Bug Audit & Fixes | Not Started | BUGS-01, BUGS-02, BUGS-03 |
 | 4 | Test Coverage | Not Started | QUAL-04, QUAL-05, QUAL-06, QUAL-10 |
@@ -30,11 +30,12 @@ All 7,659 General Conference talks processed through Phases 1-6 with verified re
 **Goal:** Restructure metadata storage so Phase 1 reads enriched fields from a dedicated `talk_metadata` table instead of scattered `talks` columns.
 **Requirements:** ENRCH-01, ENRCH-02, ENRCH-03, ENRCH-04, ENRCH-05, ENRCH-06
 **Depends on:** --
+**Plans:** 3 plans
 
-#### Plans
-1. **Create talk_metadata table and update backfill scripts** -- DDL for `talk_metadata`, migrate all `db/one-off-migration/` scripts to write there instead of `talks` (ENRCH-01, ENRCH-02, ENRCH-06)
-2. **Talk preview collection** -- Complete the Church API preview fetcher, save to `talk_previews.json`, backfill into `talk_metadata` (ENRCH-03)
-3. **Run backfills and update Phase 1 extractor** -- Execute all backfill scripts to populate `talk_metadata`, update Phase 1 to JOIN `talks + talk_metadata` and expose enriched fields (ENRCH-04, ENRCH-05)
+Plans:
+- [ ] 01-01-PLAN.md -- Create talk_metadata table DDL and migrate backfill scripts to write there (ENRCH-01, ENRCH-02, ENRCH-06)
+- [ ] 01-02-PLAN.md -- Build and run Church API preview fetcher to populate talk_previews.json (ENRCH-03)
+- [ ] 01-03-PLAN.md -- Run backfills to populate talk_metadata, update Phase 1 extractor with LEFT JOIN (ENRCH-04, ENRCH-05)
 
 **Acceptance criteria:**
 - [ ] `talk_metadata` table exists with columns `speaker_role`, `uri_l`, `uri_gc`, `kicker`, `talk_preview`, `data_aid` and has one row per GC talk
@@ -228,7 +229,7 @@ All 7,659 General Conference talks processed through Phases 1-6 with verified re
 
 | Phase | Plans Complete | Status | Completed |
 |-------|---------------|--------|-----------|
-| 1. DB Enrichment | 0/3 | Not started | - |
+| 1. DB Enrichment | 0/3 | Planning complete | - |
 | 2. Code Quality | 0/3 | Not started | - |
 | 3. Bug Audit & Fixes | 0/3 | Not started | - |
 | 4. Test Coverage | 0/3 | Not started | - |
