@@ -52,6 +52,8 @@ These requirements are satisfied by the current codebase and are preserved as-is
 | QUAL-06 | SQLite schema validation at startup: verify `core.52.db` schema matches expected structure before running the pipeline |
 | QUAL-07 | Duplicate cache manager resolved: determine which of `cache_manager_CLAUDE.py` / `cache_manager_OLD.py` is canonical; delete or archive the other |
 | QUAL-08 | Legacy root-level scripts audited: `UPDATE.py`, `process_all.py`, `process_topics.py`, `run_phase2_tests.py` — each either moved to `scripts/` with clear ownership or documented as active entry points |
+| QUAL-09 | Deprecated Phase 5 model fields removed: `is_opening`, `is_scripture`, and similar unused fields cleaned from `models/validation_report.py` and all references updated |
+| QUAL-10 | Phase 5 adversarial test cases added: malformed inputs, boundary conditions, and unexpected data shapes covered in `tests/test_phase5.py` |
 
 ### ChromaDB Loader (LOAD)
 
@@ -89,11 +91,9 @@ These requirements are satisfied by the current codebase and are preserved as-is
 | Item | Deferred To |
 |------|------------|
 | MCP server with semantic search | Milestone 2 |
+| ChromaDB metadata noise stripping (`to_chromadb_format()`) | Milestone 2 (before MCP) |
 | Journal of Discourse content | Milestone 3 |
 | Scriptures (OT, NT, BOM, D&C, POGP) | Milestone 4+ |
-| ChromaDB metadata noise stripping (`to_chromadb_format()`) | Milestone 2 (before MCP) |
-| Deprecated Phase 5 model fields cleanup (`is_opening`, `is_scripture`, etc.) | Milestone 2 |
-| Phase 5 adversarial test cases | Milestone 2 |
 | Performance optimizations (batched DB lookups, streaming Phase 2) | When needed |
 | Web scraping (all HTML from SQLite only) | Never |
 | Multi-user / hosted deployment | Never (personal use) |
@@ -109,7 +109,7 @@ These requirements are satisfied by the current codebase and are preserved as-is
 | VAL | 01–05 | Validated — already exists |
 | BUGS | 01–03 | Extractor bug audit and fixes |
 | ENRCH | 01–06 | DB enrichment restructure + backfill |
-| QUAL | 01–08 | Code quality, tests, cleanup |
+| QUAL | 01–10 | Code quality, tests, cleanup |
 | LOAD | 01–06 | Phase 6 ChromaDB loader |
 | PIPE | 01–04 | Pipeline orchestrator |
 | VER | 01–04 | Post-run verification |
