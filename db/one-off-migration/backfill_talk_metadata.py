@@ -30,6 +30,10 @@ sys.path.insert(0, root_dir)
 
 from db import Database, CORE_DB_PATH
 
+migration_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, migration_dir)
+from create_talk_metadata_table import upsert_talk_metadata
+
 
 def title_case_role(text: str) -> str:
     """
@@ -308,20 +312,17 @@ def apply_metadata(db: Database, metadata: List[Dict[str, Any]]):
             not_found.append(talk_id)
             continue
 
-        # Build update query
-        updates = []
-        params = []
-
+        # Title stays on talks table; enrichment fields go to talk_metadata
+        title_update = None
         if title is not None:
-            updates.append("Title = ?")
-            params.append(title)
+            title_update = title
             title_updates += 1
 
+        enrichment_kwargs = {}
         if speaker_role is not None and _valid_role(speaker_role):
             role_id = get_or_create_role(db, role_map, speaker_role)
             if role_id:
-                updates.append("speaker_role_id = ?")
-                params.append(role_id)
+                enrichment_kwargs["speaker_role_id"] = role_id
                 speaker_role_updates += 1
             else:
                 errors.append(
@@ -329,23 +330,23 @@ def apply_metadata(db: Database, metadata: List[Dict[str, Any]]):
                 )
 
         if data_aid is not None:
-            updates.append("data_aid = ?")
-            params.append(data_aid)
+            enrichment_kwargs["data_aid"] = data_aid
             data_aid_updates += 1
 
-        # Execute update if there are changes
-        if updates:
-            params.append(talk_id)  # Add talk_id for WHERE clause
-            query = f"UPDATE talk SET {', '.join(updates)} WHERE ID = ?"
-
+        if title_update is not None or enrichment_kwargs:
             try:
-                db.execute(query, params)
+                if title_update is not None:
+                    db.execute(
+                        "UPDATE talk SET Title = ? WHERE ID = ?",
+                        (title_update, talk_id),
+                    )
+                if enrichment_kwargs:
+                    upsert_talk_metadata(db, talk_id, **enrichment_kwargs)
                 updated_count += 1
 
                 if updated_count % 100 == 0:
                     print(f"Progress: {updated_count}/{len(metadata)} talks updated")
             except sqlite3.IntegrityError as e:
-                # Handle UNIQUE constraint violations
                 error_detail = f"IntegrityError - {str(e)}"
                 if "data_aid" in str(e).lower():
                     error_detail = f"Duplicate data_aid: {data_aid}"

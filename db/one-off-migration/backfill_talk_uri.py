@@ -16,6 +16,10 @@ sys.path.insert(0, root_dir)
 
 from db import Database, CORE_DB_PATH
 
+migration_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, migration_dir)
+from create_talk_metadata_table import upsert_talk_metadata
+
 
 def normalize_month_for_gc(month, year):
     """
@@ -183,11 +187,8 @@ def generate_uris(db: Database):
         uri_l = extract_uri_l(url)
         uri_gc = extract_uri_gc(url)
 
-        # Update database
-        db.execute(
-            "UPDATE talk SET URI_L = ?, URI_GC = ? WHERE ID = ?",
-            (uri_l, uri_gc, talk_id),
-        )
+        # Write to talk_metadata (authoritative source for uri_l and uri_gc)
+        upsert_talk_metadata(db, talk_id, uri_l=uri_l, uri_gc=uri_gc)
 
         updated_count += 1
 
@@ -277,31 +278,21 @@ def apply_corrections(db: Database, corrections: List[Dict[str, Any]]):
             print(f"⚠️  Skipping correction: missing TalkID")
             continue
 
-        # Build update parts
-        updates = []
-        params = []
-
+        # Apply correction to talk_metadata
         if is_gc:
-            # Update URI_GC with correct_uri
             if correct_uri:
-                updates.append("URI_GC = ?")
-                params.append(correct_uri)
+                upsert_talk_metadata(db, talk_id, uri_gc=correct_uri)
                 gc_updates += 1
+                print(f"✓ TalkID {talk_id}: uri_gc = {correct_uri}")
         else:
-            # Update URI_L with correct_uri and nullify URI_GC
+            upsert_kwargs = {}
             if correct_uri:
-                updates.append("URI_L = ?")
-                params.append(correct_uri)
+                upsert_kwargs["uri_l"] = correct_uri
                 l_updates += 1
-            updates.append("URI_GC = NULL")
+            upsert_kwargs["uri_gc"] = None
             gc_nullified += 1
-
-        # Execute update
-        if updates:
-            params.append(talk_id)  # Add TalkID for WHERE clause
-            query = f"UPDATE talk SET {', '.join(updates)} WHERE ID = ?"
-            db.execute(query, params)
-            print(f"✓ TalkID {talk_id}: {', '.join(updates)}")
+            upsert_talk_metadata(db, talk_id, **upsert_kwargs)
+            print(f"✓ TalkID {talk_id}: uri_l = {correct_uri}, uri_gc = NULL")
 
     print("-" * 80)
     print(f"Corrections Applied:")

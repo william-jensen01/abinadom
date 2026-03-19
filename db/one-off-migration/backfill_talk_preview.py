@@ -2,19 +2,17 @@
 """
 Backfill script for populating talk previews.
 
-This script migrates talk preview data from JSON file into the content.db database. It will:
+This script migrates talk preview data from JSON file into the core.db database. It will:
 
-- Add TextPreview column to talkbody table if it doesn't exist
-- Populate column from JSON data containing TalkID and preview text
-- Use UPDATE statements to safely handle re-runs
+- Populate talk_metadata.talk_preview in core.52.db from JSON data
+- Use UPSERT statements to safely handle re-runs
 
 Usage:
-  python backfill_talk_preview.py [--db ./content.db] [--input talk_previews.json] [--dry-run]
+  pipenv run py db/one-off-migration/backfill_talk_preview.py [--db ./db/core.52.db] [--input talk_previews.json] [--dry-run]
 
 Notes:
 - This script is idempotent and safe to re-run
-- Updates existing talkbody rows with TextPreview column
-- Will add column if it doesn't exist
+- Writes to core.52.db talk_metadata.talk_preview (NOT content.52.db talkbody.TextPreview)
 - Expects JSON format: [{"TalkID": 123, "preview": "text..."}, ...]
   or {"123": "preview text...", "456": "preview text..."}
 """
@@ -24,58 +22,32 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sqlite3
 import sys
 import time
 from typing import Dict, List, Union
+
+# Ensure Unicode output works on Windows
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 
 # Add parent directory to path for importing Database
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 root_dir = os.path.dirname(parent_dir)
 sys.path.insert(0, root_dir)
 
-from db import CONTENT_DB_PATH
+migration_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, migration_dir)
+
+from db import Database, CORE_DB_PATH
+from create_talk_metadata_table import upsert_talk_metadata
 
 
-def ensure_column_exists(conn: sqlite3.Connection) -> None:
-    """
-    Add TextPreview column to talkbody table if it doesn't exist.
-
-    Args:
-        conn: SQLite connection to content.db
-    """
-    print("Ensuring TextPreview column exists in talkbody table...")
-
-    # Check if column already exists
-    cursor = conn.execute("PRAGMA table_info(talkbody)")
-    columns = {row[1] for row in cursor.fetchall()}
-
-    # Add TextPreview column if it doesn't exist
-    if "TextPreview" not in columns:
-        print("  Adding TextPreview column to talkbody table...")
-        try:
-            conn.execute("ALTER TABLE talkbody ADD COLUMN TextPreview TEXT")
-            conn.commit()
-            print("  ✓ TextPreview column added")
-        except sqlite3.OperationalError as e:
-            if "duplicate column name" in str(e).lower():
-                print("  ✓ TextPreview column already exists")
-            else:
-                raise
-    else:
-        print("  ✓ TextPreview column already exists")
-
-    # Create index for better query performance
-    print("  Creating indexes...")
-    conn.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_talkbody_textpreview
-        ON talkbody(TextPreview)
-        """
-    )
-
-    conn.commit()
-    print("  ✓ Indexes created/verified")
+def ensure_talk_metadata_table(db: Database) -> None:
+    """Ensure talk_metadata table exists in core.52.db (idempotent)."""
+    from create_talk_metadata_table import create_table
+    create_table(db)
 
 
 def load_json_data(file_path: str) -> List[Dict[str, Union[int, str]]]:
@@ -107,48 +79,16 @@ def load_json_data(file_path: str) -> List[Dict[str, Union[int, str]]]:
         raise ValueError(f"Unexpected JSON format: {type(data)}")
 
 
-def update_preview(
-    conn: sqlite3.Connection, talk_id: int, preview: str
-) -> bool:
-    """
-    Update a talk preview in talkbody table (idempotent).
-
-    Args:
-        conn: SQLite connection
-        talk_id: ID of the talk
-        preview: Preview text
-
-    Returns:
-        True if updated successfully
-    """
-    try:
-        cursor = conn.execute(
-            """
-            UPDATE talkbody
-            SET TextPreview = ?
-            WHERE TalkID = ?
-            """,
-            (preview, talk_id),
-        )
-        if cursor.rowcount == 0:
-            print(f"  ⚠️  No talkbody row found for TalkID {talk_id}")
-            return False
-        return True
-    except sqlite3.Error as e:
-        print(f"  ⚠️  Error updating TalkID {talk_id}: {e}")
-        return False
-
-
 def populate_previews(
-    conn: sqlite3.Connection, previews_data: List[Dict], dry_run: bool = False
+    db: Database, previews_data: List[Dict], dry_run: bool = False
 ) -> tuple[int, int]:
     """
-    Populate talk_preview table.
+    Write talk previews to core.52.db talk_metadata.talk_preview.
 
     Args:
-        conn: SQLite connection
-        previews_data: List of preview dictionaries from JSON
-        dry_run: If True, don't write changes
+        db:            Writable Database instance (core.52.db).
+        previews_data: List of preview dicts from JSON.
+        dry_run:       If True, don't write changes.
 
     Returns:
         Tuple of (previews_inserted, previews_failed)
@@ -169,78 +109,62 @@ def populate_previews(
             continue
 
         if dry_run:
-            print(f"  [{i}/{total}] [DRY-RUN] Would update preview for TalkID {talk_id}")
+            print(f"  [{i}/{total}] [DRY-RUN] Would upsert talk_preview for TalkID {talk_id}")
             previews_inserted += 1
             continue
 
-        # Update preview
-        if update_preview(conn, talk_id, preview):
+        try:
+            upsert_talk_metadata(db, talk_id, talk_preview=preview)
             previews_inserted += 1
             if i % 100 == 0 or i == total:
                 print(f"  Progress: {i}/{total} ({(i/total)*100:.1f}%)")
-        else:
+        except Exception as e:
+            print(f"  ⚠️  Error upserting TalkID {talk_id}: {e}")
             previews_failed += 1
-
-    if not dry_run:
-        conn.commit()
 
     return previews_inserted, previews_failed
 
 
-def print_statistics(conn: sqlite3.Connection) -> None:
-    """
-    Print database statistics.
-
-    Args:
-        conn: SQLite connection
-    """
+def print_statistics(db: Database) -> None:
+    """Print coverage statistics from core.52.db talk_metadata."""
     print("\n" + "=" * 60)
     print("DATABASE STATISTICS")
     print("=" * 60)
 
-    # Total previews
-    cursor = conn.execute("SELECT COUNT(*) FROM talkbody WHERE TextPreview IS NOT NULL")
-    total_previews = cursor.fetchone()[0]
-    print(f"\nTotal talk previews: {total_previews}")
+    rows = db.select("SELECT COUNT(*) as cnt FROM talk_metadata WHERE talk_preview IS NOT NULL")
+    total_previews = rows[0]["cnt"] if rows else 0
+    print(f"\nTotal talk previews in talk_metadata: {total_previews}")
 
-    # Total talks in talkbody
-    cursor = conn.execute("SELECT COUNT(*) FROM talkbody")
-    total_talks = cursor.fetchone()[0]
-    percentage = (total_previews / max(total_talks, 1)) * 100
-    print(f"Total talks in talkbody: {total_talks}")
+    rows = db.select("SELECT COUNT(*) as cnt FROM talk_metadata")
+    total_rows = rows[0]["cnt"] if rows else 0
+    percentage = (total_previews / max(total_rows, 1)) * 100
+    print(f"Total rows in talk_metadata: {total_rows}")
     print(f"Coverage: {percentage:.1f}%")
 
-    # Average preview length
-    cursor = conn.execute("SELECT AVG(LENGTH(TextPreview)) FROM talkbody WHERE TextPreview IS NOT NULL")
-    avg_length = cursor.fetchone()[0]
+    rows = db.select("SELECT AVG(LENGTH(talk_preview)) as avg FROM talk_metadata WHERE talk_preview IS NOT NULL")
+    avg_length = rows[0]["avg"] if rows else None
     if avg_length:
         print(f"Average preview length: {avg_length:.0f} characters")
 
-    # Sample previews
-    print("\nSample previews (first 5):")
-    cursor = conn.execute(
-        """
-        SELECT TalkID, SUBSTR(TextPreview, 1, 100) as preview_snippet
-        FROM talkbody
-        WHERE TextPreview IS NOT NULL
-        LIMIT 5
-        """
+    sample = db.select(
+        "SELECT talk_id, SUBSTR(talk_preview, 1, 100) as snippet FROM talk_metadata WHERE talk_preview IS NOT NULL LIMIT 5"
     )
-
-    for talk_id, snippet in cursor.fetchall():
-        print(f"  TalkID {talk_id}")
-        print(f"    \"{snippet}...\"")
+    if sample:
+        print("\nSample previews (first 5):")
+        for row in sample:
+            print(f"  TalkID {row['talk_id']}")
+            print(f"    \"{row['snippet']}...\"")
 
 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Backfill talk previews into content.db talkbody table"
+        description="Backfill talk previews into core.52.db talk_metadata table"
     )
     parser.add_argument(
         "--db",
-        default=None,
-        help="Path to content.db (default: uses CONTENT_DB_PATH from db module)",
+        default=CORE_DB_PATH,
+        help="Path to core.52.db (default: CORE_DB_PATH from db module)",
     )
     parser.add_argument(
         "--input",
@@ -260,8 +184,7 @@ def main() -> None:
     """Main execution function."""
     args = parse_args()
 
-    # Use CONTENT_DB_PATH from db module or custom path if provided
-    db_path = args.db if args.db else CONTENT_DB_PATH
+    db_path = args.db
 
     # Resolve input path relative to script location
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -275,12 +198,10 @@ def main() -> None:
     print(f"Mode: {'DRY-RUN' if args.dry_run else 'WRITE'}")
     print("=" * 60)
 
-    # Check if database exists
     if not os.path.exists(db_path):
         print(f"\n❌ Error: Database not found at {db_path}")
         sys.exit(1)
 
-    # Check if input file exists
     if not os.path.exists(input_path):
         print(f"\n❌ Error: Input file not found at {input_path}")
         sys.exit(1)
@@ -288,56 +209,43 @@ def main() -> None:
     start_time = time.time()
 
     try:
-        # Load JSON data
         print(f"\nLoading data from {input_path}...")
         previews_data = load_json_data(input_path)
         print(f"✓ Loaded {len(previews_data)} talk previews")
 
-        # Create writable connection
-        with sqlite3.connect(db_path) as conn:
-            # Enable WAL mode for better concurrency
-            conn.execute("PRAGMA journal_mode=WAL;")
-            conn.execute("PRAGMA synchronous=NORMAL;")
+        db = Database(db_path, timeout=60, read_only=args.dry_run)
 
-            # Ensure column exists
-            ensure_column_exists(conn)
+        if not args.dry_run:
+            ensure_talk_metadata_table(db)
 
-            if args.dry_run:
-                print("\n[DRY-RUN MODE] No changes will be written")
+        if args.dry_run:
+            print("\n[DRY-RUN MODE] No changes will be written")
 
-            # Populate table
-            print("\n" + "=" * 60)
-            print("Updating talkbody table with TextPreview...")
-            print("=" * 60)
+        print("\n" + "=" * 60)
+        print("Writing talk_preview to talk_metadata...")
+        print("=" * 60)
 
-            inserted, failed = populate_previews(
-                conn, previews_data, dry_run=args.dry_run
-            )
+        inserted, failed = populate_previews(db, previews_data, dry_run=args.dry_run)
 
-            # Print results
-            elapsed = time.time() - start_time
-            print("\n" + "=" * 60)
-            print("MIGRATION COMPLETE")
-            print("=" * 60)
-            print(f"Previews inserted/updated: {inserted}")
-            print(f"Previews failed/skipped: {failed}")
-            print(f"Elapsed time: {elapsed:.2f}s")
+        elapsed = time.time() - start_time
+        print("\n" + "=" * 60)
+        print("MIGRATION COMPLETE")
+        print("=" * 60)
+        print(f"Previews inserted/updated: {inserted}")
+        print(f"Previews failed/skipped: {failed}")
+        print(f"Elapsed time: {elapsed:.2f}s")
 
-            if not args.dry_run:
-                # Print statistics
-                print_statistics(conn)
-                print("\n✓ Migration complete!")
-            else:
-                print("\n[DRY-RUN] No changes were written to database")
+        if not args.dry_run:
+            print_statistics(db)
+            print("\n✓ Migration complete!")
+        else:
+            print("\n[DRY-RUN] No changes were written to database")
 
     except FileNotFoundError as e:
         print(f"\n❌ Error: {e}")
         sys.exit(1)
     except json.JSONDecodeError as e:
         print(f"\n❌ Error: Invalid JSON in input file: {e}")
-        sys.exit(1)
-    except sqlite3.Error as e:
-        print(f"\n❌ Database error: {e}")
         sys.exit(1)
     except Exception as e:
         print(f"\n❌ Unexpected error: {e}")

@@ -48,6 +48,10 @@ sys.path.insert(0, root_dir)
 
 from db import Database, CORE_DB_PATH, CONTENT_DB_PATH
 
+migration_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, migration_dir)
+from create_talk_metadata_table import upsert_talk_metadata
+
 
 # ---------------------------------------------------------------------------
 # Text utilities (shared with backfill_talk_metadata.py)
@@ -356,10 +360,7 @@ def extract_and_apply_roles(
             continue
 
         try:
-            core_db.execute(
-                "UPDATE talk SET speaker_role_id = ? WHERE ID = ?",
-                (role_id, talk_id),
-            )
+            upsert_talk_metadata(core_db, talk_id, speaker_role_id=role_id)
             updated += 1
 
             if updated % 50 == 0:

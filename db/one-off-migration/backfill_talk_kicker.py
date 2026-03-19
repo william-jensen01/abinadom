@@ -39,6 +39,10 @@ sys.path.insert(0, root_dir)
 
 from db import Database, CONTENT_DB_PATH, CORE_DB_PATH
 
+migration_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, migration_dir)
+from create_talk_metadata_table import upsert_talk_metadata
+
 
 def ensure_kicker_column_exists(core_db: Database) -> None:
     """Add Kicker column to talk table in core.52.db if not present. Idempotent."""
@@ -190,14 +194,11 @@ def process_talks(
             else:
                 stats["not_found"] += 1
 
-        # Write batch
+        # Write batch to talk_metadata (authoritative source for kicker)
         if batch_updates and not dry_run:
             try:
                 for kicker_text, talk_id in batch_updates:
-                    core_db.execute(
-                        "UPDATE talk SET Kicker = ? WHERE ID = ?",
-                        (kicker_text, talk_id),
-                    )
+                    upsert_talk_metadata(core_db, talk_id, kicker=kicker_text)
                 stats["written"] += len(batch_updates)
                 print(f"  ✓ Committed batch of {len(batch_updates)} updates")
             except Exception as e:
