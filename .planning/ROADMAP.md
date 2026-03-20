@@ -16,7 +16,7 @@ All 7,659 General Conference talks processed through Phases 1-6 with verified re
 | Phase | Name | Status | Requirements |
 |-------|------|--------|--------------|
 | 1 | DB Enrichment | Planning Complete | ENRCH-01, ENRCH-02, ENRCH-03, ENRCH-04, ENRCH-05, ENRCH-06 |
-| 2 | Code Quality | Not Started | QUAL-01, QUAL-02, QUAL-03, QUAL-07, QUAL-08, QUAL-09 |
+| 2 | Code Quality | Planning Complete | QUAL-01, QUAL-02, QUAL-03, QUAL-07, QUAL-08, QUAL-09 |
 | 3 | Bug Audit & Fixes | Not Started | BUGS-01, BUGS-02, BUGS-03 |
 | 4 | Test Coverage | Not Started | QUAL-04, QUAL-05, QUAL-06, QUAL-10 |
 | 5 | ChromaDB Loader | Not Started | LOAD-01, LOAD-02, LOAD-03, LOAD-04, LOAD-05, LOAD-06 |
@@ -53,13 +53,13 @@ Plans:
 **Goal:** Clean up tech debt so the codebase is consistent, configurable, and navigable before hunting bugs.
 **Requirements:** QUAL-01, QUAL-02, QUAL-03, QUAL-07, QUAL-08, QUAL-09
 **Depends on:** Phase 1
+**Plans:** 2 plans
 
-#### Plans
-1. **Phase 3 citation position refactor** -- Implement ID-based anchor walking per `REFACTOR_CITATION_PARSING.md` to fix duplicate scripture position bugs (QUAL-01)
-2. **Config centralization and logging standardization** -- Create `config/pipeline_config.py` with all hardcoded values; standardize logging levels across all phases (QUAL-02, QUAL-03)
-3. **Legacy and model cleanup** -- Resolve duplicate cache managers, audit and relocate root-level scripts, remove deprecated Phase 5 model fields (`is_opening`, `is_scripture`, etc.) (QUAL-07, QUAL-08, QUAL-09)
+Plans:
+- [ ] 02-01-PLAN.md -- Verify citation refactor, centralize config, standardize logging (QUAL-01, QUAL-02, QUAL-03)
+- [ ] 02-02-PLAN.md -- Delete duplicate cache manager, relocate root scripts, verify no deprecated model fields (QUAL-07, QUAL-08, QUAL-09)
 
-*Plans 1, 2, and 3 are independent of each other and can run in parallel.*
+*Plans 1 and 2 are independent of each other and can run in parallel (Wave 1).*
 
 **Acceptance criteria:**
 - [ ] Phase 3 extractor produces correct citation positions when the same scripture reference appears multiple times in one paragraph
@@ -232,7 +232,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|---------------|--------|-----------|
 | 1. DB Enrichment | 0/5 | Planning complete | - |
-| 2. Code Quality | 0/3 | Not started | - |
+| 2. Code Quality | 0/2 | Planning complete | - |
 | 3. Bug Audit & Fixes | 0/3 | Not started | - |
 | 4. Test Coverage | 0/3 | Not started | - |
 | 5. ChromaDB Loader | 0/3 | Not started | - |
