@@ -72,8 +72,14 @@ None yet.
 
 None yet.
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260320-hr5 | backfill_talk_kicker not writing updates | 2026-03-20 | 8ba4345 | [260320-hr5-backfill-talk-kicker-not-writing-updates](./quick/260320-hr5-backfill-talk-kicker-not-writing-updates/) |
+
 ## Session Continuity
 
-Last session: 2026-03-20T18:56:07.926Z
-Stopped at: Completed 260320-hr5-PLAN.md
+Last session: 2026-03-20T18:46:59.081Z
+Stopped at: Completed quick task 260320-hr5: backfill_talk_kicker not writing updates
 Resume file: None
