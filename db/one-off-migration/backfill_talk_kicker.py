@@ -194,14 +194,10 @@ def process_talks(
             else:
                 stats["not_found"] += 1
 
-        # Write batch to both talk.Kicker and talk_metadata.kicker
+        # Write batch to talk_metadata.kicker
         if batch_updates and not dry_run:
             try:
                 for kicker_text, talk_id in batch_updates:
-                    core_db.execute(
-                        "UPDATE talk SET Kicker = ? WHERE ID = ?",
-                        [kicker_text, talk_id],
-                    )
                     upsert_talk_metadata(core_db, talk_id, kicker=kicker_text)
                 stats["written"] += len(batch_updates)
                 print(f"  ✓ Committed batch of {len(batch_updates)} updates")

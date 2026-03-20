@@ -51,16 +51,18 @@ class Database:
         return conn
 
     def select(self, query: str, params: Sequence[Any] = ()) -> List[Row]:
+        conn = self._connect()
         try:
-            with self._connect() as conn:
-                conn.row_factory = sqlite3.Row
-                cur = conn.execute(query, params)
-                return [dict(row) for row in cur.fetchall()]
+            conn.row_factory = sqlite3.Row
+            cur = conn.execute(query, params)
+            return [dict(row) for row in cur.fetchall()]
         except sqlite3.OperationalError as e:
             if "interrupted" in str(e).lower():
                 log.warning(f"Query timed out after {self.timeout}s: {query[:100]}...")
                 return []
             raise
+        finally:
+            conn.close()
 
     def select_one(self, query: str, params: Sequence[Any] = ()) -> Optional[Row]:
         rows = self.select(query, params)
@@ -83,16 +85,19 @@ class Database:
         if self.read_only:
             raise RuntimeError("Cannot execute write operations on read-only database")
 
+        conn = self._connect()
         try:
-            with self._connect() as conn:
-                cur = conn.execute(query, params)
-                conn.commit()
-                return cur.rowcount
+            cur = conn.execute(query, params)
+            conn.commit()
+            return cur.rowcount
         except sqlite3.OperationalError as e:
+            conn.rollback()
             if "interrupted" in str(e).lower():
                 log.warning(f"Query timed out after {self.timeout}s: {query[:100]}...")
                 return 0
             raise
+        finally:
+            conn.close()
 
     def execute_many(self, query: str, params_list: Iterable[Sequence[Any]]) -> int:
         """
@@ -105,16 +110,19 @@ class Database:
         if self.read_only:
             raise RuntimeError("Cannot execute write operations on read-only database")
 
+        conn = self._connect()
         try:
-            with self._connect() as conn:
-                cur = conn.executemany(query, params_list)
-                conn.commit()
-                return cur.rowcount
+            cur = conn.executemany(query, params_list)
+            conn.commit()
+            return cur.rowcount
         except sqlite3.OperationalError as e:
+            conn.rollback()
             if "interrupted" in str(e).lower():
                 log.warning(f"Query timed out after {self.timeout}s")
                 return 0
             raise
+        finally:
+            conn.close()
 
 
 # Global shared instances
