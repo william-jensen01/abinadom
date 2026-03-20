@@ -10,6 +10,7 @@ Tests cover:
 """
 
 import unittest
+import sqlite3
 import sys
 from pathlib import Path
 from datetime import datetime
@@ -425,21 +426,61 @@ class TestEdgeCases(unittest.TestCase):
         self.assertEqual(result["speaker_name"], "Unknown Speaker")
 
 
-@unittest.skip("Wave 0 stub -- filled by Plan 01-01")
 class TestTalkMetadataDDL(unittest.TestCase):
-    """Stubs for talk_metadata table DDL validation."""
+    """Validate talk_metadata table DDL in core.52.db."""
+
+    @classmethod
+    def setUpClass(cls):
+        try:
+            from db import CORE_DB_PATH
+            cls.db_path = CORE_DB_PATH
+            cls.db_available = True
+        except Exception:
+            cls.db_available = False
 
     def test_talk_metadata_table_exists(self):
         """talk_metadata table should exist in core.52.db after DDL runs."""
-        self.fail("Stub -- implement after Plan 01-01 creates the table")
+        if not self.db_available:
+            self.skipTest("Database not available")
+        conn = sqlite3.connect(self.db_path)
+        try:
+            result = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='talk_metadata'"
+            ).fetchone()
+            self.assertIsNotNone(result, "talk_metadata table does not exist in core.52.db")
+        finally:
+            conn.close()
 
     def test_talk_metadata_has_expected_columns(self):
         """talk_metadata should have 7 columns: talk_id, speaker_role_id, uri_l, uri_gc, kicker, talk_preview, data_aid."""
-        self.fail("Stub")
+        if not self.db_available:
+            self.skipTest("Database not available")
+        conn = sqlite3.connect(self.db_path)
+        try:
+            rows = conn.execute("PRAGMA table_info(talk_metadata)").fetchall()
+            col_names = [row[1] for row in rows]
+            self.assertEqual(len(col_names), 7, f"Expected 7 columns, got {len(col_names)}: {col_names}")
+            expected = ["talk_id", "speaker_role_id", "uri_l", "uri_gc", "kicker", "talk_preview", "data_aid"]
+            self.assertEqual(col_names, expected, f"Column mismatch: {col_names}")
+        finally:
+            conn.close()
 
     def test_talk_metadata_has_indexes(self):
         """talk_metadata should have indexes on data_aid and uri_gc."""
-        self.fail("Stub")
+        if not self.db_available:
+            self.skipTest("Database not available")
+        conn = sqlite3.connect(self.db_path)
+        try:
+            rows = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='talk_metadata'"
+            ).fetchall()
+            index_names = [row[0] for row in rows]
+            self.assertIn("idx_talk_metadata_data_aid", index_names,
+                          f"idx_talk_metadata_data_aid not found in {index_names}")
+            self.assertIn("idx_talk_metadata_uri_gc", index_names,
+                          f"idx_talk_metadata_uri_gc not found in {index_names}")
+        finally:
+            conn.close()
 
 
 @unittest.skip("Wave 0 stub -- filled by Plan 01-01")
