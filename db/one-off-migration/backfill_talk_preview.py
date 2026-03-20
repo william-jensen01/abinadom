@@ -100,7 +100,7 @@ def populate_previews(
     print(f"\nProcessing {total} talk previews...")
 
     for i, preview_data in enumerate(previews_data, 1):
-        talk_id = preview_data.get("TalkID")
+        talk_id = preview_data.get("TalkID") or preview_data.get("talkID")
         preview = preview_data.get("preview")
 
         if talk_id is None or preview is None:
