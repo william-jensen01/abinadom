@@ -150,6 +150,19 @@ TALK_METADATA_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": None,
         "description": "Speaker role identifier",
     },
+    # Enriched metadata (from talk_metadata table)
+    "kicker": {
+        "required": False,
+        "type": str,
+        "default": None,
+        "description": "Talk kicker/teaser subtitle",
+    },
+    "talk_preview": {
+        "required": False,
+        "type": str,
+        "default": None,
+        "description": "Talk preview/summary text",
+    },
     # Page numbers (for print editions)
     "start_page_num": {
         "required": False,

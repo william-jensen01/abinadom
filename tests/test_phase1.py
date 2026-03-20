@@ -455,50 +455,108 @@ class TestBackfillTargets(unittest.TestCase):
         self.fail("Stub")
 
 
-@unittest.skip("Wave 0 stub -- filled by Plan 01-03")
 class TestEnrichedFields(unittest.TestCase):
-    """Stubs for enriched field coverage in Phase 1."""
+    """Tests for enriched field coverage in Phase 1."""
+
+    def _base_data(self) -> Dict[str, Any]:
+        return {
+            "talk_id": 1,
+            "speaker_id": 100,
+            "conference_id": 50,
+            "title": "Test Talk",
+            "speaker_name": "John Doe",
+            "conference_year": 2023,
+            "conference_month": "April",
+            "conference_description": "2023 Annual General Conference",
+            "talk_date": "2023-04-01",
+        }
 
     def test_talk_metadata_has_kicker_field(self):
         """TalkMetadata dataclass should have kicker: Optional[str]."""
-        self.fail("Stub")
+        data = self._base_data()
+        data["kicker"] = "A test kicker"
+        metadata = create_talk_metadata_from_db_row(data)
+        self.assertEqual(metadata.kicker, "A test kicker")
 
     def test_talk_metadata_has_talk_preview_field(self):
         """TalkMetadata dataclass should have talk_preview: Optional[str]."""
-        self.fail("Stub")
+        data = self._base_data()
+        data["talk_preview"] = "Preview text"
+        metadata = create_talk_metadata_from_db_row(data)
+        self.assertEqual(metadata.talk_preview, "Preview text")
 
     def test_kicker_in_document_summary(self):
         """Document summary should include kicker when present."""
-        self.fail("Stub")
+        data = self._base_data()
+        data["kicker"] = "Inspiring subtitle"
+        metadata = create_talk_metadata_from_db_row(data)
+        summary = metadata._create_document_summary()
+        self.assertIn("Kicker: Inspiring subtitle", summary)
 
     def test_talk_preview_in_document_summary(self):
         """Document summary should include talk_preview when present."""
-        self.fail("Stub")
+        data = self._base_data()
+        data["talk_preview"] = "A brief preview of the talk."
+        metadata = create_talk_metadata_from_db_row(data)
+        summary = metadata._create_document_summary()
+        self.assertIn("Preview: A brief preview of the talk.", summary)
 
     def test_enriched_fields_optional(self):
         """kicker and talk_preview should default to None."""
-        self.fail("Stub")
+        data = self._base_data()
+        metadata = create_talk_metadata_from_db_row(data)
+        self.assertIsNone(metadata.kicker)
+        self.assertIsNone(metadata.talk_preview)
 
     def test_query_has_left_join(self):
         """Phase 1 query should LEFT JOIN talk_metadata."""
-        self.fail("Stub")
+        from extractors.phase1_talk_metadata import build_talk_metadata_query
+        query, _ = build_talk_metadata_query()
+        self.assertIn("LEFT JOIN talk_metadata", query)
 
     def test_transform_db_row_includes_enriched_fields(self):
         """transform_db_row_to_metadata should map kicker and talk_preview."""
-        self.fail("Stub")
+        row = {
+            "talk_id": 1, "title": "Test", "talk_date": "2023-04-01",
+            "corpus": "E", "speaker_id": 100, "speaker_role_id": 5,
+            "speaker_given_names": "John", "speaker_last_names": "Doe",
+            "conference_id": 50, "conference_description": "2023 Annual",
+            "conference_year": 2023, "conference_annual": "A",
+            "kicker": "Test kicker", "talk_preview": "Test preview",
+        }
+        result = transform_db_row_to_metadata(row)
+        self.assertEqual(result["kicker"], "Test kicker")
+        self.assertEqual(result["talk_preview"], "Test preview")
 
 
-@unittest.skip("Wave 0 stub -- filled by Plan 01-03")
 class TestTopicTablesUnchanged(unittest.TestCase):
-    """Stubs for topic table smoke test."""
+    """Topic table smoke tests -- verify backfills did not alter topic data."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Load DB counts once for the class."""
+        try:
+            from db import Database, CORE_DB_PATH
+            db = Database(CORE_DB_PATH)
+            cls.conference_topic_count = db.scalar("SELECT COUNT(*) FROM conference_topic")
+            cls.talk_topic_count = db.scalar("SELECT COUNT(*) FROM talk_topic")
+            cls.db_available = True
+        except Exception:
+            cls.db_available = False
 
     def test_conference_topic_count_unchanged(self):
         """conference_topic row count should not change after backfills."""
-        self.fail("Stub")
+        if not self.db_available:
+            self.skipTest("Database not available")
+        self.assertEqual(self.conference_topic_count, 333,
+                         f"Expected 333, got {self.conference_topic_count}")
 
     def test_talk_topic_count_unchanged(self):
         """talk_topic row count should not change after backfills."""
-        self.fail("Stub")
+        if not self.db_available:
+            self.skipTest("Database not available")
+        self.assertEqual(self.talk_topic_count, 16162,
+                         f"Expected 16162, got {self.talk_topic_count}")
 
 
 def run_tests():

@@ -67,11 +67,13 @@ def build_talk_metadata_query(
             t.Date as talk_date,
             t.Corpus as corpus,
             t.URL as url,
-            t.URI_L as uri_l,
-            t.URI_GC as uri_gc,
-            t.data_aid as data_aid,
+            COALESCE(tm.uri_l, t.URI_L) as uri_l,
+            COALESCE(tm.uri_gc, t.URI_GC) as uri_gc,
+            COALESCE(tm.data_aid, t.data_aid) as data_aid,
             t.SpeakerID as speaker_id,
-            t.speaker_role_id,
+            COALESCE(tm.speaker_role_id, t.speaker_role_id) as speaker_role_id,
+            tm.kicker,
+            tm.talk_preview,
             t.AudioUrl as audio_url,
             t.VideoLowUrl as video_low_url,
             t.VideoMedUrl as video_med_url,
@@ -107,6 +109,8 @@ def build_talk_metadata_query(
         INNER JOIN conference_talk ct ON t.ID = ct.TalkID
         INNER JOIN conf_session cs ON ct.SessionID = cs.ID
         INNER JOIN conference c ON cs.ConferenceID = c.ID
+
+        LEFT JOIN talk_metadata tm ON t.ID = tm.talk_id
 
         WHERE 1=1
     """
@@ -269,6 +273,9 @@ def transform_db_row_to_metadata(row: Dict[str, Any]) -> Dict[str, Any]:
         # Optional additional metadata
         "corpus": row.get("corpus", "E"),
         "speaker_role_id": row.get("speaker_role_id"),
+        # Enriched fields from talk_metadata
+        "kicker": row.get("kicker"),
+        "talk_preview": row.get("talk_preview"),
         "start_page_num": row.get("start_page_num"),
         "end_page_num": row.get("end_page_num"),
     }

@@ -72,6 +72,11 @@ class TalkMetadata:
     # Additional metadata
     corpus: str = "E"
     speaker_role_id: Optional[int] = None
+
+    # Enriched metadata (from talk_metadata table)
+    kicker: Optional[str] = None
+    talk_preview: Optional[str] = None
+
     start_page_num: Optional[int] = None
     end_page_num: Optional[int] = None
 
@@ -173,6 +178,12 @@ class TalkMetadata:
         if self.session_description:
             parts.append(f"Session: {self.session_description}")
 
+        if self.kicker:
+            parts.append(f"Kicker: {self.kicker}")
+
+        if self.talk_preview:
+            parts.append(f"Preview: {self.talk_preview}")
+
         if self.talk_date:
             parts.append(f"Date: {self.talk_date}")
 
@@ -244,6 +255,9 @@ def create_talk_metadata_from_db_row(row: Dict[str, Any]) -> TalkMetadata:
         # Optional additional metadata
         corpus=row.get("corpus", "E"),
         speaker_role_id=row.get("speaker_role_id"),
+        # Enriched metadata
+        kicker=row.get("kicker"),
+        talk_preview=row.get("talk_preview"),
         start_page_num=row.get("start_page_num"),
         end_page_num=row.get("end_page_num"),
         # Extraction metadata (auto-populated)
