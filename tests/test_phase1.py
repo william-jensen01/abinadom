@@ -483,17 +483,39 @@ class TestTalkMetadataDDL(unittest.TestCase):
             conn.close()
 
 
-@unittest.skip("Wave 0 stub -- filled by Plan 01-01")
 class TestBackfillTargets(unittest.TestCase):
-    """Stubs for backfill script target validation."""
+    """Validate backfill scripts use upsert helper and avoid direct table writes."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.migration_dir = Path(__file__).parent.parent / "db" / "one-off-migration"
+        cls.backfill_scripts = [
+            "backfill_talk_metadata.py",
+            "backfill_talk_kicker.py",
+            "backfill_talk_uri.py",
+            "backfill_talk_metadata_role_extraction.py",
+            "backfill_talk_preview.py",
+        ]
 
     def test_backfill_scripts_use_upsert_helper(self):
         """All 5 backfill scripts should import upsert_talk_metadata."""
-        self.fail("Stub")
+        for script in self.backfill_scripts:
+            content = (self.migration_dir / script).read_text(encoding="utf-8")
+            self.assertIn("upsert_talk_metadata", content,
+                          f"{script} does not import upsert_talk_metadata")
 
     def test_no_direct_writes_to_talks_table(self):
         """Backfill scripts (except Title in backfill_talk_metadata) should not UPDATE talk SET."""
-        self.fail("Stub")
+        for script in self.backfill_scripts:
+            content = (self.migration_dir / script).read_text(encoding="utf-8")
+            if script == "backfill_talk_metadata.py":
+                self.assertIn("UPDATE talk SET", content,
+                              f"{script} should contain the allowed Title update")
+                self.assertIn("UPDATE talk SET Title", content,
+                              f"{script} UPDATE talk SET should only target Title")
+            else:
+                self.assertNotIn("UPDATE talk SET", content,
+                                 f"{script} contains direct UPDATE talk SET")
 
 
 class TestEnrichedFields(unittest.TestCase):
