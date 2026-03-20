@@ -265,7 +265,7 @@ def main():
     results = []
     previews_found = 0
     matched = 0
-    unmatched = 0
+    unmatched_talks = []
 
     for i, (year, annual, talk) in enumerate(all_talk_entries, 1):
         uri = talk["uri"]
@@ -287,7 +287,16 @@ def main():
                 }
             )
         else:
-            unmatched += 1
+            month = "04" if annual == "A" else "10"
+            unmatched_talks.append(
+                {
+                    "year": year,
+                    "month": month,
+                    "uri": uri,
+                    "title": talk["title"],
+                    "had_preview": preview is not None,
+                }
+            )
             log.debug("No talk_id match for URI: %s", uri)
 
         if i % 100 == 0:
@@ -306,8 +315,25 @@ def main():
     print(f"Total talk URIs collected:   {len(all_talk_entries)}")
     print(f"Previews found (Level 2):    {previews_found}")
     print(f"Matched to talk_id:          {matched}")
-    print(f"Unmatched (no talk_id):       {unmatched}")
+    print(f"Unmatched (no talk_id):      {len(unmatched_talks)}")
     print(f"Results saved:               {len(results)}")
+
+    if unmatched_talks:
+        print("\n" + "-" * 70)
+        print(f"Unmatched Talks ({len(unmatched_talks)} total)")
+        print("-" * 70)
+        # Group by conference for readability
+        from itertools import groupby
+        key = lambda t: (t["year"], t["month"])
+        for (year, month), group in groupby(sorted(unmatched_talks, key=key), key=key):
+            group_list = list(group)
+            print(f"\n  {year}/{month} ({len(group_list)} unmatched):")
+            for t in group_list:
+                preview_flag = " [has preview]" if t["had_preview"] else ""
+                title = t["title"] or "(no title)"
+                print(f"    {t['uri']}")
+                print(f"      Title: {title}{preview_flag}")
+
     print("=" * 70)
 
 
