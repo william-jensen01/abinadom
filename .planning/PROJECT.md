@@ -24,6 +24,7 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 
 <!-- Milestone 1: Complete General Conference pipeline end-to-end -->
 
+- [x] DB Enrichment layer — `talk_metadata` table, backfill scripts, Phase 1 LEFT JOIN, preview cache (4,006 entries) — Validated in Phase 01: db-enrichment
 - [ ] Phase 1–5 extractors: all known bugs diagnosed and fixed
 - [ ] Phase 6: ChromaDB loader — transform validated records into 4 collections, batch insert, verify
 - [ ] Full pipeline run over all 7,659 General Conference talks, resumable and idempotent
@@ -65,4 +66,4 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 | Paragraph-level chunking | Preserves natural document structure; typical 200–800 tokens | ✓ Good |
 
 ---
-*Last updated: 2026-03-18 after initialization*
+*Last updated: 2026-03-20 — Phase 01 (db-enrichment) complete*
