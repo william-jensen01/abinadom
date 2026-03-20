@@ -150,12 +150,12 @@ def process_talks(
         )
         content_rows = {row[0]: row[1] for row in cursor.fetchall()}
 
-        # Read existing Kicker values from core.52.db
+        # Read existing kicker values from talk_metadata (authoritative source)
         existing_rows = core_db.select(
-            f"SELECT ID, Kicker FROM talk WHERE ID IN ({placeholders})",
+            f"SELECT talk_id, kicker FROM talk_metadata WHERE talk_id IN ({placeholders})",
             batch_ids,
         )
-        existing_kickers = {row["ID"]: row["Kicker"] for row in existing_rows}
+        existing_kickers = {row["talk_id"]: row["kicker"] for row in existing_rows}
 
         batch_updates = []
 
@@ -194,10 +194,14 @@ def process_talks(
             else:
                 stats["not_found"] += 1
 
-        # Write batch to talk_metadata (authoritative source for kicker)
+        # Write batch to both talk.Kicker and talk_metadata.kicker
         if batch_updates and not dry_run:
             try:
                 for kicker_text, talk_id in batch_updates:
+                    core_db.execute(
+                        "UPDATE talk SET Kicker = ? WHERE ID = ?",
+                        [kicker_text, talk_id],
+                    )
                     upsert_talk_metadata(core_db, talk_id, kicker=kicker_text)
                 stats["written"] += len(batch_updates)
                 print(f"  ✓ Committed batch of {len(batch_updates)} updates")
@@ -235,7 +239,9 @@ def print_statistics(core_db: Database) -> None:
     total_eligible = rows[0]["cnt"] if rows else 0
 
     rows = core_db.select(
-        "SELECT COUNT(*) as cnt FROM talk WHERE Corpus IN ('E', 'G') AND Kicker IS NOT NULL"
+        "SELECT COUNT(*) as cnt FROM talk_metadata tm"
+        " JOIN talk t ON tm.talk_id = t.ID"
+        " WHERE t.Corpus IN ('E', 'G') AND tm.kicker IS NOT NULL"
     )
     total_with_kicker = rows[0]["cnt"] if rows else 0
 
@@ -245,13 +251,13 @@ def print_statistics(core_db: Database) -> None:
     )
 
     sample = core_db.select(
-        "SELECT ID, Kicker FROM talk WHERE Kicker IS NOT NULL ORDER BY ID LIMIT 5"
+        "SELECT talk_id, kicker FROM talk_metadata WHERE kicker IS NOT NULL ORDER BY talk_id LIMIT 5"
     )
     if sample:
         print("\nSample kickers (first 5):")
         for row in sample:
-            snippet = row["Kicker"][:80] if row["Kicker"] else ""
-            print(f"  TalkID {row['ID']}: \"{snippet}\"")
+            snippet = row["kicker"][:80] if row["kicker"] else ""
+            print(f"  TalkID {row['talk_id']}: \"{snippet}\"")
 
 
 def parse_args() -> argparse.Namespace:
