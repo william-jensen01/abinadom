@@ -24,10 +24,6 @@ from db import core_db, Database
 from models.talk_metadata import TalkMetadata, create_talk_metadata_from_db_row
 from utils.validators import sanitize_speaker_name, determine_conference_month
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
 logger = logging.getLogger(__name__)
 
 

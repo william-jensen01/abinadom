@@ -36,11 +36,6 @@ from extractors.html_parsing_utils import (
     render_span_text,
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 

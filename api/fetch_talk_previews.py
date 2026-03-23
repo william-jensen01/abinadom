@@ -52,11 +52,6 @@ requests_cache.install_cache(
     "http_cache", backend="sqlite", expire_after=requests_cache.NEVER_EXPIRE
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S",
-)
 log = logging.getLogger(__name__)
 
 
