@@ -122,7 +122,7 @@ class DatabaseBuilder:
 
     def lookup_talk_id(self, uri: str) -> Optional[int]:
         """
-        Look up talk_id from core.db using URI_GC.
+        Look up talk_id from core.db using talk_metadata.uri_gc.
 
         Args:
             uri: URI to look up
@@ -136,7 +136,9 @@ class DatabaseBuilder:
         try:
             self.core_cursor.execute(
                 """
-                SELECT ID FROM talk WHERE URI_GC = ?
+                SELECT t.ID FROM talk t
+                JOIN talk_metadata tm ON t.ID = tm.talk_id
+                WHERE tm.uri_gc = ?
             """,
                 (uri,),
             )
