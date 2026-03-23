@@ -7,11 +7,11 @@ and JSON files. Processes a single conference session, updating metadata, topics
 roles, and talk relationships.
 
 Usage:
-    python UPDATE.py <gc_db_path> [--dry-run] [--verbose]
+    pipenv run py scripts/UPDATE.py <gc_db_path> [--dry-run] [--verbose]
 
 Example:
-    python UPDATE.py db/2025-04.db
-    python UPDATE.py db/2025-04.db --dry-run --verbose
+    pipenv run py scripts/UPDATE.py db/2025-04.db
+    pipenv run py scripts/UPDATE.py db/2025-04.db --dry-run --verbose
 """
 
 from __future__ import annotations
@@ -26,13 +26,13 @@ from typing import Any, Dict, List, Optional
 
 from bs4 import BeautifulSoup
 
-# Add project root to path for imports
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add project root to path for imports (script is in scripts/, root is one level up)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from db import Database, CORE_DB_PATH, CONTENT_DB_PATH
 
 # Import speaker role utilities from backfill script
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "db", "one-off-migration"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "db", "one-off-migration"))
 from backfill_talk_metadata import title_case_role, slugify
 
 

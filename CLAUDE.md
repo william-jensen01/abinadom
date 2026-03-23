@@ -101,6 +101,12 @@
 - `models/footnote_data.py` — Phase 4 data model
 - `models/validation_report.py` — Phase 5 data model
 
+### scripts/
+- `scripts/db_schema_extractor.py` — Database schema inspection utility (use with specific arguments)
+- `scripts/UPDATE.py` — Conference database synchronization script (gc.db to core db)
+- `scripts/process_all.py` — Batch topic and talk processing script (threaded API fetcher)
+- `scripts/process_topics.py` — Topic data fetcher (topics.json → Church API → entries)
+
 ### tests/
 - `tests/test_html_parsing_utils.py`
 - `tests/test_phase1.py`

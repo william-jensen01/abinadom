@@ -1,3 +1,13 @@
+"""
+Batch topic and talk processing script.
+
+Fetches topic data from the Church of Jesus Christ API, processes entries,
+and downloads talk HTML content using thread-pooled HTTP requests.
+
+Usage:
+    pipenv run py scripts/process_all.py [--skip-topics] [--skip-talks]
+"""
+
 import json
 import requests
 from typing import List, Dict, Any, Optional

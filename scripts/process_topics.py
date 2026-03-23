@@ -1,3 +1,13 @@
+"""
+Topic data fetcher.
+
+Loads topic URIs from topics.json, fetches each topic's data from the
+Church of Jesus Christ API, and extracts talk entries with metadata.
+
+Usage:
+    pipenv run py scripts/process_topics.py
+"""
+
 import json
 import requests
 from typing import List, Dict, Any
