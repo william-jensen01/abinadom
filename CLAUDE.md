@@ -75,6 +75,7 @@
 - `docs/pipeline/phase-2-paragraph/IMPLEMENTATION_SUMMARY.md`
 - `docs/pipeline/phase-2-paragraph/PHASE2_PLAN.md`
 - `docs/pipeline/phase-2-paragraph/PHASE2_README.md`
+- `docs/pipeline/phase-3-citation/BUGS.md` — Bug catalogue for Phase 3 audit (all known pipeline bugs)
 - `docs/pipeline/phase-3-citation/PHASE3_PLAN.md`
 - `docs/pipeline/phase-3-citation/REFACTOR_CITATION_PARSING.md`
 - `docs/pipeline/phase-4-footnote/BUG_FIXING_SUMMARY.md`
@@ -93,6 +94,7 @@
 
 ### config/
 - `config/schemas.py` — Config/validation schemas
+- `config/audit_sample.json` — Talk IDs for bug audit sample (user-curated; populate before running run_audit.py)
 
 ### models/
 - `models/talk_metadata.py` — Phase 1 data model
@@ -106,6 +108,7 @@
 - `scripts/UPDATE.py` — Conference database synchronization script (gc.db to core db)
 - `scripts/process_all.py` — Batch topic and talk processing script (threaded API fetcher)
 - `scripts/process_topics.py` — Topic data fetcher (topics.json → Church API → entries)
+- `scripts/run_audit.py` — Bug audit driver script (runs phases 1-5 per talk_id in config/audit_sample.json)
 
 ### tests/
 - `tests/test_html_parsing_utils.py`
