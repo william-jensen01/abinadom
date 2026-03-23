@@ -10,8 +10,17 @@ Creates three new columns in the talk table:
 
 import sqlite3
 import sys
+import os
 import re
 from urllib.parse import urlparse
+
+# Add project root to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from db import Database
+
+# Add one-off-migration to path for upsert helper
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "db", "one-off-migration"))
+from create_talk_metadata_table import upsert_talk_metadata
 
 
 def normalize_month_for_gc(month, year):
@@ -132,7 +141,10 @@ def extract_uri_gc(url):
 
 def add_uri_columns(db_path):
     """
-    Add URI_L, URI_GC, and URI_Success columns to talk table.
+    Generate URI variants and store them in talk_metadata table.
+
+    URI_L and URI_GC are stored in talk_metadata (not the talk table)
+    since the schema migration in Phase 01.
 
     Args:
         db_path: Path to database
@@ -143,34 +155,15 @@ def add_uri_columns(db_path):
     print(f"Database: {db_path}")
     print("=" * 80)
 
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-
-    # Add columns if they don't exist
-    print("\nStep 1: Adding URI columns to talk table...")
-
-    columns_to_add = [("URI_L", "TEXT"), ("URI_GC", "TEXT"), ("URI_Success", "TEXT")]
-
-    for col_name, col_type in columns_to_add:
-        try:
-            cursor.execute(f"ALTER TABLE talk ADD COLUMN {col_name} {col_type}")
-            print(f"  Added column: {col_name}")
-        except sqlite3.OperationalError as e:
-            if "duplicate column name" in str(e).lower():
-                print(f"  Column {col_name} already exists, will update values")
-            else:
-                raise
-
-    conn.commit()
+    db = Database(db_path, read_only=False)
 
     # Get all talks with URLs
-    print("\nStep 2: Loading talks from database...")
-    cursor.execute("SELECT ID, URL FROM talk WHERE URL IS NOT NULL")
-    talks = cursor.fetchall()
+    print("\nStep 1: Loading talks from database...")
+    talks = db.select("SELECT ID, URL FROM talk WHERE URL IS NOT NULL")
     print(f"Found {len(talks)} talks with URLs")
 
     # Process each talk
-    print("\nStep 3: Generating URI variants...")
+    print("\nStep 2: Generating URI variants...")
     print("-" * 80)
 
     updated_count = 0
@@ -178,15 +171,20 @@ def add_uri_columns(db_path):
     uri_gc_count = 0
     failed_count = 0
 
-    for talk_id, url in talks:
+    for row in talks:
+        talk_id = row["ID"]
+        url = row["URL"]
         uri_l = extract_uri_l(url)
         uri_gc = extract_uri_gc(url)
 
-        # Update database
-        cursor.execute(
-            "UPDATE talk SET URI_L = ?, URI_GC = ? WHERE ID = ?",
-            (uri_l, uri_gc, talk_id),
-        )
+        # Upsert into talk_metadata
+        fields = {}
+        if uri_l is not None:
+            fields["uri_l"] = uri_l
+        if uri_gc is not None:
+            fields["uri_gc"] = uri_gc
+        if fields:
+            upsert_talk_metadata(db, talk_id, **fields)
 
         updated_count += 1
 
@@ -196,16 +194,12 @@ def add_uri_columns(db_path):
             uri_gc_count += 1
         if not uri_l and not uri_gc:
             failed_count += 1
-            print(f"⚠️  TalkID {talk_id}: Failed to generate URIs from URL: {url}")
+            print(f"  TalkID {talk_id}: Failed to generate URIs from URL: {url}")
 
         if updated_count % 500 == 0:
             print(f"Progress: {updated_count}/{len(talks)} talks processed")
 
     print("-" * 80)
-
-    # Commit changes
-    conn.commit()
-    conn.close()
 
     print("\n" + "=" * 80)
     print("Summary:")
@@ -213,14 +207,12 @@ def add_uri_columns(db_path):
     print(f"  URI_L generated: {uri_l_count}")
     print(f"  URI_GC generated: {uri_gc_count}")
     print(f"  Failed to generate: {failed_count}")
-    print(
-        f"  Success rate: {((updated_count - failed_count) / updated_count * 100):.1f}%"
-    )
+    if updated_count > 0:
+        print(
+            f"  Success rate: {((updated_count - failed_count) / updated_count * 100):.1f}%"
+        )
     print("=" * 80)
-    print("\n✓ URI columns created and populated successfully!")
-    print(
-        "\nNote: URI_Success column created but left empty (populate with validation script)"
-    )
+    print("\nURI variants written to talk_metadata table.")
     print("=" * 80)
 
 
