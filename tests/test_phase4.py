@@ -497,7 +497,11 @@ class TestFootnoteTextRendering:
     # --- whitespace preservation ---
 
     def test_cite_tags_preserve_surrounding_spaces(self):
-        """Spaces between <cite> elements must not be collapsed into nothing."""
+        """Spaces between <cite> elements must not be collapsed into nothing.
+
+        Regression: BUG-13 — whitespace destroyed between inline elements;
+        get_text(strip=True) dropped inter-element spaces.
+        """
         html = (
             '<span class="footnote long">[<span class="note-p">'
             'Joseph&nbsp;B. Wirthlin, "The Great Commandment,"'
@@ -522,7 +526,11 @@ class TestFootnoteTextRendering:
     # --- sx() anchor removal ---
 
     def test_sx_anchor_removed_no_extra_space(self):
-        """The &nbsp;-only sx() anchor should not leave a leading space on the citation."""
+        """The &nbsp;-only sx() anchor should not leave a leading space on the citation.
+
+        Regression: BUG-14 — extra leading spaces from sx() anchors containing
+        non-breaking space before citation text.
+        """
         html = (
             '<span class="footnote">'
             '<span class="citation" id="1">'
@@ -537,6 +545,9 @@ class TestFootnoteTextRendering:
     # --- _ccontainer_punctuation unit tests ---
 
     def test_rsemi_gives_semicolon_suffix(self):
+        """Regression: BUG-15 — missing punctuation from CSS ccontainer
+        pseudo-elements not present in HTML text content.
+        """
         prefix, suffix = _ccontainer_punctuation(["ccontainer", "rsemi"])
         assert prefix == ""
         assert suffix == ";"
@@ -546,6 +557,10 @@ class TestFootnoteTextRendering:
         assert suffix == "."
 
     def test_rbrackdotrdquo_gives_compound_suffix(self):
+        """Regression: BUG-01 — cp1252 encoding of curly quotes in _PUNCT_TOKENS
+        caused replacement chars on Windows. The fix uses ASCII-safe \\u201d escapes.
+        Reverting the encoding fix would produce \\ufffd instead of \\u201d.
+        """
         _, suffix = _ccontainer_punctuation(["ccontainer", "rbrackdotrdquo"])
         assert suffix == '].' + '\u201d'  # ]  .  " (right double curly quote)
 

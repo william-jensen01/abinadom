@@ -98,7 +98,10 @@ class TestTextExtraction:
         assert result.total_paragraphs == 2
 
     def test_nested_tags_stripped(self):
-        """Test that nested tags are stripped."""
+        """Test that nested tags are stripped.
+
+        Regression: BUG-08 — test HTML text was below min_paragraph_length (9 < 10).
+        """
         html = "<div class='body-block'><p><strong>Bold words</strong> appear in text.</p></div>"
         result = extract_paragraphs(1, html, PARAGRAPH_CONFIG)
         assert result.paragraphs[0].text == "Bold words appear in text."
@@ -110,7 +113,10 @@ class TestTextExtraction:
         assert result.paragraphs[0].text == "Multiple spaces and newlines"
 
     def test_skip_tags(self):
-        """Test that skip tags are removed."""
+        """Test that skip tags are removed.
+
+        Regression: BUG-09 — first paragraph text was below min_paragraph_length (9 < 10).
+        """
         html = "<div class='body-block'><p>Keep this paragraph.</p><script>Remove this</script><p>Keep this paragraph too.</p></div>"
         result = extract_paragraphs(1, html, PARAGRAPH_CONFIG)
         assert result.total_paragraphs == 2
@@ -152,7 +158,10 @@ class TestParagraphExtraction:
     """Test complete paragraph extraction."""
 
     def test_extract_simple_talk(self):
-        """Test extracting paragraphs from simple talk."""
+        """Test extracting paragraphs from simple talk.
+
+        Regression: BUG-02 — test HTML bare div lacked body-block container class.
+        """
         html = """
         <div class="body-block">
             <p>Dear brothers and sisters, I am grateful.</p>
@@ -168,7 +177,10 @@ class TestParagraphExtraction:
         assert len(result.paragraphs) == 3
 
     def test_extract_with_multiple_paragraphs(self):
-        """Test extraction with multiple paragraphs."""
+        """Test extraction with multiple paragraphs.
+
+        Regression: BUG-03 — test HTML bare div lacked body-block container class.
+        """
         html = """
         <div class="body-block">
             <p>Opening paragraph.</p>
@@ -188,7 +200,10 @@ class TestParagraphExtraction:
         assert result.total_paragraphs == 0
 
     def test_paragraph_ids_generated(self):
-        """Test that paragraph IDs are generated correctly."""
+        """Test that paragraph IDs are generated correctly.
+
+        Regression: BUG-10 — bare p without body-block container.
+        """
         html = "<div class='body-block'><p>First paragraph text.</p><p>Second paragraph text.</p><p>Third paragraph text.</p></div>"
         result = extract_paragraphs(5, html, PARAGRAPH_CONFIG)
 
@@ -306,7 +321,10 @@ class TestEdgeCases:
         assert "Café" in result.paragraphs[0].text
 
     def test_very_long_paragraph(self):
-        """Test handling very long paragraphs."""
+        """Test handling very long paragraphs.
+
+        Regression: BUG-04 — bare p was not wrapped in body-block container.
+        """
         long_text = "word " * 5000  # 5000 words
         html = f"<div class='body-block'><p>{long_text}</p></div>"
         result = extract_paragraphs(99, html, PARAGRAPH_CONFIG)
@@ -323,7 +341,10 @@ class TestEdgeCases:
         assert result.total_paragraphs == 0
 
     def test_multiple_paragraphs(self):
-        """Test HTML with multiple paragraphs."""
+        """Test HTML with multiple paragraphs.
+
+        Regression: BUG-11 — bare div without body-block container.
+        """
         html = """
         <div class="body-block">
             <p>Paragraph 1 has enough text.</p>
@@ -417,7 +438,11 @@ class TestSemanticExtraction:
         assert should_skip_element(h1) is True
 
     def test_is_container_figure(self):
-        """Test identifying figure as container."""
+        """Test identifying figure as container.
+
+        Regression: BUG-05 — is_container_element returned False for div.figure
+        despite docstring saying it should be True.
+        """
         html = '<div class="figure"><p>Test</p></div>'
         soup = parse_html(html)
         div = soup.find("div")
@@ -782,7 +807,10 @@ class TestRealDataIntegration:
     """Test extraction on real talk data."""
 
     def test_extract_real_talk(self):
-        """Test extraction on a real talk from database."""
+        """Test extraction on a real talk from database.
+
+        Regression: BUG-12 — no skip guard when database file absent in test environment.
+        """
         import os
         if not os.path.exists(content_db.path):
             pytest.skip("Database not available in this environment")
@@ -872,6 +900,60 @@ class TestNewExtractionApproach:
 
         # Should have 3 paragraphs (one per list item)
         assert result.total_paragraphs == 3
+
+
+# =============================================================================
+# Regression Tests
+# =============================================================================
+
+
+class TestRegressionBugs:
+    """Regression tests for bugs catalogued in BUGS.md.
+
+    Each test reproduces the exact input that triggered the bug and asserts
+    the correct (fixed) behavior. Reverting the fix would cause the test to fail.
+    """
+
+    def test_regression_bug_06_bare_li_text(self):
+        """Regression: BUG-06 — extract_list_item_paragraphs silently drops bare
+        li text without p wrapper.
+
+        The fix added a fallback that extracts bare text content from <li> elements
+        when no <p> children are found. Reverting the fallback would cause this test
+        to return 0 paragraphs instead of 1.
+        """
+        html = """
+        <div class="body-block">
+            <ol>
+                <li>Bare text content without p wrapper</li>
+            </ol>
+        </div>
+        """
+        result = extract_paragraphs(1, html, PARAGRAPH_CONFIG)
+        assert result.total_paragraphs >= 1
+        texts = [p.text for p in result.paragraphs]
+        assert any("Bare text content without p wrapper" in t for t in texts)
+
+    def test_regression_bug_07_no_debug_prints(self, capsys):
+        """Regression: BUG-07 — Debug print() statements left in
+        extract_semantic_paragraphs violating logging convention.
+
+        The fix removed print("Stanza Detected") calls. Re-adding them
+        would cause this test to fail.
+        """
+        html = """
+        <div class="body-block">
+            <div class="stanza">
+                <div class="line">First line of poetry here</div>
+                <div class="line">Second line of poetry here</div>
+            </div>
+        </div>
+        """
+        soup = parse_html(html)
+        container = find_body_container(soup)
+        extract_semantic_paragraphs(container, PARAGRAPH_CONFIG)
+        captured = capsys.readouterr()
+        assert "Stanza Detected" not in captured.out
 
 
 if __name__ == "__main__":
