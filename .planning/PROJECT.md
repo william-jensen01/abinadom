@@ -26,7 +26,7 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 
 - [x] DB Enrichment layer — `talk_metadata` table, backfill scripts, Phase 1 LEFT JOIN, preview cache (4,006 entries) — Validated in Phase 01: db-enrichment
 - [x] Code quality — `config/pipeline_config.py` centralized constants, logging standardized (no `basicConfig` in extractors), codebase clutter removed (duplicate cache manager, superseded test runner, scripts relocated to `scripts/`) — Validated in Phase 02: code-quality
-- [ ] Phase 1–5 extractors: all known bugs diagnosed and fixed
+- [x] Phase 1–5 extractors: all known bugs diagnosed and fixed — Validated in Phase 03: bug-audit-fixes
 - [ ] Phase 6: ChromaDB loader — transform validated records into 4 collections, batch insert, verify
 - [ ] Full pipeline run over all 7,659 General Conference talks, resumable and idempotent
 - [ ] Post-run verification: record counts, sample queries, foreign key integrity confirmed
@@ -67,4 +67,4 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 | Paragraph-level chunking | Preserves natural document structure; typical 200–800 tokens | ✓ Good |
 
 ---
-*Last updated: 2026-03-22 — Phase 02 (code-quality) complete*
+*Last updated: 2026-03-23 — Phase 03 (bug-audit-fixes) complete*
