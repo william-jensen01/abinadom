@@ -17,7 +17,7 @@ All 7,659 General Conference talks processed through Phases 1-6 with verified re
 |-------|------|--------|--------------|
 | 1 | DB Enrichment | Planning Complete | ENRCH-01, ENRCH-02, ENRCH-03, ENRCH-04, ENRCH-05, ENRCH-06 |
 | 2 | 0/2 | Planned    |  |
-| 3 | Bug Audit & Fixes | Planning Complete | BUGS-01, BUGS-02, BUGS-03 |
+| 3 | 2/3 | In Progress|  |
 | 4 | Test Coverage | Not Started | QUAL-04, QUAL-05, QUAL-06, QUAL-10 |
 | 5 | ChromaDB Loader | Not Started | LOAD-01, LOAD-02, LOAD-03, LOAD-04, LOAD-05, LOAD-06 |
 | 6 | Pipeline Orchestrator | Not Started | PIPE-01, PIPE-02, PIPE-03, PIPE-04 |
@@ -76,11 +76,11 @@ Plans:
 **Goal:** All known and discovered bugs in Phases 1-5 are identified, fixed at root cause, and covered by regression tests.
 **Requirements:** BUGS-01, BUGS-02, BUGS-03
 **Depends on:** Phase 2
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 
 Plans:
 - [x] 03-01-PLAN.md -- Fix 7 known failing tests, create bug catalogue and audit infrastructure (BUGS-01, BUGS-02)
-- [ ] 03-02-PLAN.md -- Run curated ~20-talk audit, catalogue and fix all discovered bugs (BUGS-01, BUGS-02)
+- [x] 03-02-PLAN.md -- Run curated ~20-talk audit, catalogue and fix all discovered bugs (BUGS-01, BUGS-02)
 - [ ] 03-03-PLAN.md -- Add regression tests for every fixed bug including Phase 4 existing fixes (BUGS-03)
 
 *Plan 01 (Wave 1) must complete before Plan 02 (Wave 2). Plan 03 (Wave 3) depends on Plan 02.*
