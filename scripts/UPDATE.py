@@ -34,6 +34,7 @@ from db import Database, CORE_DB_PATH, CONTENT_DB_PATH
 # Import speaker role utilities from backfill script
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "db", "one-off-migration"))
 from backfill_talk_metadata import title_case_role, slugify
+from create_talk_metadata_table import upsert_talk_metadata
 
 
 # ============================================================================
@@ -551,7 +552,9 @@ def build_talk_matching_map(
     for gc_talk in gc_talks:
         # Try URI match first
         core_talk = core_db.select_one(
-            "SELECT ID FROM talk WHERE URI_GC = ? OR URI_L = ?",
+            """SELECT t.ID FROM talk t
+               LEFT JOIN talk_metadata tm ON t.ID = tm.talk_id
+               WHERE tm.uri_gc = ? OR tm.uri_l = ?""",
             (gc_talk["uri"], gc_talk["uri"]),
         )
 
@@ -561,7 +564,10 @@ def build_talk_matching_map(
         else:
             # Fallback to data_aid match
             core_talk = core_db.select_one(
-                "SELECT ID FROM talk WHERE data_aid = ?", (gc_talk["data_aid"],)
+                """SELECT t.ID FROM talk t
+                   JOIN talk_metadata tm ON t.ID = tm.talk_id
+                   WHERE tm.data_aid = ?""",
+                (gc_talk["data_aid"],),
             )
             if core_talk:
                 match_method = "data_aid"
@@ -620,7 +626,7 @@ def update_core_talk_table(
     dry_run: bool = False,
 ) -> None:
     """
-    Update core.talk table with speaker_role_id, URIs, and data_aid.
+    Update talk_metadata table with speaker_role_id, URIs, and data_aid.
 
     Args:
         gc_db: Database connection to gc.db
@@ -654,17 +660,7 @@ def update_core_talk_table(
                     core_db, role_text, stats, verbose
                 )
 
-        # Update talk table
-        update_sql = """
-            UPDATE talk
-            SET
-                speaker_role_id = ?,
-                URI_GC = ?,
-                URI_L = ?,
-                data_aid = ?
-            WHERE ID = ?
-        """
-
+        # Update talk_metadata table
         if dry_run:
             if verbose:
                 print(f"  [DRY RUN] Would update talk ID {core_talk_id}:")
@@ -673,15 +669,12 @@ def update_core_talk_table(
                 print(f"    URI: {gc_talk['uri']}")
                 print(f"    Data-Aid: {gc_data_aid}")
         else:
-            core_db.execute(
-                update_sql,
-                (
-                    speaker_role_id,
-                    gc_talk["uri"],
-                    gc_talk["uri"],
-                    gc_data_aid,
-                    core_talk_id,
-                ),
+            upsert_talk_metadata(
+                core_db, core_talk_id,
+                speaker_role_id=speaker_role_id,
+                uri_gc=gc_talk["uri"],
+                uri_l=gc_talk["uri"],
+                data_aid=gc_data_aid,
             )
 
             if verbose:
