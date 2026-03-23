@@ -17,7 +17,7 @@ All 7,659 General Conference talks processed through Phases 1-6 with verified re
 |-------|------|--------|--------------|
 | 1 | DB Enrichment | Planning Complete | ENRCH-01, ENRCH-02, ENRCH-03, ENRCH-04, ENRCH-05, ENRCH-06 |
 | 2 | 0/2 | Planned    |  |
-| 3 | Bug Audit & Fixes | Not Started | BUGS-01, BUGS-02, BUGS-03 |
+| 3 | Bug Audit & Fixes | Planning Complete | BUGS-01, BUGS-02, BUGS-03 |
 | 4 | Test Coverage | Not Started | QUAL-04, QUAL-05, QUAL-06, QUAL-10 |
 | 5 | ChromaDB Loader | Not Started | LOAD-01, LOAD-02, LOAD-03, LOAD-04, LOAD-05, LOAD-06 |
 | 6 | Pipeline Orchestrator | Not Started | PIPE-01, PIPE-02, PIPE-03, PIPE-04 |
@@ -76,13 +76,14 @@ Plans:
 **Goal:** All known and discovered bugs in Phases 1-5 are identified, fixed at root cause, and covered by regression tests.
 **Requirements:** BUGS-01, BUGS-02, BUGS-03
 **Depends on:** Phase 2
+**Plans:** 3 plans
 
-#### Plans
-1. **Bug audit** -- Systematically run sample talks through all phases, identify and catalogue every bug with reproduction steps (BUGS-01)
-2. **Bug fixes** -- Fix all catalogued bugs with root-cause fixes (BUGS-02)
-3. **Regression tests** -- Add test cases for every fixed bug, including coverage for existing Phase 4 fixes (BUGS-03)
+Plans:
+- [ ] 03-01-PLAN.md -- Fix 7 known failing tests, create bug catalogue and audit infrastructure (BUGS-01, BUGS-02)
+- [ ] 03-02-PLAN.md -- Run curated ~20-talk audit, catalogue and fix all discovered bugs (BUGS-01, BUGS-02)
+- [ ] 03-03-PLAN.md -- Add regression tests for every fixed bug including Phase 4 existing fixes (BUGS-03)
 
-*Plan 1 must complete before Plan 2. Plan 3 can partially overlap with Plan 2 (write tests as bugs are fixed).*
+*Plan 01 (Wave 1) must complete before Plan 02 (Wave 2). Plan 03 (Wave 3) depends on Plan 02.*
 
 **Acceptance criteria:**
 - [ ] Bug catalogue exists with every identified issue, root cause, and fix applied
@@ -233,7 +234,7 @@ Plans:
 |-------|---------------|--------|-----------|
 | 1. DB Enrichment | 0/5 | Planning complete | - |
 | 2. Code Quality | 0/2 | Planning complete | - |
-| 3. Bug Audit & Fixes | 0/3 | Not started | - |
+| 3. Bug Audit & Fixes | 0/3 | Planning complete | - |
 | 4. Test Coverage | 0/3 | Not started | - |
 | 5. ChromaDB Loader | 0/3 | Not started | - |
 | 6. Pipeline Orchestrator | 0/2 | Not started | - |
