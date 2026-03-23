@@ -547,7 +547,7 @@ class TestFootnoteTextRendering:
 
     def test_rbrackdotrdquo_gives_compound_suffix(self):
         _, suffix = _ccontainer_punctuation(["ccontainer", "rbrackdotrdquo"])
-        assert suffix == ']."'
+        assert suffix == '].' + '\u201d'  # ]  .  " (right double curly quote)
 
     def test_lparen_gives_paren_prefix(self):
         prefix, suffix = _ccontainer_punctuation(["ccontainer", "lparen"])

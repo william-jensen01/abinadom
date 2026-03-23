@@ -453,6 +453,22 @@ def extract_list_item_paragraphs(
 
             position_in_item += 1
 
+    # Fallback: if no paragraphs extracted, try bare text content of li directly.
+    # Handles <li>text content</li> without a wrapping <p>.
+    if not paragraphs:
+        text = _element_clean_text(li_element)
+        if text and len(text) >= config.get("min_paragraph_length", 10):
+            prefixed_text = build_prefixed_text(header, text)
+            paragraphs.append(
+                {
+                    "text": prefixed_text,
+                    "text_raw": str(li_element),
+                    "list_header": header,
+                    "list_item_index": list_item_index,
+                    "position_in_item": 1,
+                }
+            )
+
     return paragraphs
 
 
@@ -592,6 +608,8 @@ def is_container_element(element: Tag) -> bool:
         # stanza is a semantic unit handled separately
         if "stanza" in classes:
             return False
+        if "figure" in classes:
+            return True
 
     return False
 
@@ -641,8 +659,6 @@ def extract_semantic_paragraphs(
 
         # Handle semantic units
         if element.name == "div" and "stanza" in element.get("class", []):
-            print("Stanza Detected")
-            print(element)
             # Stanza: collapse all lines + citation
             text = extract_stanza_text(element)
             # Check for sibling citation element

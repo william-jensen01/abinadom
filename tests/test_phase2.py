@@ -99,9 +99,9 @@ class TestTextExtraction:
 
     def test_nested_tags_stripped(self):
         """Test that nested tags are stripped."""
-        html = "<div class='body-block'><p><strong>Bold</strong> text</p></div>"
+        html = "<div class='body-block'><p><strong>Bold words</strong> appear in text.</p></div>"
         result = extract_paragraphs(1, html, PARAGRAPH_CONFIG)
-        assert result.paragraphs[0].text == "Bold text"
+        assert result.paragraphs[0].text == "Bold words appear in text."
 
     def test_whitespace_normalization(self):
         """Test whitespace normalization."""
@@ -111,10 +111,10 @@ class TestTextExtraction:
 
     def test_skip_tags(self):
         """Test that skip tags are removed."""
-        html = "<div class='body-block'><p>Keep this</p><script>Remove this</script><p>Keep this too</p></div>"
+        html = "<div class='body-block'><p>Keep this paragraph.</p><script>Remove this</script><p>Keep this paragraph too.</p></div>"
         result = extract_paragraphs(1, html, PARAGRAPH_CONFIG)
         assert result.total_paragraphs == 2
-        assert result.paragraphs[0].text == "Keep this"
+        assert result.paragraphs[0].text == "Keep this paragraph."
 
 
 # =============================================================================
@@ -154,7 +154,7 @@ class TestParagraphExtraction:
     def test_extract_simple_talk(self):
         """Test extracting paragraphs from simple talk."""
         html = """
-        <div>
+        <div class="body-block">
             <p>Dear brothers and sisters, I am grateful.</p>
             <p>This is the body of the talk.</p>
             <p>In the name of Jesus Christ, amen.</p>
@@ -170,7 +170,7 @@ class TestParagraphExtraction:
     def test_extract_with_multiple_paragraphs(self):
         """Test extraction with multiple paragraphs."""
         html = """
-        <div>
+        <div class="body-block">
             <p>Opening paragraph.</p>
             <p>Body paragraph one.</p>
             <p>Body paragraph two.</p>
@@ -189,7 +189,7 @@ class TestParagraphExtraction:
 
     def test_paragraph_ids_generated(self):
         """Test that paragraph IDs are generated correctly."""
-        html = "<p>First</p><p>Second</p><p>Third</p>"
+        html = "<div class='body-block'><p>First paragraph text.</p><p>Second paragraph text.</p><p>Third paragraph text.</p></div>"
         result = extract_paragraphs(5, html, PARAGRAPH_CONFIG)
 
         # IDs should be: talk_id * 10000 + paragraph_number
@@ -308,7 +308,7 @@ class TestEdgeCases:
     def test_very_long_paragraph(self):
         """Test handling very long paragraphs."""
         long_text = "word " * 5000  # 5000 words
-        html = f"<p>{long_text}</p>"
+        html = f"<div class='body-block'><p>{long_text}</p></div>"
         result = extract_paragraphs(99, html, PARAGRAPH_CONFIG)
 
         assert result.total_paragraphs == 1
@@ -325,10 +325,10 @@ class TestEdgeCases:
     def test_multiple_paragraphs(self):
         """Test HTML with multiple paragraphs."""
         html = """
-        <div>
-            <p>Paragraph 1</p>
-            <p>Paragraph 2</p>
-            <p>Paragraph 3</p>
+        <div class="body-block">
+            <p>Paragraph 1 has enough text.</p>
+            <p>Paragraph 2 has enough text.</p>
+            <p>Paragraph 3 has enough text.</p>
         </div>
         """
         result = extract_paragraphs(101, html, PARAGRAPH_CONFIG)
@@ -783,6 +783,9 @@ class TestRealDataIntegration:
 
     def test_extract_real_talk(self):
         """Test extraction on a real talk from database."""
+        import os
+        if not os.path.exists(content_db.path):
+            pytest.skip("Database not available in this environment")
         # Test on talk ID 1
         html = fetch_talk_html(content_db, 1)
 

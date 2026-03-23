@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Shared HTML parsing utilities for the extraction pipeline.
 
@@ -244,7 +245,7 @@ _PUNCT_TOKENS: Dict[str, Any] = {
     "paren": {"l": "(", "r": ")"},
     "brack": {"l": "[", "r": "]"},
     # "dquo": '"',
-    "dquo": {"l": "“", "r": "”"},
+    "dquo": {"l": "\u201c", "r": "\u201d"},
     "squo": {"l": "‘", "r": "’"},
     "quote": '"',
     "mdash": "—",
