@@ -16,7 +16,7 @@ All 7,659 General Conference talks processed through Phases 1-6 with verified re
 | Phase | Name | Status | Requirements |
 |-------|------|--------|--------------|
 | 1 | DB Enrichment | Planning Complete | ENRCH-01, ENRCH-02, ENRCH-03, ENRCH-04, ENRCH-05, ENRCH-06 |
-| 2 | Code Quality | Planning Complete | QUAL-01, QUAL-02, QUAL-03, QUAL-07, QUAL-08, QUAL-09 |
+| 2 | 0/2 | Planned    |  |
 | 3 | Bug Audit & Fixes | Not Started | BUGS-01, BUGS-02, BUGS-03 |
 | 4 | Test Coverage | Not Started | QUAL-04, QUAL-05, QUAL-06, QUAL-10 |
 | 5 | ChromaDB Loader | Not Started | LOAD-01, LOAD-02, LOAD-03, LOAD-04, LOAD-05, LOAD-06 |
@@ -53,7 +53,7 @@ Plans:
 **Goal:** Clean up tech debt so the codebase is consistent, configurable, and navigable before hunting bugs.
 **Requirements:** QUAL-01, QUAL-02, QUAL-03, QUAL-07, QUAL-08, QUAL-09
 **Depends on:** Phase 1
-**Plans:** 2 plans
+**Plans:** 0/2 plans executed
 
 Plans:
 - [ ] 02-01-PLAN.md -- Verify citation refactor, centralize config, standardize logging (QUAL-01, QUAL-02, QUAL-03)
