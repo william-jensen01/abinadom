@@ -21,3 +21,9 @@ One row per bug. Root cause and fix details live in the relevant commit messages
 | BUG-13 | 4 | Whitespace destroyed between inline elements — get_text(strip=True) drops inter-element spaces | fixed |
 | BUG-14 | 4 | Extra leading spaces from sx() anchors containing non-breaking space before citation text | fixed |
 | BUG-15 | 4 | Missing punctuation from CSS ccontainer pseudo-elements not present in HTML text content | fixed |
+
+## Audit Log
+
+| Date | Sample | Talks | New Bugs |
+|------|--------|-------|----------|
+| 2026-03-23 | config/audit_sample.json (52 unique talks, IDs curated by user) | 52 clean, 0 errors | 0 — audit complete, no additional bugs found |
