@@ -83,7 +83,7 @@ None yet.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260320-hr5 | backfill_talk_kicker not writing updates | 2026-03-20 | 8ba4345 | [260320-hr5-backfill-talk-kicker-not-writing-updates](./quick/260320-hr5-backfill-talk-kicker-not-writing-updates/) |
-| 260323-0jy | Fix sqlite3.OperationalError no such column URI_L/URI_GC | 2026-03-23 | 3d90799,9cf36e7,7b863df,e7d5889 | [260323-0jy-fix-sqlite3-operationalerror-no-such-col](./quick/260323-0jy-fix-sqlite3-operationalerror-no-such-col/) |
+| 260323-0jy | Fix sqlite3.OperationalError no such column URI_L/URI_GC | 2026-03-23 | cc87f51 | [260323-0jy-fix-sqlite3-operationalerror-no-such-col](./quick/260323-0jy-fix-sqlite3-operationalerror-no-such-col/) |
 
 ## Session Continuity
 
