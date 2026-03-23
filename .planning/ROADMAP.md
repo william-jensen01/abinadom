@@ -79,7 +79,7 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md -- Fix 7 known failing tests, create bug catalogue and audit infrastructure (BUGS-01, BUGS-02)
+- [x] 03-01-PLAN.md -- Fix 7 known failing tests, create bug catalogue and audit infrastructure (BUGS-01, BUGS-02)
 - [ ] 03-02-PLAN.md -- Run curated ~20-talk audit, catalogue and fix all discovered bugs (BUGS-01, BUGS-02)
 - [ ] 03-03-PLAN.md -- Add regression tests for every fixed bug including Phase 4 existing fixes (BUGS-03)
 
@@ -234,7 +234,7 @@ Plans:
 |-------|---------------|--------|-----------|
 | 1. DB Enrichment | 0/5 | Planning complete | - |
 | 2. Code Quality | 0/2 | Planning complete | - |
-| 3. Bug Audit & Fixes | 0/3 | Planning complete | - |
+| 3. Bug Audit & Fixes | 1/3 | In progress | 03-01 complete |
 | 4. Test Coverage | 0/3 | Not started | - |
 | 5. ChromaDB Loader | 0/3 | Not started | - |
 | 6. Pipeline Orchestrator | 0/2 | Not started | - |

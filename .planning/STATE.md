@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Milestone complete
-stopped_at: Completed 02-code-quality 02-01-PLAN.md
-last_updated: "2026-03-23T06:12:41.946Z"
+status: In progress
+stopped_at: Completed 03-bug-audit-fixes 03-01-PLAN.md
+last_updated: "2026-03-23T19:45:00Z"
 progress:
-  total_phases: 2
+  total_phases: 3
   completed_phases: 2
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 10
+  completed_plans: 8
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** All LDS content searchable by meaning -- find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** Phase 02 — code-quality
+**Current focus:** Phase 03 — bug-audit-fixes
 
 ## Current Position
 
-Phase: 02
-Plan: Not started
+Phase: 03
+Plan: 02 (next)
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Plan: Not started
 | Phase 01 P04 | 2min | 2 tasks | 1 files |
 | Phase 02 P02 | 8min | 2 tasks | 6 files |
 | Phase 02-code-quality P01 | 20 | 2 tasks | 5 files |
+| Phase 03-bug-audit-fixes P01 | 45min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -69,6 +70,8 @@ Recent decisions affecting current work:
 - [Phase 02]: CLAUDE.md Project Structure Index updated to include scripts/ section with newly moved scripts
 - [Phase 02-code-quality]: Processing constants live in config/pipeline_config.py as module-level constants; schemas.py dict API preserved for callers
 - [Phase 02-code-quality]: No extractor or API module calls logging.basicConfig; level conventions documented in pipeline_config.py
+- [Phase 03-bug-audit-fixes]: Fix test HTML to use body-block container rather than adding extractor fallback — tests written before strict container enforcement
+- [Phase 03-bug-audit-fixes]: Replace literal curly-quote bytes with \u201c/\u201d ASCII-safe escapes — more robust than coding declaration alone on Windows cp1252
 
 ### Pending Todos
 
@@ -87,6 +90,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-23T06:35:00Z
-Stopped at: Completed quick task 260323-0jy
+Last session: 2026-03-23T19:45:00Z
+Stopped at: Completed 03-bug-audit-fixes 03-01-PLAN.md
 Resume file: None
