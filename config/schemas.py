@@ -6,6 +6,30 @@ Configuration-driven schema validation to ensure data quality and consistency.
 
 from typing import Any, Dict, Optional, Callable
 
+from config.pipeline_config import (
+    PARAGRAPH_HTML_PARSER,
+    MIN_PARAGRAPH_LENGTH,
+    NORMALIZE_WHITESPACE,
+    STRIP_FOOTNOTE_MARKERS,
+    DECODE_ENTITIES,
+    MIN_PARAGRAPHS_WARNING,
+    MAX_PARAGRAPHS_WARNING,
+    MIN_WORD_COUNT_INFO,
+    MAX_WORD_COUNT_WARNING,
+    MAX_WORD_COUNT_CRITICAL,
+    CITATION_HTML_PARSER,
+    CONTEXT_BEFORE_CHARS,
+    CONTEXT_AFTER_CHARS,
+    CONTEXT_WINDOW_MODE,
+    POSITION_MATCH_CASE_SENSITIVE,
+    MAX_CITATIONS_PER_PARAGRAPH_WARNING,
+    CITATION_BATCH_SIZE,
+    SQLITE_MAX_PARAMS,
+    MAX_VERSE_RANGE,
+    FOOTNOTE_HTML_PARSER,
+    MAX_FOOTNOTES_PER_PARAGRAPH_WARNING,
+)
+
 
 # Field schema structure:
 # - required: Whether the field must be present
@@ -260,19 +284,19 @@ def get_default_value(schema: Dict[str, Dict[str, Any]], field_name: str) -> Any
 
 PARAGRAPH_CONFIG = {
     # HTML parsing
-    "html_parser": "html5lib",  # Standards-compliant parser
+    "html_parser": PARAGRAPH_HTML_PARSER,  # Standards-compliant parser
     # Minimum paragraph length (chars) to include
-    "min_paragraph_length": 10,
+    "min_paragraph_length": MIN_PARAGRAPH_LENGTH,
     # Text cleaning
-    "normalize_whitespace": True,
-    "strip_footnote_markers": False,  # Keep for Phase 7
-    "decode_entities": True,
+    "normalize_whitespace": NORMALIZE_WHITESPACE,
+    "strip_footnote_markers": STRIP_FOOTNOTE_MARKERS,  # Keep for Phase 7
+    "decode_entities": DECODE_ENTITIES,
     # Validation thresholds (from plan)
-    "min_paragraphs_warning": 3,  # Warn if fewer than 3 paragraphs
-    "max_paragraphs_warning": 150,  # Warn if more than 150 paragraphs
-    "min_word_count_info": 5,  # Info log if paragraph < 5 words
-    "max_word_count_warning": 400,  # Warning if paragraph > 400 words
-    "max_word_count_critical": 800,  # Critical if paragraph > 800 words
+    "min_paragraphs_warning": MIN_PARAGRAPHS_WARNING,  # Warn if fewer than 3 paragraphs
+    "max_paragraphs_warning": MAX_PARAGRAPHS_WARNING,  # Warn if more than 150 paragraphs
+    "min_word_count_info": MIN_WORD_COUNT_INFO,  # Info log if paragraph < 5 words
+    "max_word_count_warning": MAX_WORD_COUNT_WARNING,  # Warning if paragraph > 400 words
+    "max_word_count_critical": MAX_WORD_COUNT_CRITICAL,  # Critical if paragraph > 800 words
 }
 
 
@@ -368,15 +392,15 @@ PARAGRAPH_DATA_SCHEMA: Dict[str, Dict[str, Any]] = {
 # =============================================================================
 
 CITATION_CONFIG = {
-    "html_parser": "html.parser",
-    "context_before_chars": 100,
-    "context_after_chars": 100,
-    "context_window_mode": "word",  # "char" or "word" (word snaps to nearest whole word within limit)
-    "position_match_case_sensitive": False,
-    "max_citations_per_paragraph_warning": 20,
-    "batch_size": 100,
-    "sqlite_max_params": 999,
-    "max_verse_range": 200,
+    "html_parser": CITATION_HTML_PARSER,
+    "context_before_chars": CONTEXT_BEFORE_CHARS,
+    "context_after_chars": CONTEXT_AFTER_CHARS,
+    "context_window_mode": CONTEXT_WINDOW_MODE,  # "char" or "word" (word snaps to nearest whole word within limit)
+    "position_match_case_sensitive": POSITION_MATCH_CASE_SENSITIVE,
+    "max_citations_per_paragraph_warning": MAX_CITATIONS_PER_PARAGRAPH_WARNING,
+    "batch_size": CITATION_BATCH_SIZE,
+    "sqlite_max_params": SQLITE_MAX_PARAMS,
+    "max_verse_range": MAX_VERSE_RANGE,
 }
 
 
@@ -543,11 +567,11 @@ CITATION_DATA_SCHEMA: Dict[str, Dict[str, Any]] = {
 # =============================================================================
 
 FOOTNOTE_CONFIG = {
-    "html_parser": "html.parser",
-    "context_before_chars": 100,
-    "context_after_chars": 100,
-    "context_window_mode": "word",  # "char" or "word" (word snaps to nearest whole word within limit)
-    "max_footnotes_per_paragraph_warning": 20,
+    "html_parser": FOOTNOTE_HTML_PARSER,
+    "context_before_chars": CONTEXT_BEFORE_CHARS,
+    "context_after_chars": CONTEXT_AFTER_CHARS,
+    "context_window_mode": CONTEXT_WINDOW_MODE,  # "char" or "word" (word snaps to nearest whole word within limit)
+    "max_footnotes_per_paragraph_warning": MAX_FOOTNOTES_PER_PARAGRAPH_WARNING,
 }
 
 
