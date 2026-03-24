@@ -29,6 +29,9 @@ class ParagraphData:
     # Metrics
     word_count: int
 
+    # Source type (set by Phase 2 extractor)
+    source_type: str = "p"  # "p", "stanza", "list", "bare", "table", "annotation"
+
     # List context
     list_header: Optional[str] = None
     list_item_index: Optional[int] = None

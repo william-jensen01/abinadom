@@ -8,6 +8,7 @@ requests = ">=2.31.0"
 beautifulsoup4 = ">=4.12.0"
 requests-cache = "*"
 html5lib = "*"
+chromadb = "*"
 
 [dev-packages]
 pytest = "*"

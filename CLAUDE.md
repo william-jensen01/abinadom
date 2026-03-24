@@ -91,6 +91,7 @@
 - `extractors/phase3_citation_extraction.py` — Phase 3: citation extraction
 - `extractors/phase4_footnote_extraction.py` — Phase 4: footnote extraction
 - `extractors/phase5_validation.py` — Phase 5: validation
+- `extractors/phase6_chromadb_loader.py` — Phase 6: ChromaDB loader
 
 ### config/
 - `config/schemas.py` — Config/validation schemas
@@ -117,6 +118,7 @@
 - `tests/test_phase3.py`
 - `tests/test_phase4.py`
 - `tests/test_phase5.py`
+- `tests/test_phase6.py`
 
 ## Process
 

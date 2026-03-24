@@ -40,3 +40,13 @@ MAX_VERSE_RANGE = 200
 # --- Footnote Extraction (Phase 4) ---
 MAX_FOOTNOTES_PER_PARAGRAPH_WARNING = 20
 # Footnotes share CONTEXT_BEFORE_CHARS, CONTEXT_AFTER_CHARS, CONTEXT_WINDOW_MODE
+
+# --- ChromaDB Loader (Phase 6) ---
+CHROMADB_PATH = "data/chromadb"
+CHROMADB_BATCH_SIZE = 5000
+CHROMADB_COLLECTION_NAMES = {
+    "talks": "conference_talks",
+    "paragraphs": "conference_talk_paragraphs",
+    "citations": "conference_talk_citations",
+    "footnotes": "conference_talk_footnotes",
+}
