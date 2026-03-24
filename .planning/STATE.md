@@ -101,9 +101,10 @@ None yet.
 |---|-------------|------|--------|-----------|
 | 260320-hr5 | backfill_talk_kicker not writing updates | 2026-03-20 | 8ba4345 | [260320-hr5-backfill-talk-kicker-not-writing-updates](./quick/260320-hr5-backfill-talk-kicker-not-writing-updates/) |
 | 260323-0jy | Fix sqlite3.OperationalError no such column URI_L/URI_GC | 2026-03-23 | cc87f51 | [260323-0jy-fix-sqlite3-operationalerror-no-such-col](./quick/260323-0jy-fix-sqlite3-operationalerror-no-such-col/) |
+| 260324-jmc | Update Phase 5 planning to remove embedding | 2026-03-24 | 15c5505 | [260324-jmc-update-phase-5-planning-to-remove-embedd](./quick/260324-jmc-update-phase-5-planning-to-remove-embedd/) |
 
 ## Session Continuity
 
-Last session: 2026-03-24T08:36:11.541Z
-Stopped at: Completed 04-test-coverage 04-02-PLAN.md
+Last session: 2026-03-24T20:19:48Z
+Stopped at: Completed quick task 260324-jmc
 Resume file: None
