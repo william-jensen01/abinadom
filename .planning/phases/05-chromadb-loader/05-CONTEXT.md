@@ -41,6 +41,10 @@ Build `extractors/phase6_chromadb_loader.py` — transform Phase 5 validated out
 - **D-12:** Use `chromadb.PersistentClient(path=CHROMADB_PATH)` where `CHROMADB_PATH` is defined in `config/pipeline_config.py` alongside other pipeline constants.
 - **D-13:** Tests inject a temporary directory (e.g., `tmp_path` pytest fixture) or use `chromadb.EphemeralClient()` — no hardcoded test paths.
 
+### Embedding Function
+
+- **D-14:** Use `chromadb.utils.embedding_functions.OllamaEmbeddingFunction` with `model_name="nomic-embed-text"` and `url="http://localhost:11434/api/embeddings"`. Pass this embedding function when calling `get_or_create_collection()` for all 4 collections. Ollama must be running locally with `nomic-embed-text` pulled before any insertion run.
+
 ### Claude's Discretion
 
 - Verification report format (markdown or structured text to stdout/log)

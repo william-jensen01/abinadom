@@ -29,6 +29,7 @@ The existing codebase already has `to_chromadb_format()` methods on all four dat
 - **D-11:** Skipped talks included in post-insertion verification summary.
 - **D-12:** Use `chromadb.PersistentClient(path=CHROMADB_PATH)` with path from `config/pipeline_config.py`.
 - **D-13:** Tests use `tmp_path` pytest fixture or `chromadb.EphemeralClient()`.
+- **D-14:** Use `chromadb.utils.embedding_functions.OllamaEmbeddingFunction` with `model_name="nomic-embed-text"` and `url="http://localhost:11434/api/embeddings"`. Pass to `get_or_create_collection()` for all 4 collections. Ollama must be running locally with `nomic-embed-text` pulled.
 
 ### Claude's Discretion
 - Verification report format (markdown or structured text to stdout/log)
@@ -73,6 +74,8 @@ None -- discussion stayed within phase scope.
 |---------|---------|---------|-------------|
 | pytest | 9.0.2 | Test framework | Already installed as dev dependency |
 | chromadb.utils.batch_utils | (bundled) | `create_batches()` utility for splitting large inserts | When inserting more than `max_batch_size` records |
+| chromadb.utils.embedding_functions | (bundled) | `OllamaEmbeddingFunction` for nomic-embed-text | Pass to `get_or_create_collection()` — D-14 |
+| Ollama (local) | — | Runs `nomic-embed-text` embedding model locally | Must be running at `http://localhost:11434` before insertion |
 
 ### Alternatives Considered
 | Instead of | Could Use | Tradeoff |
@@ -331,6 +334,8 @@ def _flatten_metadata(meta: dict[str, Any]) -> dict[str, Any]:
 | Python | Runtime | Yes | 3.14.2 | -- |
 | pipenv | Package management | Yes | (installed) | -- |
 | chromadb | Core feature | **No** | -- | Must install: `pipenv install chromadb` |
+| Ollama | Embedding runtime | **Assumed yes** | local | Must be running with `nomic-embed-text` pulled: `ollama pull nomic-embed-text` |
+| nomic-embed-text | Embedding model | **Assumed yes** | via Ollama | Pull with `ollama pull nomic-embed-text` if not present |
 | pytest | Testing | Yes | 9.0.2 | -- |
 
 **Missing dependencies with no fallback:**
