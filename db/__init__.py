@@ -9,13 +9,56 @@ log = logging.getLogger("sci-db")
 
 PARENT_DIR = os.path.dirname(os.path.dirname(__file__))  # sci/
 CURRENT_DIR = os.path.join(PARENT_DIR, "db")
-print(f"CURRENT_DIR: {CURRENT_DIR}")
 CORE_DB_PATH = os.path.join(CURRENT_DIR, "core.52.db")
 CONTENT_DB_PATH = os.path.join(CURRENT_DIR, "content.52.db")
 
 DEFAULT_TIMEOUT = 5  # seconds
 
 Row = Dict[str, Any]
+
+
+class SchemaError(Exception):
+    """Raised when database schema does not match expected structure."""
+    pass
+
+
+# Tables and key columns that the pipeline JOINs on (core DB)
+EXPECTED_CORE_TABLES = {
+    "talk": ["ID", "Corpus", "URL", "Title", "Date", "SpeakerID"],
+    "speaker": ["ID", "GivenNames", "LastNames"],
+    "conference": ["ID", "Description", "Year", "Annual"],
+    "conf_session": ["ID", "Description", "ConferenceID"],
+    "conference_talk": ["TalkID", "SessionID", "Sequence"],
+    "citation": ["ID", "TalkID", "BookID", "Chapter", "Verses"],
+    "book": ["ID", "Abbr", "FullName"],
+    "talk_metadata": ["talk_id", "speaker_role_id", "uri_l", "uri_gc", "kicker", "talk_preview", "data_aid"],
+}
+
+# Tables and key columns for the content DB
+EXPECTED_CONTENT_TABLES = {
+    "talkbody": ["TalkID", "Text", "TextRaw"],
+}
+
+
+def validate_schema(conn: sqlite3.Connection, expected_tables: Dict[str, List[str]], db_name: str) -> None:
+    """
+    Validate that expected tables and columns exist. Raises SchemaError on mismatch.
+
+    Args:
+        conn: SQLite connection to validate
+        expected_tables: Dict mapping table names to lists of required column names
+        db_name: Human-readable name of the database (used in error messages)
+
+    Raises:
+        SchemaError: If a required table or column is missing
+    """
+    for table, required_cols in expected_tables.items():
+        cols = [row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+        if not cols:
+            raise SchemaError(f"{db_name}: table '{table}' not found")
+        missing = [c for c in required_cols if c not in cols]
+        if missing:
+            raise SchemaError(f"{db_name}: table '{table}' missing columns: {missing}")
 
 
 def _install_timeout(conn: sqlite3.Connection, timeout_sec: int = DEFAULT_TIMEOUT):
@@ -38,6 +81,21 @@ class Database:
         self.path = path
         self.timeout = timeout
         self.read_only = read_only
+        self._schema_validated = False
+        self._expected_schema = None
+        self._expected_schema_db_name = None
+
+    def set_expected_schema(self, expected_tables: Dict[str, List[str]], db_name: str) -> None:
+        """
+        Set the schema expectation for this Database instance.
+        Validation will run lazily on the first _connect() call.
+
+        Args:
+            expected_tables: Dict mapping table names to lists of required column names
+            db_name: Human-readable name of the database (used in error messages)
+        """
+        self._expected_schema = expected_tables
+        self._expected_schema_db_name = db_name
 
     def _connect(self) -> sqlite3.Connection:
         if not os.path.exists(self.path):
@@ -48,6 +106,12 @@ class Database:
             conn = sqlite3.connect(self.path)
 
         _install_timeout(conn, self.timeout)
+
+        # Lazy schema validation: run once on first connection
+        if self._expected_schema is not None and not self._schema_validated:
+            validate_schema(conn, self._expected_schema, self._expected_schema_db_name)
+            self._schema_validated = True
+
         return conn
 
     def select(self, query: str, params: Sequence[Any] = ()) -> List[Row]:
@@ -127,4 +191,6 @@ class Database:
 
 # Global shared instances
 core_db = Database(CORE_DB_PATH)
+core_db.set_expected_schema(EXPECTED_CORE_TABLES, "core.52.db")
 content_db = Database(CONTENT_DB_PATH)
+content_db.set_expected_schema(EXPECTED_CONTENT_TABLES, "content.52.db")
