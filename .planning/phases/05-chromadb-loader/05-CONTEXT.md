@@ -13,12 +13,12 @@ Build `extractors/phase6_chromadb_loader.py` — transform Phase 5 validated out
 <decisions>
 ## Implementation Decisions
 
-### Document Text (What to Embed)
+### Document Text (What to Store)
 
-- **D-01:** `conference_talks` — embed `f"{title}\n\n{talk_preview}"` when `talk_preview` is present; fall back to `title` alone when absent. Rationale: talk_preview was fetched from Church API specifically to enrich talk-level semantic search; title-only gives poor signal for short/evocative titles.
-- **D-02:** `conference_talk_paragraphs` — embed `paragraph.text` (clean text, HTML stripped). Specified in PIPELINE_SPEC.md.
-- **D-03:** `conference_talk_citations` — embed `citation.context_window` text. Specified in PIPELINE_SPEC.md.
-- **D-04:** `conference_talk_footnotes` — embed `footnote.context_window` text. Specified in PIPELINE_SPEC.md.
+- **D-01:** `conference_talks` — store `f"{title}\n\n{talk_preview}"` when `talk_preview` is present; fall back to `title` alone when absent. Rationale: talk_preview was fetched from Church API specifically to enrich talk-level search; title-only gives poor signal for short/evocative titles.
+- **D-02:** `conference_talk_paragraphs` — store `paragraph.text` (clean text, HTML stripped). Specified in PIPELINE_SPEC.md.
+- **D-03:** `conference_talk_citations` — store `citation.context_window` text. Specified in PIPELINE_SPEC.md.
+- **D-04:** `conference_talk_footnotes` — store `footnote.context_window` text. Specified in PIPELINE_SPEC.md.
 
 ### Metadata Field Selection
 
@@ -27,9 +27,9 @@ Build `extractors/phase6_chromadb_loader.py` — transform Phase 5 validated out
 
 ### Annotation Paragraph Handling
 
-- **D-07:** Annotation paragraphs (`source_type="annotation"`) are excluded from `conference_talk_paragraphs` — not embedded.
+- **D-07:** Annotation paragraphs (`source_type="annotation"`) are excluded from `conference_talk_paragraphs`.
 - **D-08:** Annotation text is folded into `conference_talks` metadata as `annotations` field — pipe-joined string of all annotation texts for that talk. If no annotations, field is omitted (non-None rule).
-- **D-09:** Citations extracted from annotation paragraphs are included in `conference_talk_citations` normally — their `paragraph_id` remains valid even though the parent paragraph is not embedded.
+- **D-09:** Citations extracted from annotation paragraphs are included in `conference_talk_citations` normally — their `paragraph_id` remains valid even though the parent paragraph is excluded from `conference_talk_paragraphs`.
 
 ### Invalid Talk Handling
 
@@ -43,7 +43,6 @@ Build `extractors/phase6_chromadb_loader.py` — transform Phase 5 validated out
 
 ### Claude's Discretion
 
-- Embedding function choice (ChromaDB default `all-MiniLM-L6-v2` is reasonable unless there's a reason to override)
 - Verification report format (markdown or structured text to stdout/log)
 - Batch size default value (pipeline spec suggests 5000 records; tune as needed)
 - Exact retry logic for failed ChromaDB batches
@@ -105,8 +104,8 @@ No `chromadb` imports exist yet in the codebase. Phase 6 is the first consumer.
 <specifics>
 ## Specific Ideas
 
-- talk_preview fallback is intentional: ~4,006 of 7,659 talks have previews from the Church API cache. Older talks may lack them. Embedding quality for those talks will be lower but not broken.
-- Annotation handling is a three-way split: exclude from paragraphs, fold text into talk metadata, keep citations in citations collection. The paragraph_id on annotation-sourced citations remains valid (it points to a real paragraph even though that paragraph isn't embedded).
+- talk_preview fallback is intentional: ~4,006 of 7,659 talks have previews from the Church API cache. Older talks may lack them. Document text for those talks will be title-only but not broken.
+- Annotation handling is a three-way split: exclude from paragraphs, fold text into talk metadata, keep citations in citations collection. The paragraph_id on annotation-sourced citations remains valid (it points to a real paragraph even though that paragraph is excluded from `conference_talk_paragraphs`).
 
 </specifics>
 
