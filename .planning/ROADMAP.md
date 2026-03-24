@@ -19,7 +19,7 @@ All 7,659 General Conference talks processed through Phases 1-6 with verified re
 | 2 | 0/2 | Planned    |  |
 | 3 | 2/3 | In Progress|  |
 | 4 | 0/3 | Planned    |  |
-| 5 | ChromaDB Loader | Not Started | LOAD-01, LOAD-02, LOAD-03, LOAD-04, LOAD-05, LOAD-06 |
+| 5 | ChromaDB Loader | Planning Complete | LOAD-01, LOAD-02, LOAD-03, LOAD-04, LOAD-05, LOAD-06 |
 | 6 | Pipeline Orchestrator | Not Started | PIPE-01, PIPE-02, PIPE-03, PIPE-04 |
 | 7 | Full Run & Verification | Not Started | VER-01, VER-02, VER-03, VER-04 |
 
@@ -120,13 +120,14 @@ Plans:
 **Goal:** A new Phase 6 extractor transforms validated pipeline output into four ChromaDB collections with batch insertion and post-load verification.
 **Requirements:** LOAD-01, LOAD-02, LOAD-03, LOAD-04, LOAD-05, LOAD-06
 **Depends on:** Phase 4
+**Plans:** 3 plans
 
-#### Plans
-1. **Document transformation** -- Build the transformer that converts Phase 5 output into ChromaDB `documents/metadatas/ids` format for all 4 collections, with annotation paragraph handling (LOAD-01, LOAD-02, LOAD-03)
-2. **Batch insertion** -- Implement dependency-ordered insertion (talks, paragraphs, citations, footnotes) with configurable batch chunking and per-batch progress logging (LOAD-04, LOAD-05)
-3. **Post-insertion verification** -- Generate verification report with record counts, sample queries, and foreign key spot checks (LOAD-06)
+Plans:
+- [ ] 05-01-PLAN.md -- Install chromadb, fix source_type gap, build transformation functions for all 4 collections (LOAD-01, LOAD-02, LOAD-03)
+- [ ] 05-02-PLAN.md -- Implement dependency-ordered batch insertion with progress logging (LOAD-04, LOAD-05)
+- [ ] 05-03-PLAN.md -- Generate post-insertion verification report with counts, queries, and FK checks (LOAD-06)
 
-*Plan 1 must complete before Plan 2. Plan 3 depends on Plan 2.*
+*Plan 01 (Wave 1) must complete before Plan 02 (Wave 2). Plan 03 (Wave 3) depends on Plan 02.*
 
 **Acceptance criteria:**
 - [ ] Phase 6 loader produces correct `documents`, `metadatas`, `ids` for all 4 ChromaDB collections from Phase 5 output
@@ -237,6 +238,6 @@ Plans:
 | 2. Code Quality | 0/2 | Planning complete | - |
 | 3. Bug Audit & Fixes | 1/3 | In progress | 03-01 complete |
 | 4. Test Coverage | 0/3 | Planning complete | - |
-| 5. ChromaDB Loader | 0/3 | Not started | - |
+| 5. ChromaDB Loader | 0/3 | Planning complete | - |
 | 6. Pipeline Orchestrator | 0/2 | Not started | - |
 | 7. Full Run & Verification | 0/3 | Not started | - |
