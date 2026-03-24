@@ -64,7 +64,7 @@ Recent decisions affecting current work:
 
 - [Roadmap]: ENRCH before all other work -- changes how Phase 1 reads data
 - [Roadmap]: QUAL tech-debt before BUGS -- clean codebase makes bugs easier to find
-- [Roadmap]: QUAL-09 (deprecated Phase 5 fields) and QUAL-10 (adversarial tests) added to Milestone 1 scope
+- [Roadmap]: QUAL-09 (deprecated phase-5 validation fields) and QUAL-10 (adversarial tests) added to Milestone 1 scope
 - [Phase 01]: Sequential API fetching with requests_cache for Church API politeness
 - [Phase 01]: Used LEFT JOIN talk_metadata with COALESCE for enrichment overlay pattern
 - [Phase 01]: Added encoding='utf-8' to file reads in tests for Windows cp1252 compatibility
