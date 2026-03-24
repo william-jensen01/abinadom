@@ -8,7 +8,7 @@
 
 Phase 5 (project numbering "Phase 6" in PIPELINE_SPEC.md) transforms validated pipeline output bundles into four ChromaDB collections. The core work is: (1) transforming dataclass instances into ChromaDB's `documents/metadatas/ids` format with proper flattening, (2) handling annotation paragraph exclusion/folding, (3) batch inserting in dependency order, and (4) generating a post-insertion verification report.
 
-The existing codebase already has `to_chromadb_format()` methods on all four data models (`TalkMetadata`, `ParagraphData`, `CitationData`, `FootnoteData`). However, these methods do NOT match the user's locked decisions (D-01 through D-06) -- the Phase 6 loader must implement its own transformation logic rather than delegating to these model methods. Additionally, a critical gap exists: `ParagraphData` does not have a `source_type` field, so annotation paragraphs cannot be identified from the dataclass alone. This must be addressed.
+The existing codebase already has `to_chromadb_format()` methods on all four data models (`TalkMetadata`, `ParagraphData`, `CitationData`, `FootnoteData`). However, these methods do NOT match the user's locked decisions (D-01 through D-06) -- the Phase 6 loader must implement its own transformation logic rather than delegating to these model methods. Additionally, a critical gap exists: `ParagraphData` does not have a `source_type` field, so annotation paragraphs cannot be identified from the dataclass alone. This must be addressed in Plan 01.
 
 **Primary recommendation:** Build `extractors/phase6_chromadb_loader.py` with standalone transformation functions (not using the existing `to_chromadb_format()` methods), add `source_type` field to `ParagraphData`, install `chromadb` into the Pipfile, and use `chromadb.utils.batch_utils.create_batches` for batch chunking.
 
@@ -74,20 +74,21 @@ None -- discussion stayed within phase scope.
 |---------|---------|---------|-------------|
 | pytest | 9.0.2 | Test framework | Already installed as dev dependency |
 | chromadb.utils.batch_utils | (bundled) | `create_batches()` utility for splitting large inserts | When inserting more than `max_batch_size` records |
-| chromadb.utils.embedding_functions | (bundled) | `OllamaEmbeddingFunction` for nomic-embed-text | Pass to `get_or_create_collection()` — D-14 |
-| Ollama (local) | — | Runs `nomic-embed-text` embedding model locally | Must be running at `http://localhost:11434` before insertion |
+| chromadb.utils.embedding_functions | (bundled) | `OllamaEmbeddingFunction` for nomic-embed-text | Pass to `get_or_create_collection()` -- D-14 |
+| Ollama (local) | -- | Runs `nomic-embed-text` embedding model locally | Must be running at `http://localhost:11434` before insertion |
 
 ### Alternatives Considered
 | Instead of | Could Use | Tradeoff |
 |------------|-----------|----------|
 | `create_batches()` | Manual list slicing | `create_batches` respects `client.max_batch_size` (SQLite parameter limits); manual slicing risks hitting limits |
+| `collection.upsert()` | `collection.add()` | `add()` silently ignores duplicate IDs; `upsert()` updates them for idempotent re-runs |
 
 **Installation:**
 ```bash
 pipenv install chromadb
 ```
 
-**Version verification:** chromadb 1.5.5 confirmed on PyPI as of 2026-03-10. Python 3.14 compatibility needs verification at install time (chromadb requires >=3.9, wheels built for cp39-abi3).
+**Version verification:** chromadb 1.5.5 confirmed on PyPI via `pip index versions chromadb` as of 2026-03-24. Python 3.14.2 is the project runtime. chromadb requires >=3.9 with cp39-abi3 wheels -- compatibility needs verification at install time.
 
 ## Architecture Patterns
 
@@ -103,7 +104,7 @@ tests/
 
 ### Pattern 1: Standalone Transformation Functions (not model methods)
 
-**What:** Build `prepare_talks()`, `prepare_paragraphs()`, `prepare_citations()`, `prepare_footnotes()` functions in the loader module that accept dataclass instances and return `(documents, metadatas, ids)` tuples.
+**What:** Build `prepare_talk_record()`, `prepare_paragraph_record()`, `prepare_citation_record()`, `prepare_footnote_record()` functions in the loader module that accept dataclass instances and return `(document, metadata, id)` tuples. Also build aggregate `prepare_talk_bundle()` that handles annotation splitting and returns all four collection batches.
 
 **When to use:** Always. The existing `to_chromadb_format()` methods on the models do NOT match the locked decisions:
 - `TalkMetadata._create_document_summary()` builds a multi-field summary; D-01 says `f"{title}\n\n{talk_preview}"` with title-only fallback
@@ -142,16 +143,17 @@ def prepare_talk_record(
 
 ### Pattern 2: Metadata Flattening
 
-**What:** ChromaDB metadata values must be strings, integers, floats, booleans, or arrays of same type. No None, no nested dicts, no mixed-type arrays.
+**What:** ChromaDB metadata values must be strings, integers, floats, booleans, or arrays of same type. No None, no nested dicts, no mixed-type arrays, no empty arrays.
 
 **When to use:** Every metadata dict before insertion.
 
 **Flattening rules (from D-06 and ChromaDB constraints):**
 - `None` values: remove key entirely (D-05: "all non-None fields")
-- `list[str]` (e.g., `extraction_warnings`): pipe-join to string
-- `list[int]` (e.g., `verse_list`): pipe-join as comma-separated string
+- `list[str]` (e.g., `extraction_warnings`): pipe-join to string; omit if empty
+- `list[int]` (e.g., `verse_list`): comma-join as string; omit if empty
 - `datetime` strings: keep as-is (already strings)
-- Nested dicts: should not occur in these models (verify)
+- Nested dicts: should not occur in these models (verified -- none present)
+- `bool` values: keep as-is (ChromaDB supports booleans)
 
 ### Pattern 3: Dependency-Ordered Insertion
 
@@ -164,6 +166,7 @@ def prepare_talk_record(
 - **Storing None in metadata:** ChromaDB silently drops None values or errors. Filter them out explicitly.
 - **Inserting without batching:** A full run has ~7,659 talks, ~150K+ paragraphs, ~100K+ citations. Without batching, a single `add()` call will hit SQLite parameter limits.
 - **Hardcoding ChromaDB path in the module:** Use `config/pipeline_config.py` constant per D-12.
+- **Using `add()` for re-runnable inserts:** Use `upsert()` for idempotent behavior -- `add()` silently skips existing IDs.
 
 ## Critical Gap: source_type Missing from ParagraphData
 
@@ -181,6 +184,7 @@ def prepare_talk_record(
 |---------|-------------|-------------|-----|
 | Batch size calculation | Manual `max_batch_size` detection | `chromadb.utils.batch_utils.create_batches(api=client, ...)` | Handles SQLite parameter limits per-platform automatically |
 | Metadata type coercion | Manual type-checking per field | Simple `_flatten_metadata()` helper that walks dict once | Predictable, testable, covers all model fields |
+| Embedding generation | Manual Ollama API calls | `OllamaEmbeddingFunction` passed to `get_or_create_collection()` | ChromaDB handles embedding on `upsert()` automatically when EF is set |
 
 ## Common Pitfalls
 
@@ -203,16 +207,22 @@ def prepare_talk_record(
 **Warning signs:** Crashes mid-insertion on large runs.
 
 ### Pitfall 4: extraction_warnings List Not Flattened
-**What goes wrong:** `ParagraphData.extraction_warnings` is `List[str]`; `CitationData.extraction_warnings` same. If passed as-is to ChromaDB metadata, it's a list of strings (valid in newer ChromaDB as array), but empty lists `[]` are NOT allowed.
+**What goes wrong:** `ParagraphData.extraction_warnings` is `List[str]`; `CitationData.extraction_warnings` same. Empty lists `[]` are NOT allowed in ChromaDB metadata.
 **Why it happens:** `asdict()` preserves empty lists.
-**How to avoid:** Convert to pipe-joined string, or omit if empty (consistent with D-05 non-None rule -- empty list is "present but empty", decide on convention).
+**How to avoid:** Convert to pipe-joined string, or omit if empty (consistent with D-05 non-None rule). Treat empty list as "nothing present" and omit the key.
 **Warning signs:** `ValueError: empty arrays are not allowed` from ChromaDB.
 
 ### Pitfall 5: Annotation Paragraph Identification
 **What goes wrong:** Cannot identify which paragraphs are annotations because `source_type` is not in `ParagraphData`.
 **Why it happens:** Phase 2 extraction drops `source_type` when constructing the dataclass.
-**How to avoid:** Add `source_type` field to `ParagraphData` before implementing Phase 6 loader.
+**How to avoid:** Add `source_type` field to `ParagraphData` before implementing Phase 6 loader (Plan 01, Task 1).
 **Warning signs:** All paragraphs treated equally; annotations stored in `conference_talk_paragraphs`.
+
+### Pitfall 6: OllamaEmbeddingFunction URL Format
+**What goes wrong:** Confusion about whether to pass base URL or full endpoint URL.
+**Why it happens:** Official docs show `url="http://localhost:11434"` but Cookbook shows `url="http://localhost:11434/api/embeddings"`.
+**How to avoid:** Either format works. The ChromaDB source code normalizes: if you pass `http://localhost:11434/api/embeddings`, it strips to `http://localhost:11434` internally. D-14 specifies the `/api/embeddings` form -- use it as-is.
+**Warning signs:** None -- both work identically.
 
 ## Code Examples
 
@@ -244,7 +254,7 @@ def prepare_talk_record(
 
 ### Batch Insertion Pattern
 ```python
-# Source: ChromaDB cookbook + batch_utils docs
+# Source: ChromaDB batch_utils source + cookbook
 from chromadb.utils.batch_utils import create_batches
 
 def insert_collection(
@@ -273,6 +283,8 @@ def insert_collection(
         logger.info(f"{collection_name}: batch {i}/{total} ({len(batch_ids)} records)")
     return len(ids)
 ```
+
+**create_batches return type:** `List[Tuple[IDs, Optional[Embeddings], Optional[Metadatas], Optional[Documents]]]` -- each tuple has 4 elements: ids, embeddings (None when not provided), metadatas, documents.
 
 ### Metadata Flattening Helper
 ```python
@@ -314,7 +326,7 @@ def _flatten_metadata(meta: dict[str, Any]) -> dict[str, Any]:
 
 1. **Python 3.14 + chromadb compatibility**
    - What we know: chromadb 1.5.5 requires Python >=3.9, wheels built for cp39-abi3
-   - What's unclear: Whether abi3 wheels work correctly on Python 3.14 (very new, Dec 2025)
+   - What's unclear: Whether abi3 wheels work correctly on Python 3.14.2 (project runtime)
    - Recommendation: Attempt `pipenv install chromadb` and verify import works. If it fails, may need to pin an older chromadb version or use a compatibility shim.
 
 2. **text_raw in paragraph metadata**
@@ -327,6 +339,15 @@ def _flatten_metadata(meta: dict[str, Any]) -> dict[str, Any]:
    - What's unclear: Whether to update them or ignore them
    - Recommendation: Don't modify them -- they may be used elsewhere or in future. Build standalone transformation in the loader module.
 
+4. **OllamaEmbeddingFunction URL normalization**
+   - What we know: D-14 specifies `url="http://localhost:11434/api/embeddings"`. ChromaDB source code normalizes this to `http://localhost:11434` internally (strips `/api/embeddings` suffix if present).
+   - What's unclear: Nothing -- both URL formats work identically.
+   - Recommendation: Use D-14's URL as-is. It works. Document this for future reference.
+
+5. **Ollama availability for testing**
+   - What we know: Ollama is not currently running (`curl http://localhost:11434` fails). Unit tests use `EphemeralClient()` (D-13) and don't need Ollama. Integration tests that verify embeddings would need Ollama running.
+   - Recommendation: Unit tests should NOT depend on Ollama. For `get_or_create_collection()` calls in tests, either skip the embedding function parameter or mock it. Only the actual insertion run (production use) requires Ollama.
+
 ## Environment Availability
 
 | Dependency | Required By | Available | Version | Fallback |
@@ -334,15 +355,15 @@ def _flatten_metadata(meta: dict[str, Any]) -> dict[str, Any]:
 | Python | Runtime | Yes | 3.14.2 | -- |
 | pipenv | Package management | Yes | (installed) | -- |
 | chromadb | Core feature | **No** | -- | Must install: `pipenv install chromadb` |
-| Ollama | Embedding runtime | **Assumed yes** | local | Must be running with `nomic-embed-text` pulled: `ollama pull nomic-embed-text` |
-| nomic-embed-text | Embedding model | **Assumed yes** | via Ollama | Pull with `ollama pull nomic-embed-text` if not present |
+| Ollama | Embedding runtime (production) | **Not running** | -- | Tests use `EphemeralClient()` without EF; production requires `ollama serve` + `ollama pull nomic-embed-text` |
+| nomic-embed-text | Embedding model | **Unknown** | via Ollama | `ollama pull nomic-embed-text` if not present |
 | pytest | Testing | Yes | 9.0.2 | -- |
 
 **Missing dependencies with no fallback:**
 - `chromadb` -- must be installed before any implementation work
 
 **Missing dependencies with fallback:**
-- None
+- Ollama -- not needed for unit tests (use EphemeralClient without embedding function); required only for production insertion runs
 
 ## Validation Architecture
 
@@ -357,10 +378,10 @@ def _flatten_metadata(meta: dict[str, Any]) -> dict[str, Any]:
 ### Phase Requirements -> Test Map
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|-------------|
-| LOAD-01 | Transform Phase 5 output into 4 collection formats | unit | `pipenv run py -m pytest tests/test_phase6.py::test_prepare_talks -x` | No -- Wave 0 |
-| LOAD-01 | Transform paragraphs with correct document/metadata/id | unit | `pipenv run py -m pytest tests/test_phase6.py::test_prepare_paragraphs -x` | No -- Wave 0 |
-| LOAD-01 | Transform citations with correct document/metadata/id | unit | `pipenv run py -m pytest tests/test_phase6.py::test_prepare_citations -x` | No -- Wave 0 |
-| LOAD-01 | Transform footnotes with correct document/metadata/id | unit | `pipenv run py -m pytest tests/test_phase6.py::test_prepare_footnotes -x` | No -- Wave 0 |
+| LOAD-01 | Transform talks into documents/metadatas/ids | unit | `pipenv run py -m pytest tests/test_phase6.py::test_prepare_talk_record -x` | No -- Wave 0 |
+| LOAD-01 | Transform paragraphs with correct format | unit | `pipenv run py -m pytest tests/test_phase6.py::test_prepare_paragraph_record -x` | No -- Wave 0 |
+| LOAD-01 | Transform citations with correct format | unit | `pipenv run py -m pytest tests/test_phase6.py::test_prepare_citation_record -x` | No -- Wave 0 |
+| LOAD-01 | Transform footnotes with correct format | unit | `pipenv run py -m pytest tests/test_phase6.py::test_prepare_footnote_record -x` | No -- Wave 0 |
 | LOAD-02 | Annotation paragraphs excluded from paragraphs collection | unit | `pipenv run py -m pytest tests/test_phase6.py::test_annotation_exclusion -x` | No -- Wave 0 |
 | LOAD-02 | Annotation text folded into talk metadata | unit | `pipenv run py -m pytest tests/test_phase6.py::test_annotation_folding -x` | No -- Wave 0 |
 | LOAD-03 | Citations from annotation paragraphs included normally | unit | `pipenv run py -m pytest tests/test_phase6.py::test_annotation_citation_included -x` | No -- Wave 0 |
@@ -395,12 +416,17 @@ def _flatten_metadata(meta: dict[str, Any]) -> dict[str, Any]:
 - `extractors/pipeline.py` -- TalkPipelineResult container showing Phase 1-4 output structure
 - `config/pipeline_config.py` -- existing constants, where CHROMADB_PATH should be added
 - `docs/PIPELINE_SPEC.md` Phase 6 section -- canonical spec for data preparation, annotation handling, insertion, verification
+- [ChromaDB `batch_utils.py` source](https://github.com/chroma-core/chroma/blob/main/chromadb/utils/batch_utils.py) -- `create_batches()` signature returns `List[Tuple[IDs, Optional[Embeddings], Optional[Metadatas], Optional[Documents]]]`
+- [ChromaDB `ollama_embedding_function.py` source](https://github.com/chroma-core/chroma/blob/main/chromadb/utils/embedding_functions/ollama_embedding_function.py) -- URL normalization confirmed (strips `/api/embeddings` suffix)
 
 ### Secondary (MEDIUM confidence)
-- [ChromaDB PyPI](https://pypi.org/project/chromadb/) -- version 1.5.5, 2026-03-10
+- [chromadb PyPI](https://pypi.org/project/chromadb/) -- version 1.5.5 confirmed latest, 2026-03-10
 - [ChromaDB Cookbook Batching](https://cookbook.chromadb.dev/strategies/batching/) -- `create_batches` utility pattern
-- [ChromaDB Add Data Docs](https://docs.trychroma.com/docs/collections/add-data) -- metadata types: strings, ints, floats, booleans, typed arrays; no empty arrays
-- [ChromaDB Manage Collections Docs](https://docs.trychroma.com/docs/collections/manage-collections) -- `get_or_create_collection`, collection management
+- [ChromaDB Add Data Docs](https://docs.trychroma.com/docs/collections/add-data) -- metadata types: strings, ints, floats, booleans, typed arrays; no empty arrays; add() skips duplicates
+- [ChromaDB Update Data Docs](https://docs.trychroma.com/docs/collections/update-data) -- upsert() confirmed: updates if exists, adds if not
+- [ChromaDB Ollama Integration Docs](https://docs.trychroma.com/integrations/embedding-models/ollama) -- OllamaEmbeddingFunction constructor: `url` (base URL), `model_name`
+- [ChromaDB Ollama Cookbook](https://cookbook.chromadb.dev/integrations/ollama/embeddings/) -- shows `url="http://localhost:11434/api/embeddings"` (Python full endpoint form)
+- `pip index versions chromadb` -- 1.5.5 confirmed as latest on local machine
 
 ### Tertiary (LOW confidence)
 - None
@@ -408,9 +434,9 @@ def _flatten_metadata(meta: dict[str, Any]) -> dict[str, Any]:
 ## Metadata
 
 **Confidence breakdown:**
-- Standard stack: HIGH -- chromadb is the only new dependency; well-documented
+- Standard stack: HIGH -- chromadb 1.5.5 version confirmed via PyPI; single new dependency
 - Architecture: HIGH -- all model fields inventoried from source code; transformation rules derived from locked decisions
-- Pitfalls: HIGH -- metadata type constraints verified from official docs; source_type gap confirmed from source code
+- Pitfalls: HIGH -- metadata type constraints verified from official docs; source_type gap confirmed from source code; URL normalization verified from ChromaDB source
 
 **Research date:** 2026-03-24
 **Valid until:** 2026-04-24 (chromadb API stable; model fields change only with pipeline changes)
