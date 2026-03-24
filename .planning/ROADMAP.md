@@ -18,7 +18,7 @@ All 7,659 General Conference talks processed through Phases 1-6 with verified re
 | 1 | DB Enrichment | Planning Complete | ENRCH-01, ENRCH-02, ENRCH-03, ENRCH-04, ENRCH-05, ENRCH-06 |
 | 2 | 0/2 | Planned    |  |
 | 3 | 2/3 | In Progress|  |
-| 4 | Test Coverage | Planning Complete | QUAL-04, QUAL-05, QUAL-06, QUAL-10 |
+| 4 | 0/3 | Planned    |  |
 | 5 | ChromaDB Loader | Not Started | LOAD-01, LOAD-02, LOAD-03, LOAD-04, LOAD-05, LOAD-06 |
 | 6 | Pipeline Orchestrator | Not Started | PIPE-01, PIPE-02, PIPE-03, PIPE-04 |
 | 7 | Full Run & Verification | Not Started | VER-01, VER-02, VER-03, VER-04 |
@@ -98,7 +98,7 @@ Plans:
 **Goal:** Integration and edge-case tests prove that phases compose correctly and handle boundary conditions, including adversarial inputs.
 **Requirements:** QUAL-04, QUAL-05, QUAL-06, QUAL-10
 **Depends on:** Phase 3
-**Plans:** 3 plans
+**Plans:** 0/3 plans executed
 
 Plans:
 - [ ] 04-01-PLAN.md -- End-to-end integration test: 5 real talks through Phases 1-5 with data contract assertions (QUAL-04)
