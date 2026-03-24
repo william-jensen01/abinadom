@@ -125,7 +125,7 @@ Plans:
 Plans:
 - [ ] 05-01-PLAN.md -- Install chromadb, fix source_type gap, build transformation functions for all 4 collections (LOAD-01, LOAD-02, LOAD-03)
 - [ ] 05-02-PLAN.md -- Implement dependency-ordered batch insertion with progress logging (LOAD-04, LOAD-05)
-- [ ] 05-03-PLAN.md -- Generate post-insertion verification report with counts, queries, and FK checks (LOAD-06)
+- [ ] 05-03-PLAN.md -- Generate post-insertion verification report with counts, document retrieval checks, and FK checks (LOAD-06)
 
 *Plan 01 (Wave 1) must complete before Plan 02 (Wave 2). Plan 03 (Wave 3) depends on Plan 02.*
 
@@ -134,7 +134,7 @@ Plans:
 - [ ] Annotation paragraphs are excluded from `conference_talk_paragraphs`; their text appears as pipe-joined metadata in `conference_talks`
 - [ ] Citations from annotation paragraphs still appear normally in `conference_talk_citations`
 - [ ] Collections are inserted in dependency order: talks first, then paragraphs, then citations and footnotes
-- [ ] Post-insertion verification report shows record counts, sample query results, and foreign key spot-check results
+- [ ] Post-insertion verification report shows record counts, sample document retrieval results, and foreign key spot-check results
 
 ---
 

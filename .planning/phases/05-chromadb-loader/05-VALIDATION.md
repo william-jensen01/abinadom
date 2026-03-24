@@ -64,7 +64,7 @@ created: 2026-03-24
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
 | ChromaDB persistent client connects to correct path | LOAD-04 | Requires live ChromaDB instance with real filesystem path | Run loader against test DB path, confirm collections appear in directory |
-| Verification report human-readable output | LOAD-06 | Format/readability is subjective | Inspect printed report for all required sections: counts, sample queries, FK checks |
+| Verification report human-readable output | LOAD-06 | Format/readability is subjective | Inspect printed report for all required sections: counts, sample retrievals, FK checks |
 
 ---
 

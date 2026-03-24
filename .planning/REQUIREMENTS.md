@@ -64,7 +64,7 @@ These requirements are satisfied by the current codebase and are preserved as-is
 | LOAD-03 | Citations extracted from annotation paragraphs still included in `conference_talk_citations` normally |
 | LOAD-04 | All 4 collections inserted in dependency order (talks → paragraphs → citations/footnotes) with configurable batch chunking |
 | LOAD-05 | Insertion progress logged per batch for large runs |
-| LOAD-06 | Post-insertion verification report generated: record counts, sample queries, foreign key spot checks |
+| LOAD-06 | Post-insertion verification report generated: record counts, sample document retrievals, foreign key spot checks |
 
 ### Pipeline Orchestrator (PIPE)
 

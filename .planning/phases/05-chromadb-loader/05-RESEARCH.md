@@ -49,7 +49,7 @@ None -- discussion stayed within phase scope.
 | LOAD-03 | Citations from annotation paragraphs still included in `conference_talk_citations` normally | No special handling needed -- citations reference `paragraph_id` which remains valid; D-09 |
 | LOAD-04 | All 4 collections inserted in dependency order with configurable batch chunking | Use `chromadb.utils.batch_utils.create_batches`; insert order: talks -> paragraphs -> citations/footnotes |
 | LOAD-05 | Insertion progress logged per batch for large runs | Per-batch logging with collection name, batch N/M, record count |
-| LOAD-06 | Post-insertion verification report: record counts, sample queries, foreign key spot checks | Report dataclass or dict; query collections post-insert; spot-check talk_id/paragraph_id cross-references |
+| LOAD-06 | Post-insertion verification report: record counts, sample document retrievals, foreign key spot checks | Report dataclass or dict; retrieve documents post-insert; spot-check talk_id/paragraph_id cross-references |
 </phase_requirements>
 
 ## Project Constraints (from CLAUDE.md)
@@ -363,7 +363,7 @@ def _flatten_metadata(meta: dict[str, Any]) -> dict[str, Any]:
 | LOAD-04 | Batch chunking works for large record sets | integration | `pipenv run py -m pytest tests/test_phase6.py::test_batch_chunking -x` | No -- Wave 0 |
 | LOAD-05 | Per-batch progress logged | unit | `pipenv run py -m pytest tests/test_phase6.py::test_batch_logging -x` | No -- Wave 0 |
 | LOAD-06 | Verification report with record counts | integration | `pipenv run py -m pytest tests/test_phase6.py::test_verification_counts -x` | No -- Wave 0 |
-| LOAD-06 | Verification report with sample queries | integration | `pipenv run py -m pytest tests/test_phase6.py::test_verification_queries -x` | No -- Wave 0 |
+| LOAD-06 | Verification report with sample retrievals | integration | `pipenv run py -m pytest tests/test_phase6.py::test_verification_retrievals -x` | No -- Wave 0 |
 | LOAD-06 | Foreign key spot checks in verification | integration | `pipenv run py -m pytest tests/test_phase6.py::test_verification_fk_checks -x` | No -- Wave 0 |
 | D-10 | Invalid talks skipped | unit | `pipenv run py -m pytest tests/test_phase6.py::test_invalid_talk_skipped -x` | No -- Wave 0 |
 | D-05/D-06 | Metadata flattening (None removal, list flattening) | unit | `pipenv run py -m pytest tests/test_phase6.py::test_flatten_metadata -x` | No -- Wave 0 |
