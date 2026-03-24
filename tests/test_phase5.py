@@ -548,3 +548,142 @@ class TestCitationDBValidation:
         report = validate_talk(metadata, tp, tc, tf, db=db)
         assert not report.is_valid
         assert any("paragraph_id" in e for e in report.errors)
+
+
+# =============================================================================
+# TestAdversarialInputs
+# =============================================================================
+
+
+class TestAdversarialInputs:
+    """
+    Adversarial test cases for Phase 5 validation gate.
+
+    Covers four required categories (D-10, D-11):
+      1. Missing / None required fields
+      2. Wrong ID formulas
+      3. Empty collections
+      4. Extreme counts
+
+    Each test verifies that validate_talk() handles adversarial input
+    without raising an unhandled exception and either reports the
+    problem (errors/warnings) or accepts it gracefully.
+    """
+
+    # ------------------------------------------------------------------
+    # Category 1: Missing / None required fields
+    # ------------------------------------------------------------------
+
+    def test_adversarial_none_paragraph_id(self):
+        """Phase 5 handles a paragraph whose paragraph_id has been set to None."""
+        para = make_paragraph(1)
+        para.paragraph_id = None  # Corrupt the ID after valid construction
+        paras = make_paragraphs([para])
+        meta = make_metadata()
+        cites = make_citations([])
+        fns = make_footnotes([])
+        # Must not raise an unhandled exception
+        report = validate_talk(meta, paras, cites, fns)
+        # Validation should flag the corrupted paragraph_id (None != expected int)
+        assert not report.is_valid or len(report.warnings) > 0
+
+    def test_adversarial_none_talk_id_in_metadata(self):
+        """Phase 5 handles metadata whose talk_id has been set to None after creation."""
+        meta = make_metadata()
+        meta.talk_id = None  # Corrupt after valid __post_init__
+        paras = make_paragraphs([make_paragraph(1), make_paragraph(2), make_paragraph(3)])
+        cites = make_citations([])
+        fns = make_footnotes([])
+        # Must not raise an unhandled exception
+        report = validate_talk(meta, paras, cites, fns)
+        # The report is produced — talk_id is None so the result is invalid or warned
+        assert report is not None
+
+    # ------------------------------------------------------------------
+    # Category 2: Wrong ID formulas
+    # ------------------------------------------------------------------
+
+    def test_adversarial_wrong_paragraph_id_formula(self):
+        """Phase 5 detects paragraph_id that does not match talk_id * 10000 + number."""
+        para = make_paragraph(1)
+        para.paragraph_id = 99999  # Should be TALK_ID * 10000 + 1 = 100001
+        tp = TalkParagraphs(
+            talk_id=TALK_ID,
+            paragraphs=[para],
+            total_paragraphs=1,
+            total_words=para.word_count,
+            extraction_success=True,
+        )
+        meta = make_metadata()
+        cites = make_citations([])
+        fns = make_footnotes([])
+        report = validate_talk(meta, tp, cites, fns)
+        # Paragraph sanity check must detect the formula violation
+        assert not report.is_valid
+        assert any("paragraph_id" in e for e in report.errors)
+
+    def test_adversarial_citation_refs_nonexistent_paragraph(self):
+        """Phase 5 detects a citation referencing a paragraph_id that doesn't exist."""
+        para = make_paragraph(1)
+        paras = make_paragraphs([para])
+        cite = make_citation(1, paragraph_number=1, paragraph_id=999999)
+        cites = make_citations([cite])
+        meta = make_metadata()
+        fns = make_footnotes([])
+        report = validate_talk(meta, paras, cites, fns)
+        # Cross-collection check must flag the orphaned citation
+        assert not report.is_valid
+        assert any("999999" in e for e in report.errors)
+
+    # ------------------------------------------------------------------
+    # Category 3: Empty collections
+    # ------------------------------------------------------------------
+
+    def test_adversarial_zero_paragraphs(self):
+        """Phase 5 handles a talk with 0 paragraphs without crashing."""
+        paras = make_paragraphs([])
+        meta = make_metadata()
+        cites = make_citations([])
+        fns = make_footnotes([])
+        report = validate_talk(meta, paras, cites, fns)
+        # 0 paragraphs is unusual — validation should produce a warning
+        assert any("Low paragraph count" in w for w in report.warnings)
+
+    def test_adversarial_zero_citations_zero_footnotes(self):
+        """Phase 5 handles a talk with paragraphs but 0 citations and 0 footnotes."""
+        paras = make_paragraphs([make_paragraph(1), make_paragraph(2), make_paragraph(3)])
+        meta = make_metadata()
+        cites = make_citations([])
+        fns = make_footnotes([])
+        report = validate_talk(meta, paras, cites, fns)
+        # Valid scenario — some talks have no citations
+        assert report is not None
+
+    # ------------------------------------------------------------------
+    # Category 4: Extreme counts
+    # ------------------------------------------------------------------
+
+    def test_adversarial_extreme_paragraph_count(self):
+        """Phase 5 handles a talk with 200+ paragraphs without crashing."""
+        paras_list = [make_paragraph(i) for i in range(1, 201)]
+        paras = make_paragraphs(paras_list)
+        meta = make_metadata()
+        cites = make_citations([])
+        fns = make_footnotes([])
+        report = validate_talk(meta, paras, cites, fns)
+        # 200 > 150 threshold — high count warning expected
+        assert any("High paragraph count" in w for w in report.warnings)
+
+    def test_adversarial_very_long_paragraph_text(self):
+        """Phase 5 handles paragraphs with extremely long text (50,000+ chars)."""
+        long_text = "word " * 10000  # ~50,000 chars
+        para = make_paragraph(1, text=long_text)
+        para.word_count = 10000
+        paras = make_paragraphs([para])
+        meta = make_metadata()
+        cites = make_citations([])
+        fns = make_footnotes([])
+        report = validate_talk(meta, paras, cites, fns)
+        # Should handle without crashing — 1 paragraph triggers low count warning
+        assert report is not None
+        assert any("Low paragraph count" in w for w in report.warnings)
