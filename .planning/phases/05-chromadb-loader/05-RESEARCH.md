@@ -1,7 +1,7 @@
 # Phase 5: ChromaDB Loader - Research
 
 **Researched:** 2026-03-24
-**Domain:** ChromaDB vector database loading, data transformation, batch insertion
+**Domain:** ChromaDB document storage, data transformation, batch insertion
 **Confidence:** HIGH
 
 ## Summary
@@ -16,10 +16,10 @@ The existing codebase already has `to_chromadb_format()` methods on all four dat
 ## User Constraints (from CONTEXT.md)
 
 ### Locked Decisions
-- **D-01:** `conference_talks` -- embed `f"{title}\n\n{talk_preview}"` when `talk_preview` is present; fall back to `title` alone when absent.
-- **D-02:** `conference_talk_paragraphs` -- embed `paragraph.text` (clean text, HTML stripped).
-- **D-03:** `conference_talk_citations` -- embed `citation.context_window` text.
-- **D-04:** `conference_talk_footnotes` -- embed `footnote.context_window` text.
+- **D-01:** `conference_talks` -- store `f"{title}\n\n{talk_preview}"` when `talk_preview` is present; fall back to `title` alone when absent.
+- **D-02:** `conference_talk_paragraphs` -- store `paragraph.text` (clean text, HTML stripped).
+- **D-03:** `conference_talk_citations` -- store `citation.context_window` text.
+- **D-04:** `conference_talk_footnotes` -- store `footnote.context_window` text.
 - **D-05:** Include all non-None fields from each dataclass as metadata. No manual curation. Planner determines exact per-collection field lists by reading the model dataclasses.
 - **D-06:** Flatten any nested structures (lists -> pipe-joined strings or JSON strings). ChromaDB metadata values must be scalars.
 - **D-07:** Annotation paragraphs (`source_type="annotation"`) are excluded from `conference_talk_paragraphs`.
@@ -31,7 +31,6 @@ The existing codebase already has `to_chromadb_format()` methods on all four dat
 - **D-13:** Tests use `tmp_path` pytest fixture or `chromadb.EphemeralClient()`.
 
 ### Claude's Discretion
-- Embedding function choice (ChromaDB default `all-MiniLM-L6-v2` is reasonable)
 - Verification report format (markdown or structured text to stdout/log)
 - Batch size default value (spec suggests 5000; tune as needed)
 - Exact retry logic for failed ChromaDB batches
@@ -67,7 +66,7 @@ None -- discussion stayed within phase scope.
 ### Core
 | Library | Version | Purpose | Why Standard |
 |---------|---------|---------|--------------|
-| chromadb | 1.5.5 | Vector database for document storage and semantic search | The target database for this entire pipeline; latest stable release 2026-03-10 |
+| chromadb | 1.5.5 | Document and metadata storage | The target database for this entire pipeline; latest stable release 2026-03-10 |
 
 ### Supporting
 | Library | Version | Purpose | When to Use |
@@ -78,7 +77,6 @@ None -- discussion stayed within phase scope.
 ### Alternatives Considered
 | Instead of | Could Use | Tradeoff |
 |------------|-----------|----------|
-| Default embedding (all-MiniLM-L6-v2) | OpenAI/custom embeddings | Default is free, local, fast; good enough for personal use. No API key needed |
 | `create_batches()` | Manual list slicing | `create_batches` respects `client.max_batch_size` (SQLite parameter limits); manual slicing risks hitting limits |
 
 **Installation:**
@@ -179,7 +177,6 @@ def prepare_talk_record(
 | Problem | Don't Build | Use Instead | Why |
 |---------|-------------|-------------|-----|
 | Batch size calculation | Manual `max_batch_size` detection | `chromadb.utils.batch_utils.create_batches(api=client, ...)` | Handles SQLite parameter limits per-platform automatically |
-| Embedding generation | Custom embedding pipeline | ChromaDB default `all-MiniLM-L6-v2` (sentence-transformers) | Built-in, no setup, suitable for personal use |
 | Metadata type coercion | Manual type-checking per field | Simple `_flatten_metadata()` helper that walks dict once | Predictable, testable, covers all model fields |
 
 ## Common Pitfalls
@@ -212,7 +209,7 @@ def prepare_talk_record(
 **What goes wrong:** Cannot identify which paragraphs are annotations because `source_type` is not in `ParagraphData`.
 **Why it happens:** Phase 2 extraction drops `source_type` when constructing the dataclass.
 **How to avoid:** Add `source_type` field to `ParagraphData` before implementing Phase 6 loader.
-**Warning signs:** All paragraphs treated equally; annotations embedded in `conference_talk_paragraphs`.
+**Warning signs:** All paragraphs treated equally; annotations stored in `conference_talk_paragraphs`.
 
 ## Code Examples
 
@@ -335,7 +332,6 @@ def _flatten_metadata(meta: dict[str, Any]) -> dict[str, Any]:
 | pipenv | Package management | Yes | (installed) | -- |
 | chromadb | Core feature | **No** | -- | Must install: `pipenv install chromadb` |
 | pytest | Testing | Yes | 9.0.2 | -- |
-| sentence-transformers | Default embedding (auto-dep of chromadb) | No | -- | Installed with chromadb |
 
 **Missing dependencies with no fallback:**
 - `chromadb` -- must be installed before any implementation work
@@ -399,7 +395,7 @@ def _flatten_metadata(meta: dict[str, Any]) -> dict[str, Any]:
 - [ChromaDB PyPI](https://pypi.org/project/chromadb/) -- version 1.5.5, 2026-03-10
 - [ChromaDB Cookbook Batching](https://cookbook.chromadb.dev/strategies/batching/) -- `create_batches` utility pattern
 - [ChromaDB Add Data Docs](https://docs.trychroma.com/docs/collections/add-data) -- metadata types: strings, ints, floats, booleans, typed arrays; no empty arrays
-- [ChromaDB Manage Collections Docs](https://docs.trychroma.com/docs/collections/manage-collections) -- `get_or_create_collection`, default sentence-transformer embedding
+- [ChromaDB Manage Collections Docs](https://docs.trychroma.com/docs/collections/manage-collections) -- `get_or_create_collection`, collection management
 
 ### Tertiary (LOW confidence)
 - None
