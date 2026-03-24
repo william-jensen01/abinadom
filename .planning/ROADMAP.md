@@ -18,14 +18,14 @@ All 7,659 General Conference talks processed through Phases 1-6 with verified re
 | 1 | DB Enrichment | Planning Complete | ENRCH-01, ENRCH-02, ENRCH-03, ENRCH-04, ENRCH-05, ENRCH-06 |
 | 2 | 0/2 | Planned    |  |
 | 3 | 2/3 | In Progress|  |
-| 4 | Test Coverage | Not Started | QUAL-04, QUAL-05, QUAL-06, QUAL-10 |
+| 4 | Test Coverage | Planning Complete | QUAL-04, QUAL-05, QUAL-06, QUAL-10 |
 | 5 | ChromaDB Loader | Not Started | LOAD-01, LOAD-02, LOAD-03, LOAD-04, LOAD-05, LOAD-06 |
 | 6 | Pipeline Orchestrator | Not Started | PIPE-01, PIPE-02, PIPE-03, PIPE-04 |
 | 7 | Full Run & Verification | Not Started | VER-01, VER-02, VER-03, VER-04 |
 
 ## Phases
 
-### Phase 1 -- DB Enrichment
+### Phase 1: DB Enrichment
 
 **Goal:** Restructure metadata storage so Phase 1 reads enriched fields from a dedicated `talk_metadata` table instead of scattered `talks` columns.
 **Requirements:** ENRCH-01, ENRCH-02, ENRCH-03, ENRCH-04, ENRCH-05, ENRCH-06
@@ -48,7 +48,7 @@ Plans:
 
 ---
 
-### Phase 2 -- Code Quality
+### Phase 2: Code Quality
 
 **Goal:** Clean up tech debt so the codebase is consistent, configurable, and navigable before hunting bugs.
 **Requirements:** QUAL-01, QUAL-02, QUAL-03, QUAL-07, QUAL-08, QUAL-09
@@ -71,7 +71,7 @@ Plans:
 
 ---
 
-### Phase 3 -- Bug Audit & Fixes
+### Phase 3: Bug Audit & Fixes
 
 **Goal:** All known and discovered bugs in Phases 1-5 are identified, fixed at root cause, and covered by regression tests.
 **Requirements:** BUGS-01, BUGS-02, BUGS-03
@@ -93,18 +93,19 @@ Plans:
 
 ---
 
-### Phase 4 -- Test Coverage
+### Phase 4: Test Coverage
 
 **Goal:** Integration and edge-case tests prove that phases compose correctly and handle boundary conditions, including adversarial inputs.
 **Requirements:** QUAL-04, QUAL-05, QUAL-06, QUAL-10
 **Depends on:** Phase 3
+**Plans:** 3 plans
 
-#### Plans
-1. **End-to-end integration test** -- Create `tests/test_pipeline_integration.py` that runs 3-5 real talks through Phases 1-5 and validates phase-to-phase data contracts (QUAL-04)
-2. **Phase 1 edge cases and schema validation** -- Add tests for missing speaker, unusual sessions, no-URL talks; add startup schema validation against `core.52.db` (QUAL-05, QUAL-06)
-3. **Phase 5 adversarial test cases** -- Add test cases with malformed, edge-case, and adversarial inputs to Phase 5 validation (QUAL-10)
+Plans:
+- [ ] 04-01-PLAN.md -- End-to-end integration test: 5 real talks through Phases 1-5 with data contract assertions (QUAL-04)
+- [ ] 04-02-PLAN.md -- Phase 1 edge cases and schema validation: in-memory SQLite fixtures + db/__init__.py validation (QUAL-05, QUAL-06)
+- [ ] 04-03-PLAN.md -- Phase 5 adversarial test cases: malformed inputs, boundary conditions, unexpected data shapes (QUAL-10)
 
-*All three plans are independent and can run in parallel.*
+*All three plans are independent and can run in parallel (Wave 1).*
 
 **Acceptance criteria:**
 - [ ] `tests/test_pipeline_integration.py` passes: 3-5 real talks run through all phases with data contract assertions between each phase boundary
@@ -114,7 +115,7 @@ Plans:
 
 ---
 
-### Phase 5 -- ChromaDB Loader
+### Phase 5: ChromaDB Loader
 
 **Goal:** A new Phase 6 extractor transforms validated pipeline output into four ChromaDB collections with batch insertion and post-load verification.
 **Requirements:** LOAD-01, LOAD-02, LOAD-03, LOAD-04, LOAD-05, LOAD-06
@@ -136,7 +137,7 @@ Plans:
 
 ---
 
-### Phase 6 -- Pipeline Orchestrator
+### Phase 6: Pipeline Orchestrator
 
 **Goal:** A single orchestrator script runs the full Phases 1-6 pipeline across all talks with resume, skip, and force capabilities.
 **Requirements:** PIPE-01, PIPE-02, PIPE-03, PIPE-04
@@ -154,7 +155,7 @@ Plans:
 
 ---
 
-### Phase 7 -- Full Run & Verification
+### Phase 7: Full Run & Verification
 
 **Goal:** All 7,659 General Conference talks are processed and the resulting ChromaDB collections pass quantitative and semantic verification.
 **Requirements:** VER-01, VER-02, VER-03, VER-04
@@ -235,7 +236,7 @@ Plans:
 | 1. DB Enrichment | 0/5 | Planning complete | - |
 | 2. Code Quality | 0/2 | Planning complete | - |
 | 3. Bug Audit & Fixes | 1/3 | In progress | 03-01 complete |
-| 4. Test Coverage | 0/3 | Not started | - |
+| 4. Test Coverage | 0/3 | Planning complete | - |
 | 5. ChromaDB Loader | 0/3 | Not started | - |
 | 6. Pipeline Orchestrator | 0/2 | Not started | - |
 | 7. Full Run & Verification | 0/3 | Not started | - |
