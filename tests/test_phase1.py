@@ -7,6 +7,8 @@ Tests cover:
 - TalkMetadata dataclass
 - Database queries and transformations
 - ChromaDB format conversion
+- SQLite schema validation (QUAL-06)
+- Phase 1 edge cases via in-memory SQLite (QUAL-05)
 """
 
 import unittest
@@ -14,7 +16,7 @@ import sqlite3
 import sys
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional, Tuple
 
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -620,6 +622,196 @@ class TestTopicTablesUnchanged(unittest.TestCase):
             self.skipTest("Database not available")
         self.assertEqual(self.talk_topic_count, 16162,
                          f"Expected 16162, got {self.talk_topic_count}")
+
+
+def _build_in_memory_db(
+    talk_rows: List[Tuple],
+    speaker_rows: List[Tuple],
+    conference_rows: List[Tuple],
+    session_rows: List[Tuple],
+    conf_talk_rows: List[Tuple],
+    talk_metadata_rows: Optional[List[Tuple]] = None,
+) -> sqlite3.Connection:
+    """
+    Build minimal in-memory SQLite core DB for Phase 1 testing.
+
+    Column order matches DDL so INSERT positional values are unambiguous.
+    talk: (ID, Corpus, URL, Title, Date, SpeakerID, Kicker, AudioUrl, VideoLowUrl, VideoMedUrl, VideoHighUrl)
+    speaker: (ID, GivenNames, LastNames, Abbr, Info, NameSort)
+    conference: (ID, Description, Abbr, Year, Annual, IssueDate)
+    conf_session: (ID, Description, Abbr, Date, Sequence, ConferenceID)
+    conference_talk: (TalkID, SessionID, StartPageNum, EndPageNum, Sequence)
+    talk_metadata: (talk_id, speaker_role_id, uri_l, uri_gc, kicker, talk_preview, data_aid)
+    """
+    conn = sqlite3.connect(":memory:")
+    conn.execute("""CREATE TABLE talk (
+        ID INT PRIMARY KEY, Corpus TEXT, URL TEXT, Title TEXT, Date TEXT,
+        SpeakerID INT, Kicker TEXT, AudioUrl TEXT, VideoLowUrl TEXT,
+        VideoMedUrl TEXT, VideoHighUrl TEXT
+    )""")
+    conn.execute("""CREATE TABLE speaker (
+        ID INT PRIMARY KEY, GivenNames TEXT, LastNames TEXT, Abbr TEXT, Info TEXT, NameSort TEXT
+    )""")
+    conn.execute("""CREATE TABLE conference (
+        ID INT PRIMARY KEY, Description TEXT, Abbr TEXT, Year INT, Annual INT, IssueDate TEXT
+    )""")
+    conn.execute("""CREATE TABLE conf_session (
+        ID INT PRIMARY KEY, Description TEXT, Abbr TEXT, Date TEXT, Sequence INT, ConferenceID INT
+    )""")
+    conn.execute("""CREATE TABLE conference_talk (
+        TalkID INT, SessionID INT, StartPageNum INT, EndPageNum INT, Sequence INT
+    )""")
+    conn.execute("""CREATE TABLE talk_metadata (
+        talk_id INT PRIMARY KEY, speaker_role_id INT, uri_l TEXT, uri_gc TEXT,
+        kicker TEXT, talk_preview TEXT, data_aid TEXT
+    )""")
+    for r in talk_rows:
+        conn.execute("INSERT INTO talk VALUES (?,?,?,?,?,?,?,?,?,?,?)", r)
+    for r in speaker_rows:
+        conn.execute("INSERT INTO speaker VALUES (?,?,?,?,?,?)", r)
+    for r in conference_rows:
+        conn.execute("INSERT INTO conference VALUES (?,?,?,?,?,?)", r)
+    for r in session_rows:
+        conn.execute("INSERT INTO conf_session VALUES (?,?,?,?,?,?)", r)
+    for r in conf_talk_rows:
+        conn.execute("INSERT INTO conference_talk VALUES (?,?,?,?,?)", r)
+    for r in (talk_metadata_rows or []):
+        conn.execute("INSERT INTO talk_metadata VALUES (?,?,?,?,?,?,?)", r)
+    conn.commit()
+    return conn
+
+
+class InMemoryDatabase:
+    """Minimal Database-like wrapper for in-memory SQLite testing."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+
+    def select(self, query: str, params: tuple = ()) -> List[Dict]:
+        self._conn.row_factory = sqlite3.Row
+        cur = self._conn.execute(query, params)
+        return [dict(row) for row in cur.fetchall()]
+
+    def select_one(self, query: str, params: tuple = ()) -> Optional[Dict]:
+        rows = self.select(query, params)
+        return rows[0] if rows else None
+
+
+class TestSchemaValidation(unittest.TestCase):
+    """Tests for SQLite schema validation (QUAL-06)."""
+
+    def test_schema_validation_passes_correct_schema(self):
+        """validate_schema accepts a DB with all expected tables and columns."""
+        conn = sqlite3.connect(":memory:")
+        conn.execute("CREATE TABLE talk (ID INT PRIMARY KEY, Corpus TEXT, URL TEXT, Title TEXT, Date TEXT, SpeakerID INT)")
+        conn.execute("CREATE TABLE speaker (ID INT PRIMARY KEY, GivenNames TEXT, LastNames TEXT)")
+        conn.execute("CREATE TABLE conference (ID INT PRIMARY KEY, Description TEXT, Year INT, Annual INT)")
+        conn.execute("CREATE TABLE conf_session (ID INT PRIMARY KEY, Description TEXT, ConferenceID INT)")
+        conn.execute("CREATE TABLE conference_talk (TalkID INT, SessionID INT, Sequence INT)")
+        conn.execute("CREATE TABLE citation (ID INT PRIMARY KEY, TalkID INT, BookID INT, Chapter INT, Verses TEXT)")
+        conn.execute("CREATE TABLE book (ID INT PRIMARY KEY, Abbr TEXT, FullName TEXT)")
+        conn.execute("CREATE TABLE talk_metadata (talk_id INT PRIMARY KEY, speaker_role_id INT, uri_l TEXT, uri_gc TEXT, kicker TEXT, talk_preview TEXT, data_aid TEXT)")
+        from db import validate_schema, EXPECTED_CORE_TABLES
+        # Should not raise
+        validate_schema(conn, EXPECTED_CORE_TABLES, "test_core")
+        conn.close()
+
+    def test_schema_validation_missing_table(self):
+        """validate_schema raises SchemaError when a required table is missing."""
+        conn = sqlite3.connect(":memory:")
+        # Only create 'talk' — missing all others
+        conn.execute("CREATE TABLE talk (ID INT PRIMARY KEY, Corpus TEXT, URL TEXT, Title TEXT, Date TEXT, SpeakerID INT)")
+        from db import validate_schema, SchemaError, EXPECTED_CORE_TABLES
+        with self.assertRaises(SchemaError) as ctx:
+            validate_schema(conn, EXPECTED_CORE_TABLES, "test_core")
+        self.assertIn("not found", str(ctx.exception))
+        conn.close()
+
+    def test_schema_validation_missing_column(self):
+        """validate_schema raises SchemaError when a required column is missing."""
+        conn = sqlite3.connect(":memory:")
+        conn.execute("CREATE TABLE talk (ID INT PRIMARY KEY, Corpus TEXT)")  # Missing URL, Title, Date, SpeakerID
+        conn.execute("CREATE TABLE speaker (ID INT PRIMARY KEY, GivenNames TEXT, LastNames TEXT)")
+        conn.execute("CREATE TABLE conference (ID INT PRIMARY KEY, Description TEXT, Year INT, Annual INT)")
+        conn.execute("CREATE TABLE conf_session (ID INT PRIMARY KEY, Description TEXT, ConferenceID INT)")
+        conn.execute("CREATE TABLE conference_talk (TalkID INT, SessionID INT, Sequence INT)")
+        conn.execute("CREATE TABLE citation (ID INT PRIMARY KEY, TalkID INT, BookID INT, Chapter INT, Verses TEXT)")
+        conn.execute("CREATE TABLE book (ID INT PRIMARY KEY, Abbr TEXT, FullName TEXT)")
+        conn.execute("CREATE TABLE talk_metadata (talk_id INT PRIMARY KEY, speaker_role_id INT, uri_l TEXT, uri_gc TEXT, kicker TEXT, talk_preview TEXT, data_aid TEXT)")
+        from db import validate_schema, SchemaError, EXPECTED_CORE_TABLES
+        with self.assertRaises(SchemaError) as ctx:
+            validate_schema(conn, EXPECTED_CORE_TABLES, "test_core")
+        self.assertIn("missing columns", str(ctx.exception))
+        conn.close()
+
+    def test_schema_validation_content_db(self):
+        """validate_schema accepts a content DB with correct talkbody table."""
+        conn = sqlite3.connect(":memory:")
+        conn.execute("CREATE TABLE talkbody (TalkID INT PRIMARY KEY, Text TEXT, TextRaw TEXT)")
+        from db import validate_schema, EXPECTED_CONTENT_TABLES
+        validate_schema(conn, EXPECTED_CONTENT_TABLES, "test_content")
+        conn.close()
+
+
+class TestPhase1EdgeCases(unittest.TestCase):
+    """Tests for Phase 1 edge cases using in-memory SQLite fixtures (QUAL-05)."""
+
+    def test_edge_missing_speaker(self):
+        """Phase 1 handles a talk whose SpeakerID has no matching speaker row."""
+        conn = _build_in_memory_db(
+            talk_rows=[(1, 'G', 'http://example.com', 'Test Talk', '2020-04-05', 999, None, None, None, None, None)],
+            speaker_rows=[],  # No speaker with ID 999
+            conference_rows=[(1, 'April 2020', 'A20', 2020, 1, '2020-04-01')],
+            session_rows=[(1, 'Saturday Morning', 'SM', '2020-04-04', 1, 1)],
+            conf_talk_rows=[(1, 1, 1, 5, 1)],
+        )
+        db = InMemoryDatabase(conn)
+        from extractors.phase1_talk_metadata import fetch_talk_by_id
+        # INNER JOIN on speaker means no match returns None — that's valid graceful handling
+        result = fetch_talk_by_id(db, 1)
+        # Should return a row if LEFT JOIN, or None if INNER JOIN — either way: no crash
+        if result is not None:
+            from extractors.phase1_talk_metadata import extract_talk_metadata
+            metadata = extract_talk_metadata(result)
+            self.assertEqual(metadata.talk_id, 1)
+        # No exception raised is the key requirement
+        conn.close()
+
+    def test_edge_unusual_session_type(self):
+        """Phase 1 handles talks from welfare/sustaining sessions."""
+        conn = _build_in_memory_db(
+            talk_rows=[(1, 'G', 'http://example.com', 'Welfare Report', '1982-04-03', 1, None, None, None, None, None)],
+            speaker_rows=[(1, 'Thomas', 'Monson', 'TSM', '', 'Monson, Thomas')],
+            conference_rows=[(1, 'April 1982', 'A82', 1982, 1, '1982-04-01')],
+            session_rows=[(1, 'Welfare Session', 'WS', '1982-04-03', 1, 1)],
+            conf_talk_rows=[(1, 1, 1, 5, 1)],
+        )
+        db = InMemoryDatabase(conn)
+        from extractors.phase1_talk_metadata import fetch_talk_by_id, extract_talk_metadata
+        result = fetch_talk_by_id(db, 1)
+        self.assertIsNotNone(result, "Expected a row for welfare session talk")
+        metadata = extract_talk_metadata(result)
+        self.assertEqual(metadata.talk_id, 1)
+        self.assertEqual(metadata.title, 'Welfare Report')
+        conn.close()
+
+    def test_edge_no_url_talk(self):
+        """Phase 1 handles talks with NULL URL (Ensign-era corpus)."""
+        conn = _build_in_memory_db(
+            talk_rows=[(1, 'E', None, 'Faith and Works', '1946-04-06', 1, None, None, None, None, None)],
+            speaker_rows=[(1, 'David', 'McKay', 'DOM', '', 'McKay, David')],
+            conference_rows=[(1, 'April 1946', 'A46', 1946, 1, '1946-04-01')],
+            session_rows=[(1, 'Saturday Morning', 'SM', '1946-04-06', 1, 1)],
+            conf_talk_rows=[(1, 1, 1, 5, 1)],
+        )
+        db = InMemoryDatabase(conn)
+        from extractors.phase1_talk_metadata import fetch_talk_by_id, extract_talk_metadata
+        result = fetch_talk_by_id(db, 1)
+        self.assertIsNotNone(result, "Expected a row for no-URL talk")
+        metadata = extract_talk_metadata(result)
+        self.assertEqual(metadata.talk_id, 1)
+        self.assertIsNone(metadata.url)
+        conn.close()
 
 
 def run_tests():
