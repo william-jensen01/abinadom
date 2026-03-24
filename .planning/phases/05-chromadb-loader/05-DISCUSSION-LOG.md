@@ -9,7 +9,7 @@
 
 ---
 
-## Document Text (What to Embed)
+## Document Text (What to Store)
 
 | Option | Description | Selected |
 |--------|-------------|----------|
@@ -18,7 +18,7 @@
 | Title + kicker + preview | Maximum content; kicker is often speaker's calling (noise) | |
 
 **User's choice:** Title + talk_preview (fallback: title only)
-**Notes:** User asked for Claude's reasoning first before deciding. Key factor: title-alone gives poor semantic signal for short/evocative GC titles. Preview was specifically fetched from Church API to enrich talk-level search. Kicker rejected due to noise (often ecclesiastical calling, not content).
+**Notes:** User asked for Claude's reasoning first before deciding. Key factor: title-alone gives poor signal for short/evocative GC titles. Preview was specifically fetched from Church API to enrich talk-level search. Kicker rejected due to noise (often ecclesiastical calling, not content).
 
 ---
 
@@ -63,7 +63,6 @@
 
 ## Claude's Discretion
 
-- Embedding function choice
 - Verification report format
 - Batch size default value
 - Retry logic for failed ChromaDB batches
