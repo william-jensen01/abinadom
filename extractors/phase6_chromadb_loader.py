@@ -1,13 +1,10 @@
 """
-Phase 6: ChromaDB Loader — Data Transformation Layer
+Phase 6: ChromaDB Loader — Transformation and Insertion Layer
 
 Transforms Phase 5 validated output bundles (TalkMetadata, TalkParagraphs,
 TalkCitations, TalkFootnotes, ValidationReport) into ChromaDB-compatible
-(documents, metadatas, ids) tuples for 4 collections.
-
-This module contains ONLY the transformation logic (pure functions).
-ChromaDB client setup and batch insertion live in the orchestration layer
-(to be implemented in Plan 02).
+(documents, metadatas, ids) tuples for 4 collections, then inserts them
+in dependency order with automatic batch chunking and progress logging.
 
 Collections produced:
     - conference_talks: one record per talk
@@ -24,12 +21,16 @@ from typing import Any
 
 sys.path.append(str(Path(__file__).parent.parent))
 
+import chromadb
+from chromadb.utils.batch_utils import create_batches
+from chromadb.utils.embedding_functions import OllamaEmbeddingFunction
+
 from models.talk_metadata import TalkMetadata
 from models.paragraph_data import ParagraphData, TalkParagraphs
 from models.citation_data import CitationData, TalkCitations
 from models.footnote_data import FootnoteData, TalkFootnotes
 from models.validation_report import ValidationReport
-from config.pipeline_config import CHROMADB_COLLECTION_NAMES
+from config.pipeline_config import CHROMADB_PATH, CHROMADB_BATCH_SIZE, CHROMADB_COLLECTION_NAMES
 
 logger = logging.getLogger(__name__)
 
@@ -286,3 +287,80 @@ def prepare_talk_bundle(
         "citations": citation_records,
         "footnotes": footnote_records,
     }
+
+
+# =============================================================================
+# Public API — Client helpers and insertion
+# =============================================================================
+
+
+def get_embedding_function() -> OllamaEmbeddingFunction:
+    """
+    Return the OllamaEmbeddingFunction configured for nomic-embed-text.
+
+    Per D-14: pass this to get_or_create_collection() for all 4 collections.
+    Ollama must be running locally with nomic-embed-text pulled.
+    """
+    return OllamaEmbeddingFunction(
+        model_name="nomic-embed-text",
+        url="http://localhost:11434/api/embeddings",
+    )
+
+
+def get_chromadb_client(path: str | None = None) -> chromadb.ClientAPI:
+    """
+    Return a PersistentClient using the given path or config default.
+
+    Per D-12: uses CHROMADB_PATH from pipeline_config when no path given.
+    Tests can pass a tmp_path for isolation.
+    """
+    return chromadb.PersistentClient(path=path or CHROMADB_PATH)
+
+
+def insert_collection(
+    client: chromadb.ClientAPI,
+    collection: chromadb.Collection,
+    documents: list[str],
+    metadatas: list[dict[str, Any]],
+    ids: list[str],
+    collection_name: str,
+) -> int:
+    """
+    Insert records into a ChromaDB collection with automatic batch chunking.
+
+    Uses create_batches() to respect SQLite parameter limits on large runs.
+    Uses upsert() for idempotent behavior (LOAD-04).
+    Logs per-batch progress with collection name and batch count (LOAD-05).
+
+    Args:
+        client:          ChromaDB client (needed by create_batches for max_batch_size).
+        collection:      Target collection.
+        documents:       Document texts to insert.
+        metadatas:       Metadata dicts per document.
+        ids:             Unique IDs per document.
+        collection_name: Human-readable name for logging.
+
+    Returns:
+        Number of records inserted.
+    """
+    if len(ids) == 0:
+        logger.info("%s: no records to insert", collection_name)
+        return 0
+
+    batches = create_batches(
+        api=client,
+        ids=ids,
+        documents=documents,
+        metadatas=metadatas,
+    )
+    total = len(batches)
+    for i, batch in enumerate(batches, 1):
+        batch_ids, batch_embeddings, batch_metadatas, batch_documents = batch
+        collection.upsert(
+            ids=batch_ids,
+            documents=batch_documents,
+            metadatas=batch_metadatas,
+        )
+        logger.info("%s: batch %d/%d (%d records)", collection_name, i, total, len(batch_ids))
+
+    return len(ids)

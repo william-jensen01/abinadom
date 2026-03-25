@@ -19,6 +19,9 @@ from models.paragraph_data import ParagraphData, TalkParagraphs
 from models.citation_data import CitationData, TalkCitations
 from models.footnote_data import FootnoteData, TalkFootnotes
 from models.validation_report import ValidationReport
+import logging
+import chromadb
+from chromadb.utils.embedding_functions import OllamaEmbeddingFunction
 from extractors.phase6_chromadb_loader import (
     _flatten_metadata,
     prepare_talk_record,
@@ -26,6 +29,9 @@ from extractors.phase6_chromadb_loader import (
     prepare_citation_records,
     prepare_footnote_records,
     prepare_talk_bundle,
+    get_chromadb_client,
+    get_embedding_function,
+    insert_collection,
 )
 
 
@@ -516,3 +522,62 @@ class TestPrepareTalkBundle:
         # Talk metadata has annotations field
         doc, meta, doc_id = result["talks"][0]
         assert meta.get("annotations") == "Annotation content."
+
+
+# =============================================================================
+# Tests: get_embedding_function
+# =============================================================================
+
+
+def test_get_embedding_function():
+    """get_embedding_function returns an OllamaEmbeddingFunction instance."""
+    ef = get_embedding_function()
+    assert isinstance(ef, OllamaEmbeddingFunction)
+
+
+# =============================================================================
+# Tests: insert_collection
+# =============================================================================
+
+
+class TestInsertCollection:
+    def test_insert_collection_basic(self):
+        """Inserting 3 records into an EphemeralClient collection yields count 3."""
+        client = chromadb.EphemeralClient()
+        collection = client.get_or_create_collection("test_basic")
+        docs = ["doc one", "doc two", "doc three"]
+        metas = [{"key": "a"}, {"key": "b"}, {"key": "c"}]
+        ids = ["id_1", "id_2", "id_3"]
+        count = insert_collection(client, collection, docs, metas, ids, "test_basic")
+        assert count == 3
+        assert collection.count() == 3
+
+    def test_insert_collection_upsert(self):
+        """Re-inserting same IDs updates records rather than duplicating."""
+        client = chromadb.EphemeralClient()
+        collection = client.get_or_create_collection("test_upsert")
+        docs = ["original one", "original two", "original three"]
+        metas = [{"key": "a"}, {"key": "b"}, {"key": "c"}]
+        ids = ["id_1", "id_2", "id_3"]
+        insert_collection(client, collection, docs, metas, ids, "test_upsert")
+        assert collection.count() == 3
+
+        # Re-insert same IDs with different documents
+        new_docs = ["updated one", "updated two", "updated three"]
+        insert_collection(client, collection, new_docs, metas, ids, "test_upsert")
+        assert collection.count() == 3
+
+        # Verify documents were updated
+        result = collection.get(ids=["id_1"], include=["documents"])
+        assert result["documents"][0] == "updated one"
+
+    def test_batch_logging(self, caplog):
+        """insert_collection logs batch progress with collection name."""
+        client = chromadb.EphemeralClient()
+        collection = client.get_or_create_collection("test_logging")
+        docs = ["doc one", "doc two"]
+        metas = [{"key": "a"}, {"key": "b"}]
+        ids = ["id_1", "id_2"]
+        with caplog.at_level(logging.INFO, logger="extractors.phase6_chromadb_loader"):
+            insert_collection(client, collection, docs, metas, ids, "test_logging")
+        assert any("test_logging" in msg and "batch" in msg for msg in caplog.messages)
