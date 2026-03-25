@@ -33,6 +33,7 @@ from extractors.phase6_chromadb_loader import (
     get_embedding_function,
     insert_collection,
     load_talk_bundles,
+    generate_verification_report,
 )
 from config.pipeline_config import CHROMADB_COLLECTION_NAMES
 
@@ -735,3 +736,90 @@ class TestLoadTalkBundles:
         assert "skipped_count" in summary
         assert isinstance(summary["skipped_talks"], list)
         assert summary["talks_inserted"] == 1
+
+
+# =============================================================================
+# Fixtures for verification report tests
+# =============================================================================
+
+
+@pytest.fixture
+def loaded_client():
+    """Provide an EphemeralClient with 1 valid bundle loaded, plus the load summary."""
+    client = chromadb.EphemeralClient()
+    # Clean slate
+    for name in CHROMADB_COLLECTION_NAMES.values():
+        try:
+            client.delete_collection(name)
+        except Exception:
+            pass
+    bundle = _make_full_bundle(talk_id=8820, num_paragraphs=2, num_citations=1, num_footnotes=1)
+    summary = load_talk_bundles([bundle], client, embedding_fn=None)
+    return client, summary
+
+
+# =============================================================================
+# Tests: generate_verification_report
+# =============================================================================
+
+
+class TestVerificationReport:
+    def test_verification_counts(self, loaded_client):
+        """After loading 1 talk bundle, report['counts'] has correct per-collection counts."""
+        client, summary = loaded_client
+        report = generate_verification_report(client, summary)
+        assert report["counts"]["conference_talks"] == 1
+        # 2 normal paragraphs (annotation excluded)
+        assert report["counts"]["conference_talk_paragraphs"] == 2
+        # 1 normal citation + 1 from annotation paragraph = 2
+        assert report["counts"]["conference_talk_citations"] == 2
+        assert report["counts"]["conference_talk_footnotes"] == 1
+
+    def test_verification_retrievals(self, loaded_client):
+        """report['sample_retrievals'] contains at least 1 retrieved document per collection with non-empty text."""
+        client, summary = loaded_client
+        report = generate_verification_report(client, summary)
+        for col_name in CHROMADB_COLLECTION_NAMES.values():
+            samples = report["sample_retrievals"][col_name]
+            assert len(samples) >= 1, f"Expected at least 1 sample for {col_name}"
+            assert samples[0]["document_preview"] != "", f"Expected non-empty preview for {col_name}"
+
+    def test_verification_fk_checks(self, loaded_client):
+        """FK spot checks pass: paragraph talk_ids found in talks, citation paragraph_ids found in paragraphs."""
+        client, summary = loaded_client
+        report = generate_verification_report(client, summary)
+        assert report["fk_checks"]["paragraphs_to_talks"]["passed"] is True
+        assert report["fk_checks"]["paragraphs_to_talks"]["sampled"] > 0
+        assert report["fk_checks"]["citations_to_paragraphs"]["passed"] is True
+
+    def test_verification_skipped_talks(self):
+        """report['skipped_talks'] lists talk_ids that were skipped."""
+        client = chromadb.EphemeralClient()
+        for name in CHROMADB_COLLECTION_NAMES.values():
+            try:
+                client.delete_collection(name)
+            except Exception:
+                pass
+        valid_bundle = _make_full_bundle(talk_id=1001, num_paragraphs=1, num_citations=1, num_footnotes=1)
+        invalid_bundle = _make_full_bundle(talk_id=9999, is_valid=False)
+        summary = load_talk_bundles([valid_bundle, invalid_bundle], client, embedding_fn=None)
+        report = generate_verification_report(client, summary)
+        assert 9999 in report["skipped_talks"]
+        assert report["skipped_count"] == 1
+
+    def test_verification_report_pass(self, loaded_client):
+        """With valid data, report['passed'] is True."""
+        client, summary = loaded_client
+        report = generate_verification_report(client, summary)
+        assert report["passed"] is True
+
+    def test_verification_report_format(self, loaded_client):
+        """Report is a dict (not a string) -- downstream can format as needed."""
+        client, summary = loaded_client
+        report = generate_verification_report(client, summary)
+        assert isinstance(report, dict)
+        assert "counts" in report
+        assert "sample_retrievals" in report
+        assert "fk_checks" in report
+        assert "skipped_talks" in report
+        assert "passed" in report
