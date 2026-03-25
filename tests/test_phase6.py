@@ -32,7 +32,9 @@ from extractors.phase6_chromadb_loader import (
     get_chromadb_client,
     get_embedding_function,
     insert_collection,
+    load_talk_bundles,
 )
+from config.pipeline_config import CHROMADB_COLLECTION_NAMES
 
 
 # =============================================================================
@@ -581,3 +583,155 @@ class TestInsertCollection:
         with caplog.at_level(logging.INFO, logger="extractors.phase6_chromadb_loader"):
             insert_collection(client, collection, docs, metas, ids, "test_logging")
         assert any("test_logging" in msg and "batch" in msg for msg in caplog.messages)
+
+
+# =============================================================================
+# Helpers for load_talk_bundles tests
+# =============================================================================
+
+
+def _make_full_bundle(talk_id=8820, num_paragraphs=2, num_citations=1, num_footnotes=1, is_valid=True):
+    """Build a complete talk bundle with specified counts."""
+    metadata = make_talk_metadata(talk_id=talk_id)
+
+    # Normal paragraphs + 1 annotation
+    paragraphs_list = []
+    para_base = talk_id * 10000
+    for i in range(num_paragraphs):
+        paragraphs_list.append(make_paragraph(
+            paragraph_id=para_base + i + 1,
+            talk_id=talk_id,
+            paragraph_number=i + 1,
+            text=f"Paragraph {i+1} of talk {talk_id}.",
+            source_type="p",
+            word_count=5,
+        ))
+    # Add one annotation paragraph
+    paragraphs_list.append(make_paragraph(
+        paragraph_id=para_base + num_paragraphs + 1,
+        talk_id=talk_id,
+        paragraph_number=num_paragraphs + 1,
+        text=f"Annotation text for talk {talk_id}.",
+        source_type="annotation",
+        word_count=4,
+    ))
+    paragraphs = make_talk_paragraphs(paragraphs_list)
+
+    citations_list = []
+    for i in range(num_citations):
+        citations_list.append(make_citation(
+            citation_id=talk_id * 100 + i + 1,
+            talk_id=talk_id,
+            paragraph_id=para_base + 1,
+            paragraph_number=1,
+        ))
+    # Add 1 citation from annotation paragraph
+    citations_list.append(make_citation(
+        citation_id=talk_id * 100 + num_citations + 1,
+        talk_id=talk_id,
+        paragraph_id=para_base + num_paragraphs + 1,
+        paragraph_number=num_paragraphs + 1,
+    ))
+    citations = make_talk_citations(citations_list)
+
+    footnotes_list = []
+    for i in range(num_footnotes):
+        footnotes_list.append(make_footnote(
+            footnote_id=talk_id * 1000 + i + 1,
+            talk_id=talk_id,
+            paragraph_id=para_base + 1,
+            paragraph_number=1,
+        ))
+    footnotes = make_talk_footnotes(footnotes_list)
+
+    if is_valid:
+        report = ValidationReport(talk_id=talk_id, is_valid=True, errors=[], warnings=[], stats={})
+    else:
+        report = ValidationReport(talk_id=talk_id, is_valid=False, errors=["Test failure"], warnings=[], stats={})
+
+    return (metadata, paragraphs, citations, footnotes, report)
+
+
+# =============================================================================
+# Tests: load_talk_bundles
+# =============================================================================
+
+
+@pytest.fixture
+def fresh_client():
+    """Provide a clean EphemeralClient with all 4 collections deleted before each test."""
+    client = chromadb.EphemeralClient()
+    # Delete any leftover collections from previous tests (EphemeralClient is a singleton)
+    for name in CHROMADB_COLLECTION_NAMES.values():
+        try:
+            client.delete_collection(name)
+        except Exception:
+            pass
+    return client
+
+
+class TestLoadTalkBundles:
+    def test_insertion_order(self, fresh_client):
+        """load_talk_bundles inserts talks before paragraphs before citations/footnotes."""
+        client = fresh_client
+        bundle = _make_full_bundle(talk_id=8820, num_paragraphs=2, num_citations=1, num_footnotes=1)
+        summary = load_talk_bundles([bundle], client, embedding_fn=None)
+
+        # Verify all 4 collections have correct counts
+        talks_col = client.get_or_create_collection(CHROMADB_COLLECTION_NAMES["talks"])
+        paras_col = client.get_or_create_collection(CHROMADB_COLLECTION_NAMES["paragraphs"])
+        cites_col = client.get_or_create_collection(CHROMADB_COLLECTION_NAMES["citations"])
+        fns_col = client.get_or_create_collection(CHROMADB_COLLECTION_NAMES["footnotes"])
+
+        assert talks_col.count() == 1
+        assert paras_col.count() == 2  # 2 normal paragraphs (annotation excluded)
+        assert cites_col.count() == 2  # 1 normal + 1 from annotation
+        assert fns_col.count() == 1
+
+    def test_load_bundles_skips_invalid(self, fresh_client):
+        """When a bundle has is_valid=False, all 4 collections get 0 records."""
+        client = fresh_client
+        bundle = _make_full_bundle(talk_id=9999, is_valid=False)
+        summary = load_talk_bundles([bundle], client, embedding_fn=None)
+
+        talks_col = client.get_or_create_collection(CHROMADB_COLLECTION_NAMES["talks"])
+        paras_col = client.get_or_create_collection(CHROMADB_COLLECTION_NAMES["paragraphs"])
+        cites_col = client.get_or_create_collection(CHROMADB_COLLECTION_NAMES["citations"])
+        fns_col = client.get_or_create_collection(CHROMADB_COLLECTION_NAMES["footnotes"])
+
+        assert talks_col.count() == 0
+        assert paras_col.count() == 0
+        assert cites_col.count() == 0
+        assert fns_col.count() == 0
+        assert 9999 in summary["skipped_talks"]
+
+    def test_load_bundles_multiple_talks(self, fresh_client):
+        """2 valid talks produce correct aggregate counts across all collections."""
+        client = fresh_client
+        bundle1 = _make_full_bundle(talk_id=1001, num_paragraphs=2, num_citations=1, num_footnotes=1)
+        bundle2 = _make_full_bundle(talk_id=1002, num_paragraphs=3, num_citations=2, num_footnotes=2)
+        summary = load_talk_bundles([bundle1, bundle2], client, embedding_fn=None)
+
+        assert summary["talks_inserted"] == 2
+        # bundle1: 2 paragraphs, bundle2: 3 paragraphs
+        assert summary["paragraphs_inserted"] == 5
+        # bundle1: 1 normal + 1 annotation citation = 2; bundle2: 2 normal + 1 annotation citation = 3
+        assert summary["citations_inserted"] == 5
+        # bundle1: 1 footnote, bundle2: 2 footnotes
+        assert summary["footnotes_inserted"] == 3
+        assert summary["skipped_count"] == 0
+
+    def test_load_bundles_returns_summary(self, fresh_client):
+        """Return value includes counts per collection and skipped talk_ids."""
+        client = fresh_client
+        bundle = _make_full_bundle(talk_id=5555)
+        summary = load_talk_bundles([bundle], client, embedding_fn=None)
+
+        assert "talks_inserted" in summary
+        assert "paragraphs_inserted" in summary
+        assert "citations_inserted" in summary
+        assert "footnotes_inserted" in summary
+        assert "skipped_talks" in summary
+        assert "skipped_count" in summary
+        assert isinstance(summary["skipped_talks"], list)
+        assert summary["talks_inserted"] == 1

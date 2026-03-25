@@ -364,3 +364,103 @@ def insert_collection(
         logger.info("%s: batch %d/%d (%d records)", collection_name, i, total, len(batch_ids))
 
     return len(ids)
+
+
+# =============================================================================
+# Type alias for a talk bundle input
+# =============================================================================
+
+TalkBundle = tuple[TalkMetadata, TalkParagraphs, TalkCitations, TalkFootnotes, ValidationReport]
+
+
+# =============================================================================
+# Public API — Orchestration
+# =============================================================================
+
+
+def load_talk_bundles(
+    bundles: list[TalkBundle],
+    client: chromadb.ClientAPI,
+    embedding_fn=None,
+) -> dict[str, Any]:
+    """
+    Load validated talk bundles into ChromaDB in dependency order.
+
+    Inserts in order (LOAD-04): talks -> paragraphs -> citations -> footnotes.
+    Invalid talks (is_valid=False) are skipped per D-10.
+
+    Args:
+        bundles:      List of (TalkMetadata, TalkParagraphs, TalkCitations,
+                      TalkFootnotes, ValidationReport) tuples.
+        client:       ChromaDB client instance.
+        embedding_fn: Optional embedding function for collections (None in tests).
+
+    Returns:
+        Summary dict with per-collection counts and skipped talk info.
+    """
+    logger.info("Loading %d talk bundles into ChromaDB", len(bundles))
+
+    # Get or create all 4 collections
+    talks_col = client.get_or_create_collection(
+        name=CHROMADB_COLLECTION_NAMES["talks"], embedding_function=embedding_fn
+    )
+    paras_col = client.get_or_create_collection(
+        name=CHROMADB_COLLECTION_NAMES["paragraphs"], embedding_function=embedding_fn
+    )
+    cites_col = client.get_or_create_collection(
+        name=CHROMADB_COLLECTION_NAMES["citations"], embedding_function=embedding_fn
+    )
+    fns_col = client.get_or_create_collection(
+        name=CHROMADB_COLLECTION_NAMES["footnotes"], embedding_function=embedding_fn
+    )
+
+    # Accumulators
+    all_talks: list[tuple[str, dict[str, Any], str]] = []
+    all_paragraphs: list[tuple[str, dict[str, Any], str]] = []
+    all_citations: list[tuple[str, dict[str, Any], str]] = []
+    all_footnotes: list[tuple[str, dict[str, Any], str]] = []
+    skipped_talks: list[int] = []
+
+    # Transform each bundle
+    for metadata, paragraphs, citations, footnotes, validation_report in bundles:
+        result = prepare_talk_bundle(metadata, paragraphs, citations, footnotes, validation_report)
+        if not result["talks"]:
+            # Invalid talk — already logged by prepare_talk_bundle
+            skipped_talks.append(metadata.talk_id)
+            continue
+        all_talks.extend(result["talks"])
+        all_paragraphs.extend(result["paragraphs"])
+        all_citations.extend(result["citations"])
+        all_footnotes.extend(result["footnotes"])
+
+    # Insert in dependency order: talks -> paragraphs -> citations -> footnotes
+    def _split(records):
+        """Split list of (doc, meta, id) tuples into separate lists."""
+        docs = [r[0] for r in records]
+        metas = [r[1] for r in records]
+        ids = [r[2] for r in records]
+        return docs, metas, ids
+
+    t_docs, t_metas, t_ids = _split(all_talks)
+    insert_collection(client, talks_col, t_docs, t_metas, t_ids, CHROMADB_COLLECTION_NAMES["talks"])
+
+    p_docs, p_metas, p_ids = _split(all_paragraphs)
+    insert_collection(client, paras_col, p_docs, p_metas, p_ids, CHROMADB_COLLECTION_NAMES["paragraphs"])
+
+    c_docs, c_metas, c_ids = _split(all_citations)
+    insert_collection(client, cites_col, c_docs, c_metas, c_ids, CHROMADB_COLLECTION_NAMES["citations"])
+
+    f_docs, f_metas, f_ids = _split(all_footnotes)
+    insert_collection(client, fns_col, f_docs, f_metas, f_ids, CHROMADB_COLLECTION_NAMES["footnotes"])
+
+    summary = {
+        "talks_inserted": len(all_talks),
+        "paragraphs_inserted": len(all_paragraphs),
+        "citations_inserted": len(all_citations),
+        "footnotes_inserted": len(all_footnotes),
+        "skipped_talks": skipped_talks,
+        "skipped_count": len(skipped_talks),
+    }
+
+    logger.info("Load complete: %s", summary)
+    return summary
