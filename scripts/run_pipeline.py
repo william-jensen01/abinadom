@@ -1,0 +1,198 @@
+# -*- coding: utf-8 -*-
+"""
+Full pipeline orchestrator script.
+
+Runs all 6 extraction phases (Phases 1-5 via process_talk_pipeline, Phase 6
+via load_talk_bundles) over all General Conference talks in the database.
+
+Features:
+  - Resume from last successfully flushed talk (skip-if-processed via ChromaDB)
+  - --force flag to re-process already-loaded talks
+  - tqdm progress bar (no per-talk INFO log lines)
+  - Incremental failed_talks.json writes after each failure
+  - Final summary with processed/skipped/failed/validation-failed counts
+
+Usage:
+    pipenv run py scripts/run_pipeline.py
+    pipenv run py scripts/run_pipeline.py --force
+"""
+
+import argparse
+import json
+import logging
+import sys
+import time
+from pathlib import Path
+from typing import Any, Dict, List
+
+# Ensure project root is on sys.path when running as a script
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from tqdm import tqdm
+
+from db import content_db, core_db
+from config.schemas import PARAGRAPH_CONFIG
+from config.pipeline_config import CHROMADB_BATCH_SIZE, CHROMADB_COLLECTION_NAMES
+from extractors.pipeline import process_talk_pipeline
+from extractors.phase3_citation_extraction import fetch_all_books
+from extractors.phase5_validation import validate_talk
+from extractors.phase6_chromadb_loader import (
+    get_chromadb_client,
+    get_embedding_function,
+    load_talk_bundles,
+    TalkBundle,
+)
+
+logger = logging.getLogger(__name__)
+
+FAILED_TALKS_PATH = Path(__file__).parent.parent / "data" / "failed_talks.json"
+
+
+def _get_all_gc_talk_ids() -> List[int]:
+    """
+    Return all General Conference talk IDs from the database.
+
+    Uses INNER JOIN conference_talk to get only GC talks (approx. 5,838),
+    not all talks in the database (approx. 7,659).
+    """
+    rows = core_db.select(
+        "SELECT t.ID FROM talk t INNER JOIN conference_talk ct ON ct.TalkID = t.ID ORDER BY t.ID"
+    )
+    return [row["ID"] for row in rows]
+
+
+def _record_failure(talk_id: int, error: str, failed_talks: list) -> None:
+    """
+    Append a failure record to the failed_talks list and write it to disk.
+
+    Writes incrementally after each failure so the file survives a mid-run kill.
+
+    Args:
+        talk_id:      The talk ID that failed.
+        error:        Error message or description.
+        failed_talks: The in-memory list of failure dicts (mutated in place).
+    """
+    failed_talks.append({"talk_id": talk_id, "error": error})
+    FAILED_TALKS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(FAILED_TALKS_PATH, "w", encoding="utf-8") as f:
+        json.dump(failed_talks, f, indent=2, ensure_ascii=False)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Run the full LDS pipeline over all General Conference talks."
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-process already-loaded talks (skip the ChromaDB existence check)",
+    )
+    args = parser.parse_args()
+
+    start_time = time.time()
+
+    # --- Initialization ---
+    book_cache = fetch_all_books(core_db)
+    chroma_client = get_chromadb_client()
+    embedding_fn = get_embedding_function()
+
+    # Get the talks collection for the skip check
+    talks_col = chroma_client.get_or_create_collection(
+        name=CHROMADB_COLLECTION_NAMES["talks"],
+        embedding_function=embedding_fn,
+    )
+
+    all_talk_ids = _get_all_gc_talk_ids()
+
+    # --- Counters and buffers ---
+    pending_bundles: List[TalkBundle] = []
+    processed_since_flush: int = 0
+    skipped_count: int = 0
+    failed_count: int = 0
+    validation_failed_count: int = 0
+    processed_count: int = 0
+    failed_talks: List[Dict[str, Any]] = []
+
+    # --- Main per-talk loop ---
+    for talk_id in tqdm(all_talk_ids, unit="talk", desc="Pipeline"):
+        # Skip check: if talk already in ChromaDB and not forcing, skip it
+        if not args.force:
+            existing = talks_col.get(ids=[f"talk_{talk_id}"])
+            if existing["ids"]:
+                skipped_count += 1
+                continue
+
+        try:
+            # Phases 1-4: extraction
+            result = process_talk_pipeline(
+                content_db, core_db, talk_id, book_cache, PARAGRAPH_CONFIG
+            )
+
+            if not result.success:
+                raise RuntimeError("; ".join(result.errors))
+
+            # Phase 5: validation
+            validation = validate_talk(
+                result.metadata,
+                result.paragraphs,
+                result.citations,
+                result.footnotes,
+                db=core_db,
+            )
+
+            if not validation.is_valid:
+                tqdm.write(f"[WARN] talk_id={talk_id} validation failed")
+                _record_failure(
+                    talk_id,
+                    f"validation: {validation.errors}",
+                    failed_talks,
+                )
+                validation_failed_count += 1
+                continue
+
+            # Build bundle for Phase 6
+            bundle: TalkBundle = (
+                result.metadata,
+                result.paragraphs,
+                result.citations,
+                result.footnotes,
+                validation,
+            )
+            pending_bundles.append(bundle)
+            processed_since_flush += 1
+            processed_count += 1
+
+            # Batch flush: load when buffer reaches CHROMADB_BATCH_SIZE
+            if processed_since_flush >= CHROMADB_BATCH_SIZE:
+                load_talk_bundles(pending_bundles, chroma_client, embedding_fn)
+                pending_bundles.clear()
+                processed_since_flush = 0
+
+        except Exception as exc:
+            logger.error("talk_id=%d failed: %s", talk_id, exc)
+            tqdm.write(f"[ERROR] talk_id={talk_id}: {exc}")
+            _record_failure(talk_id, str(exc), failed_talks)
+            failed_count += 1
+
+    # --- Final flush: load any remaining buffered talks ---
+    if pending_bundles:
+        load_talk_bundles(pending_bundles, chroma_client, embedding_fn)
+
+    # --- Final summary ---
+    elapsed = time.time() - start_time
+    print(f"\nRun complete in {elapsed:.1f}s")
+    print(f"  Total GC talks:    {len(all_talk_ids)}")
+    print(f"  Processed:         {processed_count}")
+    print(f"  Skipped (cached):  {skipped_count}")
+    print(f"  Failed:            {failed_count}")
+    print(f"  Validation failed: {validation_failed_count}")
+    if failed_talks:
+        print(f"  Failed talks log:  {FAILED_TALKS_PATH}")
+
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.WARNING,
+        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+    )
+    main()
