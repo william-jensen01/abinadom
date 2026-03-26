@@ -588,9 +588,14 @@ def generate_verification_report(
     report["skipped_count"] = load_summary.get("skipped_count", 0)
 
     # 5. Overall pass/fail
-    all_counts_positive = all(c > 0 for c in counts.values())
+    # Counts must match expected (not just be positive — legitimate 0s are fine for
+    # talks with no citations or footnotes).
+    counts_match = all(
+        counts.get(name, -1) >= report["expected"].get(key, 0)
+        for key, name in CHROMADB_COLLECTION_NAMES.items()
+    )
     all_fk_passed = all(check.get("passed", False) for check in fk_checks.values())
-    report["passed"] = all_counts_positive and all_fk_passed
+    report["passed"] = counts_match and all_fk_passed
 
     logger.info(
         "Verification report: passed=%s, counts=%s, skipped=%s",

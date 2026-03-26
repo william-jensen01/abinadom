@@ -823,3 +823,13 @@ class TestVerificationReport:
         assert "fk_checks" in report
         assert "skipped_talks" in report
         assert "passed" in report
+
+    def test_verification_report_passes_on_second_run(self):
+        """report['passed'] is True when load_talk_bundles is called twice (cumulative counts >= inserted)."""
+        client = chromadb.EphemeralClient()
+        bundle1 = _make_full_bundle(talk_id=1001, num_paragraphs=2, num_citations=1, num_footnotes=1)
+        bundle2 = _make_full_bundle(talk_id=1002, num_paragraphs=2, num_citations=1, num_footnotes=1)
+        load_talk_bundles([bundle1], client, embedding_fn=None)
+        summary2 = load_talk_bundles([bundle2], client, embedding_fn=None)
+        report = generate_verification_report(client, summary2)
+        assert report["passed"] is True
