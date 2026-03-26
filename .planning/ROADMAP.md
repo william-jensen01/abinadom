@@ -20,7 +20,7 @@ All 7,659 General Conference talks processed through Phases 1-6 with verified re
 | 3 | 2/3 | In Progress|  |
 | 4 | 0/3 | Planned    |  |
 | 5 | 2/3 | In Progress|  |
-| 6 | Pipeline Orchestrator | Not Started | PIPE-01, PIPE-02, PIPE-03, PIPE-04 |
+| 6 | Pipeline Orchestrator | Planning Complete | PIPE-01, PIPE-02, PIPE-03, PIPE-04 |
 | 7 | Full Run & Verification | Not Started | VER-01, VER-02, VER-03, VER-04 |
 
 ## Phases
@@ -143,10 +143,13 @@ Plans:
 **Goal:** A single orchestrator script runs the full Phases 1-6 pipeline across all talks with resume, skip, and force capabilities.
 **Requirements:** PIPE-01, PIPE-02, PIPE-03, PIPE-04
 **Depends on:** Phase 5
+**Plans:** 2 plans
 
-#### Plans
-1. **Orchestrator core** -- Build the per-talk streaming loop that runs Phases 1-6 sequentially per talk, with progress tracking by `talk_id` and resume-from-last capability (PIPE-01, PIPE-02)
-2. **Run modes and buffering** -- Implement skip-if-processed default, `--force` flag, and configurable ChromaDB write buffer size (PIPE-03, PIPE-04)
+Plans:
+- [ ] 06-01-PLAN.md -- Orchestrator core: per-talk streaming loop, Phases 1-6, progress tracking, resume capability (PIPE-01, PIPE-02)
+- [ ] 06-02-PLAN.md -- Run modes and buffering: skip-if-processed, --force flag, CHROMADB_BATCH_SIZE update to 1000 (PIPE-03, PIPE-04)
+
+*Plan 01 (Wave 1) must complete before Plan 02 (Wave 2).*
 
 **Acceptance criteria:**
 - [ ] Running the orchestrator processes talks through Phases 1-6 in a per-talk streaming loop
@@ -239,5 +242,5 @@ Plans:
 | 3. Bug Audit & Fixes | 1/3 | In progress | 03-01 complete |
 | 4. Test Coverage | 0/3 | Planning complete | - |
 | 5. ChromaDB Loader | 0/3 | Planning complete | - |
-| 6. Pipeline Orchestrator | 0/2 | Not started | - |
+| 6. Pipeline Orchestrator | 0/2 | Planning complete | - |
 | 7. Full Run & Verification | 0/3 | Not started | - |
