@@ -28,7 +28,7 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - [x] Code quality — `config/pipeline_config.py` centralized constants, logging standardized (no `basicConfig` in extractors), codebase clutter removed (duplicate cache manager, superseded test runner, scripts relocated to `scripts/`) — Validated in Phase 02: code-quality
 - [x] Phase 1–5 extractors: all known bugs diagnosed and fixed — Validated in Phase 03: bug-audit-fixes
 - [x] Test coverage: integration tests (5 real talks, all phases), schema validation, Phase 1 edge cases, Phase 5 adversarial inputs — Validated in Phase 04: test-coverage
-- [ ] Phase 6: ChromaDB loader — transform validated records into 4 collections, batch insert, verify
+- [x] Phase 6: ChromaDB loader — transform validated records into 4 collections, batch insert, verify — Validated in Phase 05: chromadb-loader
 - [ ] Full pipeline run over all 7,659 General Conference talks, resumable and idempotent
 - [ ] Post-run verification: record counts, sample queries, foreign key integrity confirmed
 
@@ -68,4 +68,4 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 | Paragraph-level chunking | Preserves natural document structure; typical 200–800 tokens | ✓ Good |
 
 ---
-*Last updated: 2026-03-24 — Phase 04 (test-coverage) complete*
+*Last updated: 2026-03-25 — Phase 05 (chromadb-loader) complete*
