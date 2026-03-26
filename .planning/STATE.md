@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to plan
-stopped_at: Completed 04-test-coverage 04-02-PLAN.md
-last_updated: "2026-03-24T08:44:06.214Z"
+stopped_at: Completed 05-chromadb-loader 05-03-PLAN.md
+last_updated: "2026-03-26T01:22:27.763Z"
 progress:
   total_phases: 7
-  completed_phases: 4
-  total_plans: 13
-  completed_plans: 13
+  completed_phases: 5
+  total_plans: 16
+  completed_plans: 16
 ---
 
 # Project State
@@ -19,11 +19,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** All LDS content searchable by meaning -- find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** Phase 04 — test-coverage
+**Current focus:** Phase 05 — chromadb-loader
 
 ## Current Position
 
-Phase: 5
+Phase: 6
 Plan: Not started
 
 ## Performance Metrics
@@ -57,6 +57,9 @@ Plan: Not started
 | Phase 04-test-coverage P01 | 4min | 2 tasks | 1 files |
 | Phase 04-test-coverage P03 | 15min | 2 tasks | 1 files |
 | Phase 04-test-coverage P02 | 5min | 2 tasks | 2 files |
+| Phase 05-chromadb-loader P01 | 10min | 2 tasks | 8 files |
+| Phase 05-chromadb-loader P02 | 11min | 2 tasks | 4 files |
+| Phase 05-chromadb-loader P03 | 5min | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -86,6 +89,12 @@ Recent decisions affecting current work:
 - [Phase 04-test-coverage]: Schema validation is lazy (runs on first _connect per instance) to avoid breaking tests that use in-memory or mock DBs
 - [Phase 04-test-coverage]: SchemaError is a hard fail per D-09 — pipeline halts with a clear message on schema mismatch
 - [Phase 04-test-coverage]: Missing speaker test documents INNER JOIN behavior: fetch_talk_by_id returns None when speaker row absent — no crash
+- [Phase 05-chromadb-loader]: source_type added to ParagraphData with default p — non-breaking change enabling annotation detection
+- [Phase 05-chromadb-loader]: _flatten_metadata removes None/empty lists, comma-joins List[int], pipe-joins List[str] for ChromaDB scalar requirement
+- [Phase 05-chromadb-loader]: Annotation three-way split: excluded from paragraphs, text folded into talk metadata, citations preserved in citations collection
+- [Phase 05-chromadb-loader]: EphemeralClient is a singleton -- fresh_client fixture deletes collections between tests
+- [Phase 05-chromadb-loader]: Installed ollama python package as runtime dep (required by OllamaEmbeddingFunction at instantiation)
+- [Phase 05-chromadb-loader]: Verification report returns dict (not string) for downstream flexibility; missing annotation paragraph_ids always pass FK check per D-07/D-09
 
 ### Pending Todos
 
@@ -105,6 +114,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-24T20:19:48Z
-Stopped at: Completed quick task 260324-jmc
+Last session: 2026-03-25T23:39:45.252Z
+Stopped at: Completed 05-chromadb-loader 05-03-PLAN.md
 Resume file: None
