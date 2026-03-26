@@ -161,19 +161,19 @@ Plans:
 
 ### Phase 7: Full Run & Verification
 
-**Goal:** All 7,659 General Conference talks are processed and the resulting ChromaDB collections pass quantitative and semantic verification.
+**Goal:** All General Conference talks are processed and the resulting ChromaDB collections pass quantitative and semantic verification.
 **Requirements:** VER-01, VER-02, VER-03, VER-04
 **Depends on:** Phase 6
+**Plans:** 2 plans
 
-#### Plans
-1. **Full pipeline run** -- Execute the orchestrator across all 7,659 talks, monitoring for errors and completion
-2. **Quantitative verification** -- Verify record counts match SQLite-derived expectations; confirm all foreign keys resolve across collections (VER-01, VER-04)
-3. **Semantic verification** -- Run test semantic searches on `conference_talk_paragraphs`; verify metadata filtering by speaker, year, and session returns correct results (VER-02, VER-03)
+Plans:
+- [ ] 07-01-PLAN.md -- Build verify_pipeline.py with all 4 VER checks (VER-01, VER-02, VER-03, VER-04)
+- [ ] 07-02-PLAN.md -- Run verification, manual semantic spot-check, update ROADMAP (VER-01, VER-02, VER-03, VER-04)
 
-*Plan 1 must complete before Plans 2 and 3. Plans 2 and 3 are independent and can run in parallel.*
+*Plan 01 (Wave 1) must complete before Plan 02 (Wave 2). Plan 02 includes a manual checkpoint for VER-02 semantic review.*
 
 **Acceptance criteria:**
-- [ ] All 7,659 General Conference talks processed without unrecoverable errors
+- [ ] All General Conference talks processed without unrecoverable errors (pipeline run already complete: 5,838 GC talks, 0 failures)
 - [ ] Record counts in all 4 ChromaDB collections match expected totals derived from SQLite source
 - [ ] Semantic search on `conference_talk_paragraphs` returns relevant results for at least 3 test queries
 - [ ] Metadata filtering by speaker, year, and session returns correct, non-empty result sets
@@ -243,4 +243,4 @@ Plans:
 | 4. Test Coverage | 0/3 | Planning complete | - |
 | 5. ChromaDB Loader | 0/3 | Planning complete | - |
 | 6. Pipeline Orchestrator | 0/2 | Planning complete | - |
-| 7. Full Run & Verification | 0/3 | Not started | - |
+| 7. Full Run & Verification | 0/2 | Planning complete | - |
