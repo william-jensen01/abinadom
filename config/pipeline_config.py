@@ -43,7 +43,7 @@ MAX_FOOTNOTES_PER_PARAGRAPH_WARNING = 20
 
 # --- ChromaDB Loader (Phase 6) ---
 CHROMADB_PATH = "data/chromadb"
-CHROMADB_BATCH_SIZE = 5000
+CHROMADB_BATCH_SIZE = 1000
 CHROMADB_COLLECTION_NAMES = {
     "talks": "conference_talks",
     "paragraphs": "conference_talk_paragraphs",

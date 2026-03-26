@@ -10,6 +10,7 @@ requests-cache = "*"
 html5lib = "*"
 chromadb = "*"
 ollama = "*"
+tqdm = "*"
 
 [dev-packages]
 pytest = "*"
