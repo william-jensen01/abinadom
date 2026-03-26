@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to plan
-stopped_at: Completed 05-chromadb-loader 05-03-PLAN.md
-last_updated: "2026-03-26T01:22:27.763Z"
+stopped_at: Completed 06-pipeline-orchestrator 06-02-PLAN.md
+last_updated: "2026-03-26T19:14:12.509Z"
 progress:
   total_phases: 7
-  completed_phases: 5
-  total_plans: 16
-  completed_plans: 16
+  completed_phases: 6
+  total_plans: 18
+  completed_plans: 18
 ---
 
 # Project State
@@ -19,11 +19,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** All LDS content searchable by meaning -- find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** Phase 05 — chromadb-loader
+**Current focus:** Phase 06 — pipeline-orchestrator
 
 ## Current Position
 
-Phase: 6
+Phase: 7
 Plan: Not started
 
 ## Performance Metrics
@@ -60,6 +60,8 @@ Plan: Not started
 | Phase 05-chromadb-loader P01 | 10min | 2 tasks | 8 files |
 | Phase 05-chromadb-loader P02 | 11min | 2 tasks | 4 files |
 | Phase 05-chromadb-loader P03 | 5min | 1 tasks | 2 files |
+| Phase 06 P01 | 6min | 2 tasks | 2 files |
+| Phase 06 P02 | 10min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -95,6 +97,11 @@ Recent decisions affecting current work:
 - [Phase 05-chromadb-loader]: EphemeralClient is a singleton -- fresh_client fixture deletes collections between tests
 - [Phase 05-chromadb-loader]: Installed ollama python package as runtime dep (required by OllamaEmbeddingFunction at instantiation)
 - [Phase 05-chromadb-loader]: Verification report returns dict (not string) for downstream flexibility; missing annotation paragraph_ids always pass FK check per D-07/D-09
+- [Phase 06]: INNER JOIN conference_talk for GC-only talk IDs (~5,838 vs 7,659 total)
+- [Phase 06]: logging.WARNING level so tqdm progress bar is uncluttered by INFO lines
+- [Phase 06]: No include=['ids'] param in ChromaDB skip check (raises ValueError per Research Pitfall 4)
+- [Phase 06]: CHROMADB_BATCH_SIZE set to 1000 (PIPE-04 compliance): reconciled discrepancy from 5000, limits re-processing on interrupt to 1000 talks
+- [Phase 06]: tqdm declared as explicit Pipfile runtime dep (was installed 4.67.3 but undeclared)
 
 ### Pending Todos
 
@@ -114,6 +121,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T23:39:45.252Z
-Stopped at: Completed 05-chromadb-loader 05-03-PLAN.md
+Last session: 2026-03-26T19:06:25.665Z
+Stopped at: Completed 06-pipeline-orchestrator 06-02-PLAN.md
 Resume file: None

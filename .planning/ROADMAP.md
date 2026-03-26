@@ -20,7 +20,7 @@ All 7,659 General Conference talks processed through Phases 1-6 with verified re
 | 3 | 2/3 | In Progress|  |
 | 4 | 0/3 | Planned    |  |
 | 5 | 2/3 | In Progress|  |
-| 6 | Pipeline Orchestrator | Planning Complete | PIPE-01, PIPE-02, PIPE-03, PIPE-04 |
+| 6 | 1/2 | In Progress|  |
 | 7 | Full Run & Verification | Not Started | VER-01, VER-02, VER-03, VER-04 |
 
 ## Phases
@@ -143,10 +143,10 @@ Plans:
 **Goal:** A single orchestrator script runs the full Phases 1-6 pipeline across all talks with resume, skip, and force capabilities.
 **Requirements:** PIPE-01, PIPE-02, PIPE-03, PIPE-04
 **Depends on:** Phase 5
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 06-01-PLAN.md -- Orchestrator core: per-talk streaming loop, Phases 1-6, progress tracking, resume capability (PIPE-01, PIPE-02)
+- [x] 06-01-PLAN.md -- Orchestrator core: per-talk streaming loop, Phases 1-6, progress tracking, resume capability (PIPE-01, PIPE-02)
 - [ ] 06-02-PLAN.md -- Run modes and buffering: skip-if-processed, --force flag, CHROMADB_BATCH_SIZE update to 1000 (PIPE-03, PIPE-04)
 
 *Plan 01 (Wave 1) must complete before Plan 02 (Wave 2).*
