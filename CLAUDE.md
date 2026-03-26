@@ -110,6 +110,7 @@
 - `scripts/process_all.py` — Batch topic and talk processing script (threaded API fetcher)
 - `scripts/process_topics.py` — Topic data fetcher (topics.json → Church API → entries)
 - `scripts/run_audit.py` — Bug audit driver script (runs phases 1-5 per talk_id in config/audit_sample.json)
+- `scripts/run_pipeline.py` — Full pipeline orchestrator (Phases 1-6, per-talk streaming, resume, --force)
 
 ### tests/
 - `tests/test_html_parsing_utils.py`
@@ -119,6 +120,7 @@
 - `tests/test_phase4.py`
 - `tests/test_phase5.py`
 - `tests/test_phase6.py`
+- `tests/test_phase6_orchestrator.py`
 
 ## Process
 

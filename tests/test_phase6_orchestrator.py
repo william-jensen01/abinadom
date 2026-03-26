@@ -280,3 +280,166 @@ def test_final_summary_printed(capsys):
     assert "Processed:" in output
     assert "Skipped" in output
     assert "Failed:" in output
+
+
+# =============================================================================
+# Test: skip mode default (3 talks, 2 already cached)
+# =============================================================================
+
+
+def test_skip_mode_default():
+    """Default mode (no --force): talks already in ChromaDB are skipped; only unprocessed talk is processed."""
+    def get_side_effect(ids):
+        if ids == ["talk_1"]:
+            return {"ids": ["talk_1"]}
+        if ids == ["talk_2"]:
+            return {"ids": []}
+        if ids == ["talk_3"]:
+            return {"ids": ["talk_3"]}
+        return {"ids": []}
+
+    mock_chroma_col = MagicMock()
+    mock_chroma_col.get.side_effect = get_side_effect
+    mock_chroma_client = MagicMock()
+    mock_chroma_client.get_or_create_collection.return_value = mock_chroma_col
+
+    mock_pipeline_result = _make_pipeline_result(talk_id=2)
+    mock_validation = _make_validation(is_valid=True)
+
+    with (
+        patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[1, 2, 3]),
+        patch.object(run_pipeline, "fetch_all_books", return_value={}),
+        patch.object(run_pipeline, "get_chromadb_client", return_value=mock_chroma_client),
+        patch.object(run_pipeline, "get_embedding_function", return_value=None),
+        patch.object(run_pipeline, "process_talk_pipeline", return_value=mock_pipeline_result) as mock_pipeline,
+        patch.object(run_pipeline, "validate_talk", return_value=mock_validation),
+        patch.object(run_pipeline, "load_talk_bundles", return_value={}),
+        patch.object(run_pipeline, "_record_failure"),
+    ):
+        sys.argv = ["run_pipeline.py"]
+        run_pipeline.main()
+
+    # Only talk_id=2 (not in ChromaDB) should be processed; talk_1 and talk_3 skipped
+    assert mock_pipeline.call_count == 1
+    call_talk_id = mock_pipeline.call_args[0][2]
+    assert call_talk_id == 2
+
+
+# =============================================================================
+# Test: --force flag bypasses ChromaDB skip check entirely
+# =============================================================================
+
+
+def test_force_flag_reprocesses():
+    """--force flag causes all talks to be reprocessed; ChromaDB .get() is NOT called."""
+    mock_chroma_col = MagicMock()
+    mock_chroma_client = MagicMock()
+    mock_chroma_client.get_or_create_collection.return_value = mock_chroma_col
+
+    mock_validation = _make_validation(is_valid=True)
+
+    def pipeline_side_effect(content_db_arg, core_db_arg, talk_id, *args, **kwargs):
+        return _make_pipeline_result(talk_id=talk_id)
+
+    with (
+        patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[1, 2]),
+        patch.object(run_pipeline, "fetch_all_books", return_value={}),
+        patch.object(run_pipeline, "get_chromadb_client", return_value=mock_chroma_client),
+        patch.object(run_pipeline, "get_embedding_function", return_value=None),
+        patch.object(run_pipeline, "process_talk_pipeline", side_effect=pipeline_side_effect) as mock_pipeline,
+        patch.object(run_pipeline, "validate_talk", return_value=mock_validation),
+        patch.object(run_pipeline, "load_talk_bundles", return_value={}),
+        patch.object(run_pipeline, "_record_failure"),
+    ):
+        sys.argv = ["run_pipeline.py", "--force"]
+        run_pipeline.main()
+
+    # Both talks processed (force bypasses skip)
+    assert mock_pipeline.call_count == 2
+    # ChromaDB .get() should NOT be called (skip check entirely bypassed in force mode)
+    assert mock_chroma_col.get.call_count == 0
+
+
+# =============================================================================
+# Test: buffer flush at CHROMADB_BATCH_SIZE boundary
+# =============================================================================
+
+
+def test_buffer_flush_at_batch_size():
+    """With CHROMADB_BATCH_SIZE=2 and 3 talks, load_talk_bundles called twice: once at boundary, once final."""
+    mock_chroma_col = _make_chroma_collection(existing_ids=[])
+    mock_chroma_client = MagicMock()
+    mock_chroma_client.get_or_create_collection.return_value = mock_chroma_col
+
+    mock_validation = _make_validation(is_valid=True)
+
+    # Track bundle snapshot sizes at each flush call (before pending_bundles.clear())
+    flush_sizes = []
+
+    def pipeline_side_effect(content_db_arg, core_db_arg, talk_id, *args, **kwargs):
+        return _make_pipeline_result(talk_id=talk_id)
+
+    def load_bundles_side_effect(bundles, *args, **kwargs):
+        # Capture the size before clear() is called
+        flush_sizes.append(len(bundles))
+        return {}
+
+    with (
+        patch.object(run_pipeline, "CHROMADB_BATCH_SIZE", 2),
+        patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[1, 2, 3]),
+        patch.object(run_pipeline, "fetch_all_books", return_value={}),
+        patch.object(run_pipeline, "get_chromadb_client", return_value=mock_chroma_client),
+        patch.object(run_pipeline, "get_embedding_function", return_value=None),
+        patch.object(run_pipeline, "process_talk_pipeline", side_effect=pipeline_side_effect),
+        patch.object(run_pipeline, "validate_talk", return_value=mock_validation),
+        patch.object(run_pipeline, "load_talk_bundles", side_effect=load_bundles_side_effect),
+        patch.object(run_pipeline, "_record_failure"),
+    ):
+        sys.argv = ["run_pipeline.py", "--force"]
+        run_pipeline.main()
+
+    # First flush at boundary (2 talks), second flush for remaining (1 talk)
+    assert len(flush_sizes) == 2, f"Expected 2 flushes, got {len(flush_sizes)}: {flush_sizes}"
+    assert flush_sizes[0] == 2, f"First flush should have 2 bundles, got {flush_sizes[0]}"
+    assert flush_sizes[1] == 1, f"Final flush should have 1 bundle, got {flush_sizes[1]}"
+
+
+# =============================================================================
+# Test: final flush only when total < CHROMADB_BATCH_SIZE
+# =============================================================================
+
+
+def test_final_flush_on_remaining():
+    """With CHROMADB_BATCH_SIZE=100 and 2 talks, load_talk_bundles called once (final flush only)."""
+    mock_chroma_col = _make_chroma_collection(existing_ids=[])
+    mock_chroma_client = MagicMock()
+    mock_chroma_client.get_or_create_collection.return_value = mock_chroma_col
+
+    mock_validation = _make_validation(is_valid=True)
+
+    flush_sizes = []
+
+    def pipeline_side_effect(content_db_arg, core_db_arg, talk_id, *args, **kwargs):
+        return _make_pipeline_result(talk_id=talk_id)
+
+    def load_bundles_side_effect(bundles, *args, **kwargs):
+        flush_sizes.append(len(bundles))
+        return {}
+
+    with (
+        patch.object(run_pipeline, "CHROMADB_BATCH_SIZE", 100),
+        patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[1, 2]),
+        patch.object(run_pipeline, "fetch_all_books", return_value={}),
+        patch.object(run_pipeline, "get_chromadb_client", return_value=mock_chroma_client),
+        patch.object(run_pipeline, "get_embedding_function", return_value=None),
+        patch.object(run_pipeline, "process_talk_pipeline", side_effect=pipeline_side_effect),
+        patch.object(run_pipeline, "validate_talk", return_value=mock_validation),
+        patch.object(run_pipeline, "load_talk_bundles", side_effect=load_bundles_side_effect),
+        patch.object(run_pipeline, "_record_failure"),
+    ):
+        sys.argv = ["run_pipeline.py", "--force"]
+        run_pipeline.main()
+
+    # Only final flush, never hit batch boundary
+    assert len(flush_sizes) == 1, f"Expected 1 flush, got {len(flush_sizes)}: {flush_sizes}"
+    assert flush_sizes[0] == 2, f"Final flush should have 2 bundles, got {flush_sizes[0]}"
