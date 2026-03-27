@@ -32,6 +32,7 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - [x] Full pipeline orchestrator — `scripts/run_pipeline.py`, skip-if-processed default, `--force` override, ChromaDB write buffer (1000 talks/flush), 11 orchestrator tests — Validated in Phase 06: pipeline-orchestrator
 - [x] Full pipeline run over all 5,838 General Conference talks, resumable and idempotent — Validated in Phase 07: full-run-verification
 - [x] Post-run verification: record counts (VER-01), semantic search (VER-02), metadata filters (VER-03), FK integrity (VER-04) — all passed — Validated in Phase 07: full-run-verification
+- [x] Topic metadata enrichment — `TalkMetadata.topics: List[str]`, Phase 1 GROUP_CONCAT subquery, Phase 6 document text and pipe-joined ChromaDB metadata, schema coverage, 12 new tests — Validated in Phase 08: include-topics-in-talk-metadata
 
 ### Out of Scope
 
@@ -69,4 +70,4 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 | Paragraph-level chunking | Preserves natural document structure; typical 200–800 tokens | ✓ Good |
 
 ---
-*Last updated: 2026-03-27 — Phase 07 (full-run-verification) complete — Milestone 1 achieved*
+*Last updated: 2026-03-27 — Phase 08 (include-topics-in-talk-metadata) complete — topic metadata now flows through pipeline*
