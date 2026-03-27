@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A data pipeline and RAG system that transforms the BYU Scripture Citation Index SQLite database into four ChromaDB vector collections optimized for semantic search. Content is exposed via an MCP server to AI clients (e.g., Claude Desktop). The project starts with General Conference talks (7,659 total) and expands to Journal of Discourse, and the standard LDS scripture canon in future milestones.
+A data pipeline and RAG system that transforms the BYU Scripture Citation Index SQLite database into four ChromaDB vector collections optimized for semantic search. Content is exposed via an MCP server to AI clients (e.g., Claude Desktop). The project starts with General Conference talks (5,838 GC-only via INNER JOIN) and expands to Journal of Discourse, and the standard LDS scripture canon in future milestones.
 
 ## Core Value
 
@@ -30,8 +30,8 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - [x] Test coverage: integration tests (5 real talks, all phases), schema validation, Phase 1 edge cases, Phase 5 adversarial inputs — Validated in Phase 04: test-coverage
 - [x] Phase 6: ChromaDB loader — transform validated records into 4 collections, batch insert, verify — Validated in Phase 05: chromadb-loader
 - [x] Full pipeline orchestrator — `scripts/run_pipeline.py`, skip-if-processed default, `--force` override, ChromaDB write buffer (1000 talks/flush), 11 orchestrator tests — Validated in Phase 06: pipeline-orchestrator
-- [ ] Full pipeline run over all 7,659 General Conference talks, resumable and idempotent
-- [ ] Post-run verification: record counts, sample queries, foreign key integrity confirmed
+- [x] Full pipeline run over all 5,838 General Conference talks, resumable and idempotent — Validated in Phase 07: full-run-verification
+- [x] Post-run verification: record counts (VER-01), semantic search (VER-02), metadata filters (VER-03), FK integrity (VER-04) — all passed — Validated in Phase 07: full-run-verification
 
 ### Out of Scope
 
@@ -43,7 +43,7 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 
 ## Context
 
-- **Data source**: BYU Scripture Citation Index SQLite database (~7,659 General Conference talks with raw HTML, metadata, speaker info)
+- **Data source**: BYU Scripture Citation Index SQLite database (5,838 General Conference talks via INNER JOIN conference_talk — GC-only, verified)
 - **Existing pipeline**: Phases 1–5 implemented in `extractors/` with typed dataclasses (`models/`), shared HTML utilities (`extractors/html_parsing_utils.py`), and per-phase tests (`tests/`)
 - **Known state**: Phases 1–5 have known bugs; Phase 6 (ChromaDB loader) does not yet exist
 - **Architecture decisions established**: Layered architecture, configuration-driven schemas, pure functions, typed dataclasses, idempotent design, fail-fast vs fail-safe hybrid (see `docs/PROJECT.md`)
@@ -56,17 +56,17 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - **Pattern consistency**: New phases must follow the patterns established in Phases 1–5 (layered architecture, dataclasses, same logging/error handling strategy)
 - **Database**: Read-only from SQLite; all output goes to ChromaDB only
 - **Idempotency**: Pipeline must be safe to re-run; supports skip-if-processed and force-reprocess modes
-- **Scale**: 7,659 talks × ~20–50 paragraphs each; batch sizes must manage memory
+- **Scale**: 5,838 GC talks × ~35 paragraphs each (202,175 total); batch sizes must manage memory
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| General Conference first | Largest and most structured content type; proves the pipeline before expanding | — Pending |
-| Bug-fix phase before Phase 6 | Broken extractors produce bad data; fix before loading to ChromaDB | — Pending |
-| MCP server as separate milestone | Pipeline correctness must be verified before building search layer on top | — Pending |
-| 4 ChromaDB collections | Talks, paragraphs, citations, footnotes — separate by semantic role | — Pending |
+| General Conference first | Largest and most structured content type; proves the pipeline before expanding | ✓ Complete — 5,838 talks loaded and verified |
+| Bug-fix phase before Phase 6 | Broken extractors produce bad data; fix before loading to ChromaDB | ✓ Good — Phase 3 bugs fixed before load |
+| MCP server as separate milestone | Pipeline correctness must be verified before building search layer on top | ✓ Good — Milestone 1 complete, ready for Milestone 2 |
+| 4 ChromaDB collections | Talks, paragraphs, citations, footnotes — separate by semantic role | ✓ Good — 5,838 talks / 202,175 paras / 67,307 citations / 25,608 footnotes |
 | Paragraph-level chunking | Preserves natural document structure; typical 200–800 tokens | ✓ Good |
 
 ---
-*Last updated: 2026-03-26 — Phase 06 (pipeline-orchestrator) complete*
+*Last updated: 2026-03-27 — Phase 07 (full-run-verification) complete — Milestone 1 achieved*
