@@ -22,6 +22,7 @@ All 5,838 General Conference talks (GC-only via INNER JOIN conference_talk) proc
 | 5 | 2/3 | In Progress|  |
 | 6 | 1/2 | In Progress|  |
 | 7 | 0/2 | Planned    |  |
+| 8 | Topic Metadata | Planning Complete | TOPIC-01, TOPIC-02, TOPIC-03, TOPIC-04, TOPIC-05 |
 
 ## Phases
 
@@ -181,6 +182,26 @@ Plans:
 
 ---
 
+### Phase 8: Topic Metadata
+
+**Goal:** Extend Phase 1 talk metadata extraction to include topic names from talk_topic and conference_topic tables, flowing through to ChromaDB for semantic search and metadata filtering.
+**Requirements:** TOPIC-01, TOPIC-02, TOPIC-03, TOPIC-04, TOPIC-05
+**Depends on:** Phase 7
+**Plans:** 1 plan
+
+Plans:
+- [ ] 08-01-PLAN.md -- Add topics field to TalkMetadata, SQL query, transformation, Phase 6 document text, schema, and tests (TOPIC-01, TOPIC-02, TOPIC-03, TOPIC-04, TOPIC-05)
+
+**Acceptance criteria:**
+- [ ] `TalkMetadata` has `topics: List[str]` field defaulting to `[]`
+- [ ] Phase 1 SQL query fetches topics via GROUP_CONCAT subquery from `talk_topic` + `conference_topic`
+- [ ] Talks with topics produce e.g. `topics=["Atonement", "Faith"]`; talks without produce `topics=[]`
+- [ ] Phase 6 ChromaDB document text includes `Topics: Atonement, Faith` when topics present
+- [ ] ChromaDB metadata includes topics as pipe-joined string (via `_flatten_metadata`)
+- [ ] 10+ regression tests cover topics field behavior
+
+---
+
 ## Deferred
 
 | Item | Target |
@@ -230,10 +251,15 @@ Plans:
 | VER-02 | Phase 7 | Pending |
 | VER-03 | Phase 7 | Pending |
 | VER-04 | Phase 7 | Pending |
+| TOPIC-01 | Phase 8 | Pending |
+| TOPIC-02 | Phase 8 | Pending |
+| TOPIC-03 | Phase 8 | Pending |
+| TOPIC-04 | Phase 8 | Pending |
+| TOPIC-05 | Phase 8 | Pending |
 
 ## Progress
 
-**Execution Order:** Phase 1 > Phase 2 > Phase 3 > Phase 4 > Phase 5 > Phase 6 > Phase 7
+**Execution Order:** Phase 1 > Phase 2 > Phase 3 > Phase 4 > Phase 5 > Phase 6 > Phase 7 > Phase 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|---------------|--------|-----------|
@@ -244,3 +270,4 @@ Plans:
 | 5. ChromaDB Loader | 0/3 | Planning complete | - |
 | 6. Pipeline Orchestrator | 0/2 | Planning complete | - |
 | 7. Full Run & Verification | 0/2 | Planning complete | - |
+| 8. Topic Metadata | 0/1 | Planning complete | - |

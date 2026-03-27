@@ -1,7 +1,7 @@
 # Requirements — BYU Scripture Citation Index RAG System
 # Milestone 1: General Conference Pipeline
 
-*Last updated: 2026-03-19*
+*Last updated: 2026-03-27*
 
 ---
 
@@ -84,6 +84,16 @@ These requirements are satisfied by the current codebase and are preserved as-is
 | VER-03 | Metadata filtering by speaker, year, and session returns correct, non-empty results |
 | VER-04 | All foreign keys (`talk_id`, `paragraph_id`) resolvable across all 4 collections |
 
+### Topic Metadata (TOPIC)
+
+| ID | Requirement |
+|----|-------------|
+| TOPIC-01 | `TalkMetadata` dataclass has `topics: List[str]` field (default `[]`) storing topic names from `conference_topic` table |
+| TOPIC-02 | Phase 1 SQL query includes GROUP_CONCAT subquery joining `talk_topic` and `conference_topic` to fetch pipe-delimited topic names per talk |
+| TOPIC-03 | `transform_db_row_to_metadata()` splits pipe-delimited `topics_str` into `List[str]`; NULL produces empty list |
+| TOPIC-04 | Phase 6 ChromaDB document text includes `Topics: {comma-joined names}` when topics present; `_flatten_metadata` auto-handles topics in metadata as pipe-joined string |
+| TOPIC-05 | `TALK_METADATA_SCHEMA` includes `topics` entry and regression tests cover topics with/without values, document summary, transform splitting, and in-memory DB integration |
+
 ---
 
 ## Out of Scope (v1)
@@ -113,3 +123,4 @@ These requirements are satisfied by the current codebase and are preserved as-is
 | LOAD | 01–06 | Phase 6 ChromaDB loader |
 | PIPE | 01–04 | Pipeline orchestrator |
 | VER | 01–04 | Post-run verification |
+| TOPIC | 01–05 | Topic metadata enrichment |
