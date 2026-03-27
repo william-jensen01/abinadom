@@ -11,6 +11,7 @@ Checks:
   VER-02: Semantic search spot-check (5 queries; manual review)
   VER-03: Metadata filter verification (speaker, year, session, compound)
   VER-04: Foreign key integrity scan (all collections)
+  VER-05: Topics metadata verification (coverage vs SQLite baseline, document text)
 
 Usage:
     pipenv run py scripts/verify_pipeline.py
@@ -628,6 +629,124 @@ def check_fk_integrity(client: Any, ef: Any) -> Dict[str, Any]:
 
 
 # =============================================================================
+# VER-05: Topics metadata verification
+# =============================================================================
+
+
+def check_topics(client: Any, ef: Any) -> Dict[str, Any]:
+    """
+    VER-05: Verify topics metadata flows through to ChromaDB.
+
+    Uses SQLite as the source of truth throughout:
+      - Pulls 50 talk IDs that HAVE topics and 50 that DON'T from SQLite
+      - Looks each set up directly in ChromaDB and verifies the topics field matches
+      - Spot-checks that "Topics:" appears in the document text for a talk with topics
+    Pass threshold: >= 90% correct for each set; document text check must pass.
+    """
+    print("VER-05: Topics metadata ...")
+
+    talks_col = client.get_or_create_collection(
+        name=CHROMADB_COLLECTION_NAMES["talks"],
+        embedding_function=ef,
+    )
+
+    # Pull talk IDs from SQLite — source of truth for which talks have topics
+    has_topic_rows = core_db.select(
+        """SELECT DISTINCT t.ID
+           FROM talk t
+           INNER JOIN conference_talk ct ON ct.TalkID = t.ID
+           INNER JOIN talk_topic tt ON tt.talk_id = t.ID
+           ORDER BY t.ID
+           LIMIT 50"""
+    )
+    no_topic_rows = core_db.select(
+        """SELECT t.ID
+           FROM talk t
+           INNER JOIN conference_talk ct ON ct.TalkID = t.ID
+           WHERE t.ID NOT IN (SELECT DISTINCT talk_id FROM talk_topic)
+           ORDER BY t.ID
+           LIMIT 50"""
+    )
+
+    has_topic_ids = [f"talk_{r['ID']}" for r in has_topic_rows]
+    no_topic_ids = [f"talk_{r['ID']}" for r in no_topic_rows]
+
+    # Cross-reference: look up those exact IDs in ChromaDB
+    chroma_has = talks_col.get(ids=has_topic_ids, include=["metadatas"]) if has_topic_ids else {}
+    chroma_no = talks_col.get(ids=no_topic_ids, include=["metadatas"]) if no_topic_ids else {}
+
+    has_metas = chroma_has.get("metadatas") or []
+    no_metas = chroma_no.get("metadatas") or []
+
+    has_correct = sum(1 for m in has_metas if m and m.get("topics") and str(m["topics"]).strip())
+    no_correct = sum(1 for m in no_metas if not (m and m.get("topics") and str(m["topics"]).strip()))
+
+    has_pass = (has_correct / len(has_metas) >= 0.90) if has_metas else False
+    no_pass = (no_correct / len(no_metas) >= 0.90) if no_metas else True
+    id_check_pass = has_pass and no_pass
+
+    # Document text spot-check: reuse first has-topics ID already fetched above
+    doc_text_ok: Optional[bool] = None
+    doc_talk_id: Optional[int] = None
+    doc_topics_meta: Optional[str] = None
+    if has_topic_rows:
+        doc_talk_id = has_topic_rows[0]["ID"]
+        try:
+            result = talks_col.get(
+                ids=[f"talk_{doc_talk_id}"],
+                include=["documents", "metadatas"],
+            )
+            if result and result.get("documents"):
+                doc = result["documents"][0] or ""
+                meta = ((result.get("metadatas") or [None])[0]) or {}
+                doc_text_ok = "Topics:" in doc
+                doc_topics_meta = str(meta.get("topics", ""))
+        except Exception:
+            doc_text_ok = None
+    doc_pass = doc_text_ok is True
+
+    overall_passed = id_check_pass and doc_pass
+    status = "PASS" if overall_passed else "FAIL"
+
+    print(
+        f"  SQLite says topics → ChromaDB ({len(has_metas)} checked): "
+        f"{has_correct}/{len(has_metas)} have topics {'OK' if has_pass else 'FAIL (< 90%)'}"
+    )
+    print(
+        f"  SQLite says no topics → ChromaDB ({len(no_metas)} checked): "
+        f"{no_correct}/{len(no_metas)} have no topics {'OK' if no_pass else 'FAIL (< 90%)'}"
+    )
+    if doc_talk_id is not None:
+        print(
+            f"  Document text (talk_{doc_talk_id}): metadata='{doc_topics_meta}', "
+            f"'Topics:' in doc={'YES' if doc_text_ok else 'NO'} {'OK' if doc_pass else 'FAIL'}"
+        )
+    else:
+        print("  Document text check: no talks with topics found in SQLite — skipping")
+    print(f"VER-05: Topics metadata ... {status}")
+
+    return {
+        "passed": overall_passed,
+        "sqlite_says_topics": {
+            "checked": len(has_metas),
+            "correct": has_correct,
+            "passed": has_pass,
+        },
+        "sqlite_says_no_topics": {
+            "checked": len(no_metas),
+            "correct": no_correct,
+            "passed": no_pass,
+        },
+        "document_text_check": {
+            "talk_id": doc_talk_id,
+            "topics_in_metadata": doc_topics_meta,
+            "topics_in_document_text": doc_text_ok,
+            "passed": doc_pass,
+        },
+    }
+
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -664,17 +783,20 @@ def main() -> None:
     print()
     ver04_result = check_fk_integrity(client, ef)
     print()
+    ver05_result = check_topics(client, ef)
+    print()
 
-    # Overall pass: VER-01, VER-03, VER-04 are automated; VER-02 is manual review
+    # Overall pass: VER-01, VER-03, VER-04, VER-05 are automated; VER-02 is manual review
     ver01_passed = ver01_result.get("passed", False)
     ver03_passed = ver03_result.get("passed", False)
     ver04_passed = ver04_result.get("passed", False)
-    overall_passed = ver01_passed and ver03_passed and ver04_passed
+    ver05_passed = ver05_result.get("passed", False)
+    overall_passed = ver01_passed and ver03_passed and ver04_passed and ver05_passed
 
-    automated_pass_count = sum([ver01_passed, ver03_passed, ver04_passed])
+    automated_pass_count = sum([ver01_passed, ver03_passed, ver04_passed, ver05_passed])
 
     print("=" * 60)
-    print(f"Overall: {automated_pass_count}/3 automated checks PASS | VER-02: manual review")
+    print(f"Overall: {automated_pass_count}/4 automated checks PASS | VER-02: manual review")
     print("=" * 60)
 
     # Build and write JSON report
@@ -684,6 +806,7 @@ def main() -> None:
         "ver_02": ver02_result,
         "ver_03": ver03_result,
         "ver_04": ver04_result,
+        "ver_05": ver05_result,
         "overall_passed": overall_passed,
     }
 
