@@ -1,273 +1,49 @@
-# Roadmap -- BYU Scripture Citation Index RAG System
-# Milestone 1: General Conference Pipeline
+# Roadmap — BYU Scripture Citation Index RAG System
 
-*Status: In Progress | Started: 2026-03-19*
+## Milestones
 
-## Overview
-
-Milestone 1 delivers an end-to-end pipeline that processes all 5,838 General Conference talks (GC-only via INNER JOIN conference_talk) from SQLite through Phases 1-6 into four ChromaDB vector collections. The ordering is intentional: restructure the database enrichment layer first (it changes how Phase 1 reads data), clean up tech debt so the codebase is navigable, fix bugs on stable code, lock in test coverage, then build the new ChromaDB loader, wrap it in an orchestrator, and verify the full run.
-
-## Milestone Goal
-
-All 5,838 General Conference talks (GC-only via INNER JOIN conference_talk) processed through Phases 1-6 with verified record counts, working semantic search, and full foreign key integrity across all four ChromaDB collections.
-
-## Phase Summary
-
-| Phase | Name | Status | Requirements |
-|-------|------|--------|--------------|
-| 1 | DB Enrichment | Planning Complete | ENRCH-01, ENRCH-02, ENRCH-03, ENRCH-04, ENRCH-05, ENRCH-06 |
-| 2 | 0/2 | Planned    |  |
-| 3 | 2/3 | In Progress|  |
-| 4 | 0/3 | Planned    |  |
-| 5 | 2/3 | In Progress|  |
-| 6 | 1/2 | In Progress|  |
-| 7 | 0/2 | Planned    |  |
-| 8 | 1/1 | Complete   | 2026-03-27 |
+- ✅ **v1.0 General Conference Pipeline** — Phases 1–8 (shipped 2026-03-27)
+- 📋 **v2.0 MCP Server** — Phases TBD (planned)
 
 ## Phases
 
-### Phase 1: DB Enrichment
+<details>
+<summary>✅ v1.0 General Conference Pipeline (Phases 1–8) — SHIPPED 2026-03-27</summary>
 
-**Goal:** Restructure metadata storage so Phase 1 reads enriched fields from a dedicated `talk_metadata` table instead of scattered `talks` columns.
-**Requirements:** ENRCH-01, ENRCH-02, ENRCH-03, ENRCH-04, ENRCH-05, ENRCH-06
-**Depends on:** --
-**Plans:** 5 plans
+- [x] Phase 1: DB Enrichment (5/5 plans) — completed 2026-03-20
+- [x] Phase 2: Code Quality (2/2 plans) — completed 2026-03-21
+- [x] Phase 3: Bug Audit & Fixes (3/3 plans) — completed 2026-03-22
+- [x] Phase 4: Test Coverage (3/3 plans) — completed 2026-03-24
+- [x] Phase 5: ChromaDB Loader (3/3 plans) — completed 2026-03-25
+- [x] Phase 6: Pipeline Orchestrator (2/2 plans) — completed 2026-03-26
+- [x] Phase 7: Full Run & Verification (2/2 plans) — completed 2026-03-27
+- [x] Phase 8: Topic Metadata (1/1 plan) — completed 2026-03-27
 
-Plans:
-- [ ] 01-00-PLAN.md -- Wave 0: create test stubs for enrichment requirements (ENRCH-01, ENRCH-02, ENRCH-04, ENRCH-05, ENRCH-06)
-- [ ] 01-01-PLAN.md -- Create talk_metadata table DDL and migrate backfill scripts to write there (ENRCH-01, ENRCH-02, ENRCH-06)
-- [ ] 01-02-PLAN.md -- Build and run Church API preview fetcher to populate talk_previews.json (ENRCH-03)
-- [ ] 01-03-PLAN.md -- Run backfills to populate talk_metadata, update Phase 1 extractor with LEFT JOIN (ENRCH-04, ENRCH-05)
-- [ ] 01-04-PLAN.md -- Gap closure: implement Wave 0 test stubs for DDL and backfill validation (ENRCH-01, ENRCH-02)
+Full details: `.planning/milestones/v1.0-ROADMAP.md`
 
-**Acceptance criteria:**
-- [ ] `talk_metadata` table exists with columns `speaker_role_id`, `uri_l`, `uri_gc`, `kicker`, `talk_preview`, `data_aid` and has one row per GC talk
-- [ ] No backfill script in `db/one-off-migration/` writes to the `talks` table directly -- all target `talk_metadata`
-- [ ] `talk_previews.json` contains preview text for all available GC talks from the Church API
-- [ ] Phase 1 extractor output includes enriched fields (`speaker_role_id`, `kicker`, `talk_preview`) when present in `talk_metadata`
-- [ ] `talk_topic` and `conference_topic` tables are untouched
+</details>
 
----
-
-### Phase 2: Code Quality
-
-**Goal:** Clean up tech debt so the codebase is consistent, configurable, and navigable before hunting bugs.
-**Requirements:** QUAL-01, QUAL-02, QUAL-03, QUAL-07, QUAL-08, QUAL-09
-**Depends on:** Phase 1
-**Plans:** 0/2 plans executed
-
-Plans:
-- [ ] 02-01-PLAN.md -- Verify citation refactor, centralize config, standardize logging (QUAL-01, QUAL-02, QUAL-03)
-- [ ] 02-02-PLAN.md -- Delete duplicate cache manager, relocate root scripts, verify no deprecated model fields (QUAL-07, QUAL-08, QUAL-09)
-
-*Plans 1 and 2 are independent of each other and can run in parallel (Wave 1).*
-
-**Acceptance criteria:**
-- [ ] Phase 3 extractor produces correct citation positions when the same scripture reference appears multiple times in one paragraph
-- [ ] `config/pipeline_config.py` exists and all phases read parser choice, context window size, batch sizes, and regex patterns from it -- no hardcoded magic values in extractor files
-- [ ] Logging uses consistent level conventions (documented) across Phases 1-5
-- [ ] Exactly one canonical cache manager exists; the other is deleted or archived with a note
-- [ ] Root-level scripts (`UPDATE.py`, `process_all.py`, `process_topics.py`, `run_phase2_tests.py`) are each either moved to `scripts/` or documented as active entry points
-- [ ] Deprecated Phase 5 model fields (`is_opening`, `is_scripture`, etc.) removed from `models/validation_report.py` and all references updated
-
----
-
-### Phase 3: Bug Audit & Fixes
-
-**Goal:** All known and discovered bugs in Phases 1-5 are identified, fixed at root cause, and covered by regression tests.
-**Requirements:** BUGS-01, BUGS-02, BUGS-03
-**Depends on:** Phase 2
-**Plans:** 2/3 plans executed
-
-Plans:
-- [x] 03-01-PLAN.md -- Fix 7 known failing tests, create bug catalogue and audit infrastructure (BUGS-01, BUGS-02)
-- [x] 03-02-PLAN.md -- Run curated ~20-talk audit, catalogue and fix all discovered bugs (BUGS-01, BUGS-02)
-- [ ] 03-03-PLAN.md -- Add regression tests for every fixed bug including Phase 4 existing fixes (BUGS-03)
-
-*Plan 01 (Wave 1) must complete before Plan 02 (Wave 2). Plan 03 (Wave 3) depends on Plan 02.*
-
-**Acceptance criteria:**
-- [ ] Bug catalogue exists with every identified issue, root cause, and fix applied
-- [ ] All identified bugs are fixed -- none papered over with workarounds
-- [ ] Every fixed bug has at least one regression test that would fail if the fix were reverted
-- [ ] Existing Phase 4 bug fixes have regression test coverage
-
----
-
-### Phase 4: Test Coverage
-
-**Goal:** Integration and edge-case tests prove that phases compose correctly and handle boundary conditions, including adversarial inputs.
-**Requirements:** QUAL-04, QUAL-05, QUAL-06, QUAL-10
-**Depends on:** Phase 3
-**Plans:** 0/3 plans executed
-
-Plans:
-- [ ] 04-01-PLAN.md -- End-to-end integration test: 5 real talks through Phases 1-5 with data contract assertions (QUAL-04)
-- [ ] 04-02-PLAN.md -- Phase 1 edge cases and schema validation: in-memory SQLite fixtures + db/__init__.py validation (QUAL-05, QUAL-06)
-- [ ] 04-03-PLAN.md -- Phase 5 adversarial test cases: malformed inputs, boundary conditions, unexpected data shapes (QUAL-10)
-
-*All three plans are independent and can run in parallel (Wave 1).*
-
-**Acceptance criteria:**
-- [ ] `tests/test_pipeline_integration.py` passes: 3-5 real talks run through all phases with data contract assertions between each phase boundary
-- [ ] Phase 1 edge case tests cover missing speaker, unusual session types, and talks with no URL
-- [ ] Pipeline startup validates SQLite schema matches expected structure and fails fast with a clear error if mismatched
-- [ ] Phase 5 has adversarial test cases covering malformed inputs, boundary conditions, and unexpected data shapes
-
----
-
-### Phase 5: ChromaDB Loader
-
-**Goal:** A new Phase 6 extractor transforms validated pipeline output into four ChromaDB collections with batch insertion and post-load verification.
-**Requirements:** LOAD-01, LOAD-02, LOAD-03, LOAD-04, LOAD-05, LOAD-06
-**Depends on:** Phase 4
-**Plans:** 2/3 plans executed
-
-Plans:
-- [x] 05-01-PLAN.md -- Install chromadb, fix source_type gap, build transformation functions for all 4 collections (LOAD-01, LOAD-02, LOAD-03)
-- [x] 05-02-PLAN.md -- Implement dependency-ordered batch insertion with progress logging (LOAD-04, LOAD-05)
-- [ ] 05-03-PLAN.md -- Generate post-insertion verification report with counts, document retrieval checks, and FK checks (LOAD-06)
-
-*Plan 01 (Wave 1) must complete before Plan 02 (Wave 2). Plan 03 (Wave 3) depends on Plan 02.*
-
-**Acceptance criteria:**
-- [ ] Phase 6 loader produces correct `documents`, `metadatas`, `ids` for all 4 ChromaDB collections from Phase 5 output
-- [ ] Annotation paragraphs are excluded from `conference_talk_paragraphs`; their text appears as pipe-joined metadata in `conference_talks`
-- [ ] Citations from annotation paragraphs still appear normally in `conference_talk_citations`
-- [ ] Collections are inserted in dependency order: talks first, then paragraphs, then citations and footnotes
-- [ ] Post-insertion verification report shows record counts, sample document retrieval results, and foreign key spot-check results
-
----
-
-### Phase 6: Pipeline Orchestrator
-
-**Goal:** A single orchestrator script runs the full Phases 1-6 pipeline across all talks with resume, skip, and force capabilities.
-**Requirements:** PIPE-01, PIPE-02, PIPE-03, PIPE-04
-**Depends on:** Phase 5
-**Plans:** 1/2 plans executed
-
-Plans:
-- [x] 06-01-PLAN.md -- Orchestrator core: per-talk streaming loop, Phases 1-6, progress tracking, resume capability (PIPE-01, PIPE-02)
-- [ ] 06-02-PLAN.md -- Run modes and buffering: skip-if-processed, --force flag, CHROMADB_BATCH_SIZE update to 1000 (PIPE-03, PIPE-04)
-
-*Plan 01 (Wave 1) must complete before Plan 02 (Wave 2).*
-
-**Acceptance criteria:**
-- [ ] Running the orchestrator processes talks through Phases 1-6 in a per-talk streaming loop
-- [ ] An interrupted run resumes from the last successfully processed `talk_id` without reprocessing completed talks
-- [ ] Default mode skips already-processed talks; `--force` flag reprocesses them
-- [ ] ChromaDB write buffer size is configurable with a default of 500-1000 talks per flush
-
----
-
-### Phase 7: Full Run & Verification
-
-**Goal:** All General Conference talks are processed and the resulting ChromaDB collections pass quantitative and semantic verification.
-**Requirements:** VER-01, VER-02, VER-03, VER-04
-**Depends on:** Phase 6
-**Plans:** 2 plans
-
-Plans:
-- [x] 07-01-PLAN.md -- Build verify_pipeline.py with all 4 VER checks (VER-01, VER-02, VER-03, VER-04)
-- [x] 07-02-PLAN.md -- Run verification, manual semantic spot-check, update ROADMAP (VER-01, VER-02, VER-03, VER-04)
-
-*Plan 01 (Wave 1) must complete before Plan 02 (Wave 2). Plan 02 includes a manual checkpoint for VER-02 semantic review.*
-
-**Acceptance criteria:**
-- [ ] All General Conference talks processed without unrecoverable errors (pipeline run already complete: 5,838 GC talks, 0 failures)
-- [ ] Record counts in all 4 ChromaDB collections match expected totals derived from SQLite source
-- [ ] Semantic search on `conference_talk_paragraphs` returns relevant results for at least 3 test queries
-- [ ] Metadata filtering by speaker, year, and session returns correct, non-empty result sets
-- [ ] All `talk_id` and `paragraph_id` foreign keys resolve across all 4 collections
-
----
-
-### Phase 8: Topic Metadata
-
-**Goal:** Extend Phase 1 talk metadata extraction to include topic names from talk_topic and conference_topic tables, flowing through to ChromaDB for semantic search and metadata filtering.
-**Requirements:** TOPIC-01, TOPIC-02, TOPIC-03, TOPIC-04, TOPIC-05
-**Depends on:** Phase 7
-**Plans:** 1/1 plans complete
-
-Plans:
-- [x] 08-01-PLAN.md -- Add topics field to TalkMetadata, SQL query, transformation, Phase 6 document text, schema, and tests (TOPIC-01, TOPIC-02, TOPIC-03, TOPIC-04, TOPIC-05)
-
-**Acceptance criteria:**
-- [ ] `TalkMetadata` has `topics: List[str]` field defaulting to `[]`
-- [ ] Phase 1 SQL query fetches topics via GROUP_CONCAT subquery from `talk_topic` + `conference_topic`
-- [ ] Talks with topics produce e.g. `topics=["Atonement", "Faith"]`; talks without produce `topics=[]`
-- [ ] Phase 6 ChromaDB document text includes `Topics: Atonement, Faith` when topics present
-- [ ] ChromaDB metadata includes topics as pipe-joined string (via `_flatten_metadata`)
-- [ ] 10+ regression tests cover topics field behavior
-
----
-
-## Deferred
+## Deferred to Next Milestones
 
 | Item | Target |
 |------|--------|
 | MCP server with semantic search | Milestone 2 |
-| ChromaDB metadata noise stripping (`to_chromadb_format()`) | Milestone 2 |
+| ChromaDB metadata noise stripping (`to_chromadb_format()`) | Milestone 2 (before MCP) |
 | Journal of Discourse content | Milestone 3 |
 | Scriptures (OT, NT, BOM, D&C, POGP) | Milestone 4+ |
 | Performance optimizations (batched DB lookups, streaming Phase 2) | When needed |
 | Web scraping | Never |
 | Multi-user / hosted deployment | Never |
 
-## Traceability
-
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| ENRCH-01 | Phase 1 | Pending |
-| ENRCH-02 | Phase 1 | Pending |
-| ENRCH-03 | Phase 1 | Pending |
-| ENRCH-04 | Phase 1 | Pending |
-| ENRCH-05 | Phase 1 | Pending |
-| ENRCH-06 | Phase 1 | Pending |
-| QUAL-01 | Phase 2 | Pending |
-| QUAL-02 | Phase 2 | Pending |
-| QUAL-03 | Phase 2 | Pending |
-| QUAL-07 | Phase 2 | Pending |
-| QUAL-08 | Phase 2 | Pending |
-| QUAL-09 | Phase 2 | Pending |
-| BUGS-01 | Phase 3 | Pending |
-| BUGS-02 | Phase 3 | Pending |
-| BUGS-03 | Phase 3 | Pending |
-| QUAL-04 | Phase 4 | Pending |
-| QUAL-05 | Phase 4 | Pending |
-| QUAL-06 | Phase 4 | Pending |
-| QUAL-10 | Phase 4 | Pending |
-| LOAD-01 | Phase 5 | Pending |
-| LOAD-02 | Phase 5 | Pending |
-| LOAD-03 | Phase 5 | Pending |
-| LOAD-04 | Phase 5 | Pending |
-| LOAD-05 | Phase 5 | Pending |
-| LOAD-06 | Phase 5 | Pending |
-| PIPE-01 | Phase 6 | Pending |
-| PIPE-02 | Phase 6 | Pending |
-| PIPE-03 | Phase 6 | Pending |
-| PIPE-04 | Phase 6 | Pending |
-| VER-01 | Phase 7 | Pending |
-| VER-02 | Phase 7 | Pending |
-| VER-03 | Phase 7 | Pending |
-| VER-04 | Phase 7 | Pending |
-| TOPIC-01 | Phase 8 | Pending |
-| TOPIC-02 | Phase 8 | Pending |
-| TOPIC-03 | Phase 8 | Pending |
-| TOPIC-04 | Phase 8 | Pending |
-| TOPIC-05 | Phase 8 | Pending |
-
 ## Progress
 
-**Execution Order:** Phase 1 > Phase 2 > Phase 3 > Phase 4 > Phase 5 > Phase 6 > Phase 7 > Phase 8
-
-| Phase | Plans Complete | Status | Completed |
-|-------|---------------|--------|-----------|
-| 1. DB Enrichment | 0/5 | Planning complete | - |
-| 2. Code Quality | 0/2 | Planning complete | - |
-| 3. Bug Audit & Fixes | 1/3 | In progress | 03-01 complete |
-| 4. Test Coverage | 0/3 | Planning complete | - |
-| 5. ChromaDB Loader | 0/3 | Planning complete | - |
-| 6. Pipeline Orchestrator | 0/2 | Planning complete | - |
-| 7. Full Run & Verification | 0/2 | Planning complete | - |
-| 8. Topic Metadata | 0/1 | Planning complete | - |
+| Phase | Milestone | Plans Complete | Status   | Completed  |
+|-------|-----------|---------------|----------|------------|
+| 1. DB Enrichment | v1.0 | 5/5 | Complete | 2026-03-20 |
+| 2. Code Quality | v1.0 | 2/2 | Complete | 2026-03-21 |
+| 3. Bug Audit & Fixes | v1.0 | 3/3 | Complete | 2026-03-22 |
+| 4. Test Coverage | v1.0 | 3/3 | Complete | 2026-03-24 |
+| 5. ChromaDB Loader | v1.0 | 3/3 | Complete | 2026-03-25 |
+| 6. Pipeline Orchestrator | v1.0 | 2/2 | Complete | 2026-03-26 |
+| 7. Full Run & Verification | v1.0 | 2/2 | Complete | 2026-03-27 |
+| 8. Topic Metadata | v1.0 | 1/1 | Complete | 2026-03-27 |

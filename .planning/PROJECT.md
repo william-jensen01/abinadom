@@ -12,27 +12,28 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 
 ### Validated
 
-<!-- Implemented in Phases 1–5 extractors — existing, brownfield code. -->
+<!-- v1.0 General Conference Pipeline — shipped 2026-03-27 -->
 
-- ✓ Talk metadata extraction (speaker, title, conference, session, URL) — Phase 1
-- ✓ Paragraph segmentation with position tracking — Phase 2
-- ✓ Citation extraction and parsing (book, chapter, verses, context window) — Phase 3
-- ✓ Footnote extraction and parsing (reference type, context window) — Phase 4
-- ✓ Enrichment, cross-reference linking, and integrity validation — Phase 5
+- ✓ Talk metadata extraction (speaker, title, conference, session, URL) — Phase 1 (brownfield)
+- ✓ Paragraph segmentation with position tracking — Phase 2 (brownfield)
+- ✓ Citation extraction and parsing (book, chapter, verses, context window) — Phase 3 (brownfield)
+- ✓ Footnote extraction and parsing (reference type, context window) — Phase 4 (brownfield)
+- ✓ Enrichment, cross-reference linking, and integrity validation — Phase 5 (brownfield)
+- ✓ DB Enrichment layer — `talk_metadata` table, backfill scripts, Phase 1 LEFT JOIN, preview cache (4,006 entries) — v1.0
+- ✓ Code quality — `config/pipeline_config.py` centralized constants, logging standardized, codebase clutter removed — v1.0
+- ✓ Phase 1–5 extractors: all 15 known bugs diagnosed, fixed at root cause, regression tests added — v1.0
+- ✓ Test coverage — integration tests (5 talks, all phases), schema validation gate, Phase 1 edge cases, Phase 5 adversarial inputs — v1.0
+- ✓ Phase 6 ChromaDB loader — transform validated records into 4 collections, annotation handling, batch insert, verify — v1.0
+- ✓ Full pipeline orchestrator — `scripts/run_pipeline.py`, skip-if-processed, `--force`, 1000-talk write buffer — v1.0
+- ✓ Full pipeline run — 5,838 GC talks processed, resumable, idempotent — v1.0
+- ✓ Post-run verification — record counts, semantic search, metadata filters, FK integrity — all passed — v1.0
+- ✓ Topic metadata enrichment — `TalkMetadata.topics: List[str]`, GROUP_CONCAT subquery, Phase 6 doc text, ChromaDB metadata — v1.0
 
 ### Active
 
-<!-- Milestone 1: Complete General Conference pipeline end-to-end -->
+<!-- Milestone 2: MCP Server — planning not yet started -->
 
-- [x] DB Enrichment layer — `talk_metadata` table, backfill scripts, Phase 1 LEFT JOIN, preview cache (4,006 entries) — Validated in Phase 01: db-enrichment
-- [x] Code quality — `config/pipeline_config.py` centralized constants, logging standardized (no `basicConfig` in extractors), codebase clutter removed (duplicate cache manager, superseded test runner, scripts relocated to `scripts/`) — Validated in Phase 02: code-quality
-- [x] Phase 1–5 extractors: all known bugs diagnosed and fixed — Validated in Phase 03: bug-audit-fixes
-- [x] Test coverage: integration tests (5 real talks, all phases), schema validation, Phase 1 edge cases, Phase 5 adversarial inputs — Validated in Phase 04: test-coverage
-- [x] Phase 6: ChromaDB loader — transform validated records into 4 collections, batch insert, verify — Validated in Phase 05: chromadb-loader
-- [x] Full pipeline orchestrator — `scripts/run_pipeline.py`, skip-if-processed default, `--force` override, ChromaDB write buffer (1000 talks/flush), 11 orchestrator tests — Validated in Phase 06: pipeline-orchestrator
-- [x] Full pipeline run over all 5,838 General Conference talks, resumable and idempotent — Validated in Phase 07: full-run-verification
-- [x] Post-run verification: record counts (VER-01), semantic search (VER-02), metadata filters (VER-03), FK integrity (VER-04) — all passed — Validated in Phase 07: full-run-verification
-- [x] Topic metadata enrichment — `TalkMetadata.topics: List[str]`, Phase 1 GROUP_CONCAT subquery, Phase 6 document text and pipe-joined ChromaDB metadata, schema coverage, 12 new tests — Validated in Phase 08: include-topics-in-talk-metadata
+(Requirements TBD — run `/gsd:new-milestone` to define Milestone 2 scope)
 
 ### Out of Scope
 
@@ -45,11 +46,11 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 ## Context
 
 - **Data source**: BYU Scripture Citation Index SQLite database (5,838 General Conference talks via INNER JOIN conference_talk — GC-only, verified)
-- **Existing pipeline**: Phases 1–5 implemented in `extractors/` with typed dataclasses (`models/`), shared HTML utilities (`extractors/html_parsing_utils.py`), and per-phase tests (`tests/`)
-- **Known state**: Phases 1–5 have known bugs; Phase 6 (ChromaDB loader) does not yet exist
-- **Architecture decisions established**: Layered architecture, configuration-driven schemas, pure functions, typed dataclasses, idempotent design, fail-fast vs fail-safe hybrid (see `docs/PROJECT.md`)
-- **Processing model**: Per-talk streaming loop — Phases 1–5 run sequentially per talk; Phase 6 buffers and batch-inserts across talks
-- **ID strategy**: Use existing SQLite primary keys (`talk_8820`, `para_156789`, etc.) for bidirectional lookups
+- **Current state (v1.0)**: Full 8-phase pipeline shipped — Phases 1–6 extractors bug-free, tested, and loading to ChromaDB; `scripts/run_pipeline.py` orchestrates all 5,838 talks; ChromaDB holds 5,838 talks / 202,175 paragraphs / 67,307 citations / 25,608 footnotes
+- **Architecture**: Layered, configuration-driven (`config/pipeline_config.py`), typed dataclasses, pure functions, idempotent; fail-fast (schema validation) + fail-safe (FK spot-check) hybrid
+- **Processing model**: Per-talk streaming loop — Phases 1–6 run sequentially per talk; ChromaDB write buffer flushes every 1,000 talks
+- **ID strategy**: Existing SQLite primary keys (`talk_8820`, `para_156789`, etc.) for bidirectional lookups
+- **Next milestone**: MCP server exposing ChromaDB semantic search to AI clients (Claude Desktop); metadata noise stripping (`to_chromadb_format()`) before MCP build
 
 ## Constraints
 
@@ -70,4 +71,4 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 | Paragraph-level chunking | Preserves natural document structure; typical 200–800 tokens | ✓ Good |
 
 ---
-*Last updated: 2026-03-27 — Phase 08 (include-topics-in-talk-metadata) complete — topic metadata now flows through pipeline*
+*Last updated: 2026-03-27 after v1.0 milestone — General Conference Pipeline complete*
