@@ -5,7 +5,7 @@ Provides type-safe representation of talk metadata with validation.
 """
 
 from dataclasses import dataclass, field, asdict
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 import sys
 from pathlib import Path
@@ -76,6 +76,7 @@ class TalkMetadata:
     # Enriched metadata (from talk_metadata table)
     kicker: Optional[str] = None
     talk_preview: Optional[str] = None
+    topics: List[str] = field(default_factory=list)
 
     start_page_num: Optional[int] = None
     end_page_num: Optional[int] = None
@@ -184,6 +185,9 @@ class TalkMetadata:
         if self.talk_preview:
             parts.append(f"Preview: {self.talk_preview}")
 
+        if self.topics:
+            parts.append(f"Topics: {', '.join(self.topics)}")
+
         if self.talk_date:
             parts.append(f"Date: {self.talk_date}")
 
@@ -258,6 +262,7 @@ def create_talk_metadata_from_db_row(row: Dict[str, Any]) -> TalkMetadata:
         # Enriched metadata
         kicker=row.get("kicker"),
         talk_preview=row.get("talk_preview"),
+        topics=row.get("topics", []),
         start_page_num=row.get("start_page_num"),
         end_page_num=row.get("end_page_num"),
         # Extraction metadata (auto-populated)

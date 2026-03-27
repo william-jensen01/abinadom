@@ -96,7 +96,13 @@ def build_talk_metadata_query(
             -- Talk-Session linking (optional)
             ct.Sequence as talk_sequence,
             ct.StartPageNum as start_page_num,
-            ct.EndPageNum as end_page_num
+            ct.EndPageNum as end_page_num,
+
+            -- Topic names (pipe-delimited via GROUP_CONCAT)
+            (SELECT GROUP_CONCAT(ct2.name, '|')
+             FROM talk_topic tt
+             JOIN conference_topic ct2 ON tt.topic_id = ct2.id
+             WHERE tt.talk_id = t.ID) as topics_str
 
         FROM talk t
 
@@ -274,6 +280,8 @@ def transform_db_row_to_metadata(row: Dict[str, Any]) -> Dict[str, Any]:
         "talk_preview": row.get("talk_preview"),
         "start_page_num": row.get("start_page_num"),
         "end_page_num": row.get("end_page_num"),
+        # Topics from GROUP_CONCAT subquery (pipe-delimited or NULL)
+        "topics": [t.strip() for t in row.get("topics_str", "").split("|") if t.strip()] if row.get("topics_str") else [],
     }
 
     return metadata

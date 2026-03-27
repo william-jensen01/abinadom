@@ -665,6 +665,12 @@ def _build_in_memory_db(
         talk_id INT PRIMARY KEY, speaker_role_id INT, uri_l TEXT, uri_gc TEXT,
         kicker TEXT, talk_preview TEXT, data_aid TEXT
     )""")
+    conn.execute("""CREATE TABLE conference_topic (
+        id INT PRIMARY KEY, name TEXT
+    )""")
+    conn.execute("""CREATE TABLE talk_topic (
+        talk_id INT, topic_id INT
+    )""")
     for r in talk_rows:
         conn.execute("INSERT INTO talk VALUES (?,?,?,?,?,?,?,?,?,?,?)", r)
     for r in speaker_rows:

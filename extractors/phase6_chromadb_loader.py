@@ -111,6 +111,9 @@ def prepare_talk_record(
     else:
         document = metadata.title
 
+    if metadata.topics:
+        document += f"\nTopics: {', '.join(metadata.topics)}"
+
     # Build metadata from all dataclass fields
     raw_meta = asdict(metadata)
     flat_meta = _flatten_metadata(raw_meta)

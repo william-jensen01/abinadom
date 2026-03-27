@@ -187,6 +187,12 @@ TALK_METADATA_SCHEMA: Dict[str, Dict[str, Any]] = {
         "default": None,
         "description": "Talk preview/summary text",
     },
+    "topics": {
+        "required": False,
+        "type": list,
+        "default": [],
+        "description": "List of topic names from conference_topic table",
+    },
     # Page numbers (for print editions)
     "start_page_num": {
         "required": False,
