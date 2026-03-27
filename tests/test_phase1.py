@@ -624,6 +624,124 @@ class TestTopicTablesUnchanged(unittest.TestCase):
                          f"Expected 16162, got {self.talk_topic_count}")
 
 
+class TestTopicsField(unittest.TestCase):
+    """Tests for topics field on TalkMetadata (Phase 8)."""
+
+    def _base_data(self) -> Dict[str, Any]:
+        return {
+            "talk_id": 1,
+            "speaker_id": 100,
+            "conference_id": 50,
+            "title": "Test Talk",
+            "speaker_name": "John Doe",
+            "conference_year": 2023,
+            "conference_month": "April",
+            "conference_description": "2023 Annual General Conference",
+            "talk_date": "2023-04-01",
+        }
+
+    def test_topics_field_with_values(self):
+        """TalkMetadata should store topics as List[str]."""
+        data = self._base_data()
+        data["topics"] = ["Atonement", "Faith", "Prayer"]
+        metadata = create_talk_metadata_from_db_row(data)
+        self.assertEqual(metadata.topics, ["Atonement", "Faith", "Prayer"])
+
+    def test_topics_field_defaults_empty(self):
+        """TalkMetadata topics should default to [] when not provided."""
+        data = self._base_data()
+        metadata = create_talk_metadata_from_db_row(data)
+        self.assertEqual(metadata.topics, [])
+
+    def test_topics_in_document_summary(self):
+        """Document summary should include 'Topics: ...' when topics present."""
+        data = self._base_data()
+        data["topics"] = ["Atonement", "Faith"]
+        metadata = create_talk_metadata_from_db_row(data)
+        summary = metadata._create_document_summary()
+        self.assertIn("Topics: Atonement, Faith", summary)
+
+    def test_topics_not_in_summary_when_empty(self):
+        """Document summary should NOT include 'Topics:' when topics is empty."""
+        data = self._base_data()
+        metadata = create_talk_metadata_from_db_row(data)
+        summary = metadata._create_document_summary()
+        self.assertNotIn("Topics:", summary)
+
+    def test_transform_splits_topics_str(self):
+        """transform_db_row_to_metadata should split pipe-delimited topics_str."""
+        row = {
+            "talk_id": 1, "title": "Test", "talk_date": "2023-04-01",
+            "corpus": "E", "speaker_id": 100,
+            "speaker_given_names": "John", "speaker_last_names": "Doe",
+            "conference_id": 50, "conference_description": "2023 Annual",
+            "conference_year": 2023, "conference_annual": "A",
+            "topics_str": "Atonement|Faith|Prayer",
+        }
+        result = transform_db_row_to_metadata(row)
+        self.assertEqual(result["topics"], ["Atonement", "Faith", "Prayer"])
+
+    def test_transform_null_topics_str(self):
+        """transform_db_row_to_metadata with no topics_str produces []."""
+        row = {
+            "talk_id": 1, "title": "Test", "talk_date": "2023-04-01",
+            "corpus": "E", "speaker_id": 100,
+            "speaker_given_names": "John", "speaker_last_names": "Doe",
+            "conference_id": 50, "conference_description": "2023 Annual",
+            "conference_year": 2023, "conference_annual": "A",
+        }
+        result = transform_db_row_to_metadata(row)
+        self.assertEqual(result["topics"], [])
+
+    def test_query_has_group_concat_subquery(self):
+        """Phase 1 query should contain GROUP_CONCAT subquery for topics."""
+        from extractors.phase1_talk_metadata import build_talk_metadata_query
+        query, _ = build_talk_metadata_query()
+        self.assertIn("GROUP_CONCAT", query)
+        self.assertIn("topics_str", query)
+        self.assertIn("talk_topic", query)
+        self.assertIn("conference_topic", query)
+
+    def test_schema_includes_topics(self):
+        """TALK_METADATA_SCHEMA should have a topics entry."""
+        self.assertIn("topics", TALK_METADATA_SCHEMA)
+        self.assertEqual(TALK_METADATA_SCHEMA["topics"]["type"], list)
+        self.assertFalse(TALK_METADATA_SCHEMA["topics"]["required"])
+
+    def test_schema_validates_with_topics(self):
+        """Schema validation should pass for data including topics."""
+        data = self._base_data()
+        data["topics"] = ["Atonement"]
+        data["extraction_timestamp"] = datetime.now().isoformat()
+        data["extraction_version"] = "1.0.0"
+        is_valid, errors = validate_schema(data, TALK_METADATA_SCHEMA)
+        self.assertTrue(is_valid, f"Expected valid, got errors: {errors}")
+
+    def test_topics_flow_through_in_memory_db(self):
+        """Topics from talk_topic + conference_topic should appear in extracted metadata."""
+        conn = _build_in_memory_db(
+            talk_rows=[(1, 'G', 'http://example.com', 'Test Talk', '2020-04-05', 1, None, None, None, None, None)],
+            speaker_rows=[(1, 'John', 'Doe', 'JD', '', 'Doe, John')],
+            conference_rows=[(1, 'April 2020', 'A20', 2020, 1, '2020-04-01')],
+            session_rows=[(1, 'Saturday Morning', 'SM', '2020-04-04', 1, 1)],
+            conf_talk_rows=[(1, 1, 1, 5, 1)],
+        )
+        # Insert topic data into the tables created by _build_in_memory_db
+        conn.execute("INSERT INTO conference_topic VALUES (1, 'Atonement')")
+        conn.execute("INSERT INTO conference_topic VALUES (2, 'Faith')")
+        conn.execute("INSERT INTO talk_topic VALUES (1, 1)")
+        conn.execute("INSERT INTO talk_topic VALUES (1, 2)")
+        conn.commit()
+
+        db = InMemoryDatabase(conn)
+        from extractors.phase1_talk_metadata import fetch_talk_by_id, extract_talk_metadata
+        result = fetch_talk_by_id(db, 1)
+        self.assertIsNotNone(result)
+        metadata = extract_talk_metadata(result)
+        self.assertEqual(sorted(metadata.topics), ["Atonement", "Faith"])
+        conn.close()
+
+
 def _build_in_memory_db(
     talk_rows: List[Tuple],
     speaker_rows: List[Tuple],
