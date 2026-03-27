@@ -1,0 +1,52 @@
+3130        p .quote, div .closingBlockContainer
+744         p .quote
+3158        div .newAuthor
+1800        blockquote .poem, p .credit
+1618        i (no class)
+3818        div .address
+7330        ol .number
+1313        blockquote (no class)
+46          blockquote (no class)
+2719        h2 (no class)
+2720        h2 (no class)
+8159        img (no class)
+8184        img (no class)
+5263        div .heading
+5264        div .heading
+5265        div .heading
+5266        div .heading
+7625        div .heading
+7889        div .annotation
+8092        div .annotation
+8222        div .annotation
+8316        ol .decimal
+8593        ol .decimal
+8790        ol .decimal
+7999        div .poetry
+8324        div .poetry
+8820        div .poetry
+3083        p .preamble
+6080        p .preamble
+7864        p .preamble
+1382        _text (no class)
+1753        _text (no class)
+6137        _text (no class)
+7996        div .topic
+8188        div .topic
+8292        div .topic
+3083        ul .bullet
+7334        ul .bullet
+8803        ul.bullet
+7922        span .story
+7993        span .story
+8108        span .story
+8295        section (no class)
+8573        section (no class)
+8834        section (no class)
+2022        div (no class)
+6428        div (no class), blockquote .dontHighlight .intro
+8361        div (no class)
+2000        blockquote .dontHighlight .intro, div .figure
+8149        blockquote .dontHighlight .intro
+4943        div .figure
+8253        div .figure
