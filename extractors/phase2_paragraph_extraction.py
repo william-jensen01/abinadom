@@ -497,7 +497,9 @@ def extract_list(
     # Handle <p class="preamble"> as a direct non-li child of the list element
     for preamble in list_element.find_all("p", class_="preamble", recursive=False):
         preamble_text = _element_clean_text(preamble)
-        if preamble_text and len(preamble_text) >= config.get("min_paragraph_length", 10):
+        if preamble_text and len(preamble_text) >= config.get(
+            "min_paragraph_length", 10
+        ):
             paragraphs.append(
                 {
                     "text": preamble_text,
@@ -856,7 +858,9 @@ def extract_semantic_paragraphs(
                                 )
 
                     # Emit list items as own paragraphs; append trailing text to last item
-                    list_paragraphs = extract_list(list_element, processed_elements, config)
+                    list_paragraphs = extract_list(
+                        list_element, processed_elements, config
+                    )
                     for i, para_dict in enumerate(list_paragraphs):
                         para_dict["source_type"] = "list"
                         if trailing_text and i == len(list_paragraphs) - 1:
@@ -914,7 +918,6 @@ def extract_semantic_paragraphs(
 
     # Start processing from container
     for child in container.children:
-        print(child)
         if isinstance(child, NavigableString):
             text = re.sub(r"\s+", " ", str(child)).strip()
             if text and len(text) >= config.get("min_paragraph_length", 10):
