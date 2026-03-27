@@ -21,7 +21,7 @@ All 7,659 General Conference talks processed through Phases 1-6 with verified re
 | 4 | 0/3 | Planned    |  |
 | 5 | 2/3 | In Progress|  |
 | 6 | 1/2 | In Progress|  |
-| 7 | Full Run & Verification | Not Started | VER-01, VER-02, VER-03, VER-04 |
+| 7 | 0/2 | Planned    |  |
 
 ## Phases
 
@@ -164,7 +164,7 @@ Plans:
 **Goal:** All General Conference talks are processed and the resulting ChromaDB collections pass quantitative and semantic verification.
 **Requirements:** VER-01, VER-02, VER-03, VER-04
 **Depends on:** Phase 6
-**Plans:** 2 plans
+**Plans:** 0/2 plans executed
 
 Plans:
 - [ ] 07-01-PLAN.md -- Build verify_pipeline.py with all 4 VER checks (VER-01, VER-02, VER-03, VER-04)

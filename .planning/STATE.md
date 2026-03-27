@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to plan
-stopped_at: Completed 06-pipeline-orchestrator 06-02-PLAN.md
-last_updated: "2026-03-26T19:14:12.509Z"
+status: Ready to execute
+stopped_at: Completed 07-full-run-verification 07-01-PLAN.md
+last_updated: "2026-03-27T17:53:58.589Z"
 progress:
   total_phases: 7
   completed_phases: 6
-  total_plans: 18
+  total_plans: 20
   completed_plans: 18
 ---
 
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** All LDS content searchable by meaning -- find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** Phase 06 — pipeline-orchestrator
+**Current focus:** Phase 07 — full-run-verification
 
 ## Current Position
 
-Phase: 7
-Plan: Not started
+Phase: 07 (full-run-verification) — EXECUTING
+Plan: 2 of 2
 
 ## Performance Metrics
 
@@ -62,6 +62,7 @@ Plan: Not started
 | Phase 05-chromadb-loader P03 | 5min | 1 tasks | 2 files |
 | Phase 06 P01 | 6min | 2 tasks | 2 files |
 | Phase 06 P02 | 10min | 2 tasks | 4 files |
+| Phase 07 P01 | 3min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -102,6 +103,9 @@ Recent decisions affecting current work:
 - [Phase 06]: No include=['ids'] param in ChromaDB skip check (raises ValueError per Research Pitfall 4)
 - [Phase 06]: CHROMADB_BATCH_SIZE set to 1000 (PIPE-04 compliance): reconciled discrepancy from 5000, limits re-processing on interrupt to 1000 talks
 - [Phase 06]: tqdm declared as explicit Pipfile runtime dep (was installed 4.67.3 but undeclared)
+- [Phase 07]: Talk count derived from SQLite INNER JOIN conference_talk at runtime (not hardcoded) for VER-01
+- [Phase 07]: VER-02 skipped (not failed) when Ollama unavailable — avoids false failures in offline environments
+- [Phase 07]: Citations->paragraphs FK check is informational — annotation-sourced citations have unresolvable paragraph_ids by design
 
 ### Pending Todos
 
@@ -121,6 +125,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-26T19:06:25.665Z
-Stopped at: Completed 06-pipeline-orchestrator 06-02-PLAN.md
+Last session: 2026-03-27T17:53:58.584Z
+Stopped at: Completed 07-full-run-verification 07-01-PLAN.md
 Resume file: None
