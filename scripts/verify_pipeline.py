@@ -210,6 +210,7 @@ def check_semantic_search(client: Any, ef: Any) -> Dict[str, Any]:
                 speaker_name = ""
                 conference_year = ""
                 title = ""
+                topics_raw = ""
 
                 if talk_id is not None:
                     try:
@@ -222,13 +223,17 @@ def check_semantic_search(client: Any, ef: Any) -> Dict[str, Any]:
                             speaker_name = tm.get("speaker_name", "")
                             conference_year = tm.get("conference_year", "")
                             title = tm.get("title", "")
+                            topics_raw = tm.get("topics", "")
                     except Exception:
                         pass
 
+                topics = topics_raw if topics_raw else ""
                 para_text = (doc or "")[:150]
                 print(
                     f"  {i}. talk_id={talk_id} | {speaker_name} | {conference_year} | {title}"
                 )
+                if topics:
+                    print(f"     Topics: {topics}")
                 print(f"     Para: {para_text}")
 
                 hits.append({
@@ -238,6 +243,7 @@ def check_semantic_search(client: Any, ef: Any) -> Dict[str, Any]:
                     "speaker_name": speaker_name,
                     "conference_year": conference_year,
                     "title": title,
+                    "topics": topics,
                     "distance": dist,
                     "para_text_preview": para_text,
                 })
