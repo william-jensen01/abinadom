@@ -5,11 +5,11 @@
 
 ## Overview
 
-Milestone 1 delivers an end-to-end pipeline that processes all 7,659 General Conference talks from SQLite through Phases 1-6 into four ChromaDB vector collections. The ordering is intentional: restructure the database enrichment layer first (it changes how Phase 1 reads data), clean up tech debt so the codebase is navigable, fix bugs on stable code, lock in test coverage, then build the new ChromaDB loader, wrap it in an orchestrator, and verify the full run.
+Milestone 1 delivers an end-to-end pipeline that processes all 5,838 General Conference talks (GC-only via INNER JOIN conference_talk) from SQLite through Phases 1-6 into four ChromaDB vector collections. The ordering is intentional: restructure the database enrichment layer first (it changes how Phase 1 reads data), clean up tech debt so the codebase is navigable, fix bugs on stable code, lock in test coverage, then build the new ChromaDB loader, wrap it in an orchestrator, and verify the full run.
 
 ## Milestone Goal
 
-All 7,659 General Conference talks processed through Phases 1-6 with verified record counts, working semantic search, and full foreign key integrity across all four ChromaDB collections.
+All 5,838 General Conference talks (GC-only via INNER JOIN conference_talk) processed through Phases 1-6 with verified record counts, working semantic search, and full foreign key integrity across all four ChromaDB collections.
 
 ## Phase Summary
 
@@ -164,11 +164,11 @@ Plans:
 **Goal:** All General Conference talks are processed and the resulting ChromaDB collections pass quantitative and semantic verification.
 **Requirements:** VER-01, VER-02, VER-03, VER-04
 **Depends on:** Phase 6
-**Plans:** 0/2 plans executed
+**Plans:** 2 plans
 
 Plans:
-- [ ] 07-01-PLAN.md -- Build verify_pipeline.py with all 4 VER checks (VER-01, VER-02, VER-03, VER-04)
-- [ ] 07-02-PLAN.md -- Run verification, manual semantic spot-check, update ROADMAP (VER-01, VER-02, VER-03, VER-04)
+- [x] 07-01-PLAN.md -- Build verify_pipeline.py with all 4 VER checks (VER-01, VER-02, VER-03, VER-04)
+- [x] 07-02-PLAN.md -- Run verification, manual semantic spot-check, update ROADMAP (VER-01, VER-02, VER-03, VER-04)
 
 *Plan 01 (Wave 1) must complete before Plan 02 (Wave 2). Plan 02 includes a manual checkpoint for VER-02 semantic review.*
 
