@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Milestone complete
-stopped_at: Completed 07-full-run-verification 07-02-PLAN.md
-last_updated: "2026-03-27T18:21:37.273Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-03-27T19:18:11.841Z"
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 20
-  completed_plans: 20
+  total_phases: 8
+  completed_phases: 8
+  total_plans: 21
+  completed_plans: 21
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** All LDS content searchable by meaning -- find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** Phase 07 — full-run-verification
+**Current focus:** Phase 08 — include-topics-in-talk-metadata
 
 ## Current Position
 
-Phase: 07
-Plan: Not started
+Phase: 08 (include-topics-in-talk-metadata) — EXECUTING
+Plan: 1 of 1
 
 ## Performance Metrics
 
@@ -64,8 +64,13 @@ Plan: Not started
 | Phase 06 P02 | 10min | 2 tasks | 4 files |
 | Phase 07 P01 | 3min | 2 tasks | 2 files |
 | Phase 07 P02 | 15min | 3 tasks | 2 files |
+| Phase 08 P01 | 6min | 2 tasks | 5 files |
 
 ## Accumulated Context
+
+### Roadmap Evolution
+
+- Phase 8 added: include topics in talk metadata for phase 1 of pipeline (talk_topic and conference_topic tables in core.52.db)
 
 ### Decisions
 
@@ -109,6 +114,9 @@ Recent decisions affecting current work:
 - [Phase 07]: Citations->paragraphs FK check is informational — annotation-sourced citations have unresolvable paragraph_ids by design
 - [Phase 07]: VER-02 semantic results approved manually — all 5 queries returned relevant results
 - [Phase 07]: ROADMAP.md updated: 7,659 replaced with 5,838 (GC-only INNER JOIN) throughout milestone goal and acceptance criteria
+- [Phase 08]: topics field uses List[str] with default_factory=list -- empty list semantically correct for talks with no topics
+- [Phase 08]: GROUP_CONCAT uses pipe delimiter to match existing _flatten_metadata pipe-join convention for List[str] fields
+- [Phase 08]: ct2 alias for conference_topic in subquery avoids collision with outer ct alias (conference_talk)
 
 ### Pending Todos
 
@@ -128,6 +136,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-27T18:13:22.697Z
-Stopped at: Completed 07-full-run-verification 07-02-PLAN.md
+Last session: 2026-03-27T19:18:11.836Z
+Stopped at: Completed 08-01-PLAN.md
 Resume file: None

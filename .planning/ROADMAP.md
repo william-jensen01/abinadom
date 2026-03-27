@@ -22,7 +22,7 @@ All 5,838 General Conference talks (GC-only via INNER JOIN conference_talk) proc
 | 5 | 2/3 | In Progress|  |
 | 6 | 1/2 | In Progress|  |
 | 7 | 0/2 | Planned    |  |
-| 8 | Topic Metadata | Planning Complete | TOPIC-01, TOPIC-02, TOPIC-03, TOPIC-04, TOPIC-05 |
+| 8 | 1/1 | Complete   | 2026-03-27 |
 
 ## Phases
 
@@ -187,10 +187,10 @@ Plans:
 **Goal:** Extend Phase 1 talk metadata extraction to include topic names from talk_topic and conference_topic tables, flowing through to ChromaDB for semantic search and metadata filtering.
 **Requirements:** TOPIC-01, TOPIC-02, TOPIC-03, TOPIC-04, TOPIC-05
 **Depends on:** Phase 7
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 08-01-PLAN.md -- Add topics field to TalkMetadata, SQL query, transformation, Phase 6 document text, schema, and tests (TOPIC-01, TOPIC-02, TOPIC-03, TOPIC-04, TOPIC-05)
+- [x] 08-01-PLAN.md -- Add topics field to TalkMetadata, SQL query, transformation, Phase 6 document text, schema, and tests (TOPIC-01, TOPIC-02, TOPIC-03, TOPIC-04, TOPIC-05)
 
 **Acceptance criteria:**
 - [ ] `TalkMetadata` has `topics: List[str]` field defaulting to `[]`
