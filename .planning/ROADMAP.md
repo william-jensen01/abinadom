@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 General Conference Pipeline** — Phases 1–8 (shipped 2026-03-27)
-- 📋 **v2.0 MCP Server** — Phases TBD (planned)
+- 📋 **v2.0 MCP Server** — Phases 9–11 (planned)
 
 ## Phases
 
@@ -23,22 +23,54 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
 
 </details>
 
-## Deferred to Next Milestones
+### v2.0 MCP Server (Planned)
 
-| Item | Target |
-|------|--------|
-| MCP server with semantic search | Milestone 2 |
-| ChromaDB metadata noise stripping (`to_chromadb_format()`) | Milestone 2 (before MCP) |
-| Journal of Discourse content | Milestone 3 |
-| Scriptures (OT, NT, BOM, D&C, POGP) | Milestone 4+ |
-| Performance optimizations (batched DB lookups, streaming Phase 2) | When needed |
-| Web scraping | Never |
-| Multi-user / hosted deployment | Never |
+**Milestone Goal:** Expose ChromaDB via a local MCP server so Claude Desktop can search by meaning, read full talks, and engage conversationally with General Conference content.
+
+- [ ] **Phase 9: Server Foundation** — Reliable server startup: absolute path resolution, Ollama health check, collection warmup, stdio transport
+- [ ] **Phase 10: Tools & Normalization** — Working `search` and `get_talk` tools with speaker/date/collection normalizers and clean output
+- [ ] **Phase 11: Claude Desktop Integration** — End-to-end connection: Claude Desktop config wired and system prompt established
+
+## Phase Details
+
+### Phase 9: Server Foundation
+**Goal**: The MCP server starts reliably, warms up all collections, and fails fast with actionable errors when dependencies are missing
+**Depends on**: Phase 8 (ChromaDB populated and verified)
+**Requirements**: CORE-01, CORE-02, CORE-03, INTG-01
+**Success Criteria** (what must be TRUE):
+  1. Server launched from any working directory finds ChromaDB collections (no silent empty-DB creation)
+  2. Server launched without Ollama running exits immediately with a clear error message (not a cryptic stack trace)
+  3. Server launched successfully has all 4 ChromaDB collections loaded before any tool call arrives
+  4. All server log output goes to stderr; stdout carries only MCP protocol messages
+**Plans**: TBD
+
+### Phase 10: Tools & Normalization
+**Goal**: Users can perform semantic search and retrieve full talks through tools that accept natural language inputs and return clean, readable results
+**Depends on**: Phase 9
+**Requirements**: CORE-04, CORE-05, CORE-06, TOOL-01, TOOL-02, TOOL-03, TOOL-04, TOOL-05
+**Success Criteria** (what must be TRUE):
+  1. User can issue a natural-language query and receive relevant results from any of the 4 collections
+  2. User can pass an informal speaker name ("Holland", "Elder Holland") and get results attributed to the correct speaker
+  3. User can pass an informal date ("2020", "April 2020") and get results filtered to the right conference
+  4. User can retrieve the full ordered text of a talk by ID, with paragraphs in narrative sequence
+  5. Search results contain readable snippet text only — no internal pipeline fields exposed
+**Plans**: TBD
+
+### Phase 11: Claude Desktop Integration
+**Goal**: Claude Desktop is connected to the MCP server and engages with LDS content as an informed discussion partner
+**Depends on**: Phase 10
+**Requirements**: INTG-02, INTG-03
+**Success Criteria** (what must be TRUE):
+  1. Claude Desktop connects to the MCP server using an absolute virtualenv path in `claude_desktop_config.json` without errors
+  2. Claude responds to LDS content questions conversationally, drawing on the `search` and `get_talk` tools without needing prompting from the user
+  3. System prompt establishes Claude's role so that it synthesizes and discusses content rather than merely returning raw tool output
+**Plans**: TBD
+**UI hint**: yes
 
 ## Progress
 
-| Phase | Milestone | Plans Complete | Status   | Completed  |
-|-------|-----------|---------------|----------|------------|
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
 | 1. DB Enrichment | v1.0 | 5/5 | Complete | 2026-03-20 |
 | 2. Code Quality | v1.0 | 2/2 | Complete | 2026-03-21 |
 | 3. Bug Audit & Fixes | v1.0 | 3/3 | Complete | 2026-03-22 |
@@ -47,3 +79,6 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
 | 6. Pipeline Orchestrator | v1.0 | 2/2 | Complete | 2026-03-26 |
 | 7. Full Run & Verification | v1.0 | 2/2 | Complete | 2026-03-27 |
 | 8. Topic Metadata | v1.0 | 1/1 | Complete | 2026-03-27 |
+| 9. Server Foundation | v2.0 | 0/? | Not started | - |
+| 10. Tools & Normalization | v2.0 | 0/? | Not started | - |
+| 11. Claude Desktop Integration | v2.0 | 0/? | Not started | - |

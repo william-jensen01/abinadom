@@ -59,26 +59,26 @@ Requirements for the MCP Server milestone. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | TBD | Pending |
-| CORE-02 | TBD | Pending |
-| CORE-03 | TBD | Pending |
-| CORE-04 | TBD | Pending |
-| CORE-05 | TBD | Pending |
-| CORE-06 | TBD | Pending |
-| TOOL-01 | TBD | Pending |
-| TOOL-02 | TBD | Pending |
-| TOOL-03 | TBD | Pending |
-| TOOL-04 | TBD | Pending |
-| TOOL-05 | TBD | Pending |
-| INTG-01 | TBD | Pending |
-| INTG-02 | TBD | Pending |
-| INTG-03 | TBD | Pending |
+| CORE-01 | Phase 9 | Pending |
+| CORE-02 | Phase 9 | Pending |
+| CORE-03 | Phase 9 | Pending |
+| CORE-04 | Phase 10 | Pending |
+| CORE-05 | Phase 10 | Pending |
+| CORE-06 | Phase 10 | Pending |
+| TOOL-01 | Phase 10 | Pending |
+| TOOL-02 | Phase 10 | Pending |
+| TOOL-03 | Phase 10 | Pending |
+| TOOL-04 | Phase 10 | Pending |
+| TOOL-05 | Phase 10 | Pending |
+| INTG-01 | Phase 9 | Pending |
+| INTG-02 | Phase 11 | Pending |
+| INTG-03 | Phase 11 | Pending |
 
 **Coverage:**
 - v2.0 requirements: 14 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 14 ⚠️
+- Mapped to phases: 14 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-30*
-*Last updated: 2026-03-30 after initial definition*
+*Last updated: 2026-03-30 — traceability filled after roadmap creation*
