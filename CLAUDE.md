@@ -66,6 +66,9 @@
 > 2. **LSP** — navigate symbols once you know the file: definitions (`goToDefinition`), references (`findReferences`), call hierarchies (`incomingCalls`/`outgoingCalls`), workspace-wide symbol search (`workspaceSymbol`)
 > 3. **Grep** — search file content for fresh, accurate answers; never assume content from the index alone
 
+### Root
+- `server.py` — MCP server entry point (FastMCP, stdio transport)
+
 ### docs/
 - `docs/PIPELINE_SPEC.md` — Full pipeline specification
 - `docs/PROJECT.md` — Project overview
@@ -122,6 +125,7 @@
 - `tests/test_phase5.py`
 - `tests/test_phase6.py`
 - `tests/test_phase6_orchestrator.py`
+- `tests/test_server.py`
 
 ## Process
 
