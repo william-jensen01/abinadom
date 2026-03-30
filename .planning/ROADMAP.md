@@ -42,7 +42,9 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
   2. Server launched without Ollama running exits immediately with a clear error message (not a cryptic stack trace)
   3. Server launched successfully has all 4 ChromaDB collections loaded before any tool call arrives
   4. All server log output goes to stderr; stdout carries only MCP protocol messages
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 09-01-PLAN.md — Install mcp SDK, create server.py with startup validation, unit tests
 
 ### Phase 10: Tools & Normalization
 **Goal**: Users can perform semantic search and retrieve full talks through tools that accept natural language inputs and return clean, readable results
@@ -79,6 +81,6 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
 | 6. Pipeline Orchestrator | v1.0 | 2/2 | Complete | 2026-03-26 |
 | 7. Full Run & Verification | v1.0 | 2/2 | Complete | 2026-03-27 |
 | 8. Topic Metadata | v1.0 | 1/1 | Complete | 2026-03-27 |
-| 9. Server Foundation | v2.0 | 0/? | Not started | - |
+| 9. Server Foundation | v2.0 | 0/1 | Not started | - |
 | 10. Tools & Normalization | v2.0 | 0/? | Not started | - |
 | 11. Claude Desktop Integration | v2.0 | 0/? | Not started | - |
