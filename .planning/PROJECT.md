@@ -31,15 +31,19 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 
 ### Active
 
-<!-- Milestone 2: MCP Server — planning not yet started -->
+<!-- Milestone 2: MCP Server — v2.0 -->
 
-(Requirements TBD — run `/gsd:new-milestone` to define Milestone 2 scope)
+- [ ] MCP server with `search` tool — semantic search + metadata filters across 4 collections, server-side fuzzy normalization
+- [ ] MCP server with `get_talk` tool — full ordered talk content by ID
+- [ ] Concise tool descriptions — minimal token overhead
+- [ ] System prompt priming Claude to engage conversationally, not just retrieve
+- [ ] Claude Desktop config wired and working end-to-end
 
 ### Out of Scope
 
-- MCP server — deferred to Milestone 2 (pipeline must be solid first)
-- Journal of Discourse content — Milestone 3
-- Scriptures (OT, NT, BOM, D&C, POGP) — Milestone 4+
+- Remote/mobile access — Milestone 3 (ChromaDB across machines, hosting, auth)
+- Journal of Discourse content — Milestone 4
+- Scriptures (OT, NT, BOM, D&C, POGP) — Milestone 5+
 - Web scraping — HTML is read from SQLite only, no live fetching
 - Multi-user / hosted deployment — personal use only
 
@@ -50,7 +54,7 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - **Architecture**: Layered, configuration-driven (`config/pipeline_config.py`), typed dataclasses, pure functions, idempotent; fail-fast (schema validation) + fail-safe (FK spot-check) hybrid
 - **Processing model**: Per-talk streaming loop — Phases 1–6 run sequentially per talk; ChromaDB write buffer flushes every 1,000 talks
 - **ID strategy**: Existing SQLite primary keys (`talk_8820`, `para_156789`, etc.) for bidirectional lookups
-- **Next milestone**: MCP server exposing ChromaDB semantic search to AI clients (Claude Desktop); metadata noise stripping (`to_chromadb_format()`) before MCP build
+- **Current milestone**: v2.0 MCP Server — local MCP server exposing `search` and `get_talk` tools to Claude Desktop for conversational exploration of GC talks
 
 ## Constraints
 
@@ -71,4 +75,16 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 | Paragraph-level chunking | Preserves natural document structure; typical 200–800 tokens | ✓ Good |
 
 ---
-*Last updated: 2026-03-27 after v1.0 milestone — General Conference Pipeline complete*
+## Current Milestone: v2.0 MCP Server
+
+**Goal:** Expose ChromaDB via a local MCP server so Claude Desktop can have rich, conversational exploration of General Conference talks — searching by meaning, reading full talks, discussing LDS teachings as an informed partner.
+
+**Target features:**
+- `search` tool: semantic + metadata filters, server-side fuzzy normalization, collection parameter
+- `get_talk` tool: full ordered talk content by ID
+- Concise tool descriptions — minimal token overhead
+- System prompt priming Claude to engage conversationally
+- Claude Desktop config wired and working end-to-end
+
+---
+*Last updated: 2026-03-30 — v2.0 MCP Server milestone started*

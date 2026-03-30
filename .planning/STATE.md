@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: General Conference Pipeline
-status: v1.0 milestone complete
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-03-27T22:44:20.978Z"
+milestone: v2.0
+milestone_name: MCP Server
+status: Defining requirements
+stopped_at: ~
+last_updated: "2026-03-30T00:00:00.000Z"
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 21
-  completed_plans: 21
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
@@ -23,8 +23,10 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 
 ## Current Position
 
-Phase: 08
-Plan: Not started
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-30 — Milestone v2.0 started
 
 ## Performance Metrics
 
