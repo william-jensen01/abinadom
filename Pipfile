@@ -11,6 +11,7 @@ html5lib = "*"
 chromadb = "*"
 ollama = "*"
 tqdm = "*"
+mcp = "*"
 
 [dev-packages]
 pytest = "*"
