@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: MCP Server
 status: Ready to plan
-stopped_at: ~
-last_updated: "2026-03-30T00:00:00.000Z"
+stopped_at: Completed 09-server-foundation 09-01-PLAN.md
+last_updated: "2026-03-31T00:03:44.138Z"
 progress:
   total_phases: 3
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  completed_phases: 1
+  total_plans: 1
+  completed_plans: 1
 ---
 
 # Project State
@@ -19,16 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** All LDS content searchable by meaning — find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** Planning Milestone 2 — MCP server for semantic search
+**Current focus:** Phase 09 — server-foundation
 
 ## Current Position
 
-Phase: 9 of 11 (Server Foundation) — not started
-Plan: —
-Status: Ready to plan Phase 9
-Last activity: 2026-03-30 — Roadmap written; Phases 9–11 defined
-
-Progress: [░░░░░░░░░░] 0% (v2.0 milestone)
+Phase: 10
+Plan: Not started
 
 ## Performance Metrics
 
@@ -50,6 +46,7 @@ Progress: [░░░░░░░░░░] 0% (v2.0 milestone)
 - Trend: --
 
 *Updated after each plan completion*
+| Phase 09-server-foundation P01 | 15 | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -61,6 +58,9 @@ Recent decisions affecting current work:
 - [Roadmap v2.0]: 3-phase structure — Foundation (startup) → Tools (search + get_talk) → Integration (Claude Desktop)
 - [Roadmap v2.0]: INTG-01 (stdio logging) assigned to Phase 9 — it is server infrastructure, not a tool concern
 - [Phase 08]: topics field uses List[str] with default_factory=list; GROUP_CONCAT uses pipe delimiter to match _flatten_metadata convention
+- [Phase 09-server-foundation]: FastMCP lifespan @asynccontextmanager chosen over inline __main__ startup for server lifecycle integration
+- [Phase 09-server-foundation]: get_collection() not get_or_create_collection() as ChromaDB startup guard against silent empty DB creation
+- [Phase 09-server-foundation]: Startup order: path resolution → Ollama check → collection warmup (fail fast on cheapest checks first)
 
 ### Pending Todos
 
@@ -79,6 +79,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-30
-Stopped at: Roadmap written for v2.0 Phases 9–11
+Last session: 2026-03-30T23:54:31.020Z
+Stopped at: Completed 09-server-foundation 09-01-PLAN.md
 Resume file: None
