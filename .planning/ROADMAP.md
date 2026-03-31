@@ -46,6 +46,16 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
 Plans:
 - [ ] 09-01-PLAN.md — Install mcp SDK, create server.py with startup validation, unit tests
 
+### Phase 09.1: Paragraph Metadata Enrichment (INSERTED)
+
+**Goal:** Enrich paragraph ChromaDB records with talk-level metadata (speaker_name, title, conference_year, conference_month) so Phase 10 search results return the full 6-field shape without secondary lookup
+**Requirements**: Unblocks CORE-04, TOOL-01, TOOL-02, TOOL-03, TOOL-04, TOOL-05
+**Depends on:** Phase 9
+**Plans:** 1 plan
+
+Plans:
+- [ ] 09.1-01-PLAN.md — Enrich prepare_paragraph_records with talk metadata injection, add VER-06
+
 ### Phase 10: Tools & Normalization
 **Goal**: Users can perform semantic search and retrieve full talks through tools that accept natural language inputs and return clean, readable results
 **Depends on**: Phase 9
@@ -82,5 +92,6 @@ Plans:
 | 7. Full Run & Verification | v1.0 | 2/2 | Complete | 2026-03-27 |
 | 8. Topic Metadata | v1.0 | 1/1 | Complete | 2026-03-27 |
 | 9. Server Foundation | v2.0 | 0/1 | Planned    |  |
+| 9.1 Paragraph Metadata Enrichment | v2.0 | 0/1 | Planned | - |
 | 10. Tools & Normalization | v2.0 | 0/? | Not started | - |
 | 11. Claude Desktop Integration | v2.0 | 0/? | Not started | - |
