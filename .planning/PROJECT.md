@@ -33,6 +33,7 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 
 <!-- Milestone 2: MCP Server — v2.0 -->
 
+- ✓ MCP server foundation — FastMCP server with lifespan startup validation (ChromaDB path resolution, Ollama health check, 4-collection warmup, stderr-only logging) — Phase 9 (v2.0)
 - [ ] MCP server with `search` tool — semantic search + metadata filters across 4 collections, server-side fuzzy normalization
 - [ ] MCP server with `get_talk` tool — full ordered talk content by ID
 - [ ] Concise tool descriptions — minimal token overhead
@@ -87,4 +88,4 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - Claude Desktop config wired and working end-to-end
 
 ---
-*Last updated: 2026-03-30 — v2.0 MCP Server milestone started*
+*Last updated: 2026-03-30 — Phase 9 complete: MCP server foundation shipped*
