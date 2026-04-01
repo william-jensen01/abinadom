@@ -752,6 +752,105 @@ def check_topics(client: Any, ef: Any) -> Dict[str, Any]:
     }
 
 
+def check_paragraph_enrichment(client: Any, ef: Any) -> Dict[str, Any]:
+    """
+    VER-06: Verify paragraph metadata enrichment.
+
+    Spot-checks paragraph records from conference_talk_paragraphs and asserts
+    all 4 enriched fields (speaker_name, title, conference_year, conference_month)
+    are present and match the corresponding talk record in conference_talks.
+
+    Also checks coverage: a 1000-record sample should have >= 95% with speaker_name set.
+
+    Note: This check will FAIL until run_pipeline.py --force has been run with
+    the enriched prepare_paragraph_records() code.
+    """
+    print("VER-06: Paragraph metadata enrichment ...")
+
+    paras_col = client.get_or_create_collection(
+        name=CHROMADB_COLLECTION_NAMES["paragraphs"],
+        embedding_function=ef,
+    )
+    talks_col = client.get_or_create_collection(
+        name=CHROMADB_COLLECTION_NAMES["talks"],
+        embedding_function=ef,
+    )
+
+    total_paragraphs = paras_col.count()
+    ENRICHMENT_FIELDS = ["speaker_name", "title", "conference_year", "conference_month"]
+
+    # --- Coverage sub-check: sample 1000 records, count how many have speaker_name ---
+    sample_size = min(1000, total_paragraphs)
+    sample = paras_col.get(limit=sample_size, include=["metadatas"])
+    sample_metas = sample.get("metadatas") or []
+
+    enriched_count = sum(1 for m in sample_metas if m and m.get("speaker_name"))
+    coverage_pct = (enriched_count / len(sample_metas) * 100) if sample_metas else 0
+    coverage_pass = coverage_pct >= 95.0
+
+    if not coverage_pass:
+        hint = " — run 'pipenv run py scripts/run_pipeline.py --force' to enrich" if coverage_pct < 5 else ""
+        print(f"  Coverage: {enriched_count}/{len(sample_metas)} ({coverage_pct:.1f}%) have speaker_name — FAIL{hint}")
+    else:
+        print(f"  Coverage: {enriched_count}/{len(sample_metas)} ({coverage_pct:.1f}%) have speaker_name — PASS")
+
+    # --- Spot-check sub-check: 10 enriched records, cross-reference talks collection ---
+    # Find up to 10 records that HAVE speaker_name for cross-referencing
+    spot_records = [m for m in sample_metas if m and m.get("speaker_name")][:10]
+    spot_pass = True
+    spot_mismatches = []
+
+    for para_meta in spot_records:
+        talk_id = para_meta.get("talk_id")
+        if talk_id is None:
+            continue
+        talk_doc_id = f"talk_{int(talk_id)}"
+        talk_result = talks_col.get(ids=[talk_doc_id], include=["metadatas"])
+        talk_metas = talk_result.get("metadatas") or []
+        if not talk_metas:
+            spot_mismatches.append(f"talk {talk_doc_id} not found in talks collection")
+            spot_pass = False
+            continue
+        talk_meta = talk_metas[0]
+        for field in ENRICHMENT_FIELDS:
+            para_val = para_meta.get(field)
+            talk_val = talk_meta.get(field)
+            # Defensive int coercion for conference_year (Pitfall 5)
+            if field == "conference_year":
+                para_val = int(para_val) if para_val is not None else None
+                talk_val = int(talk_val) if talk_val is not None else None
+            if para_val != talk_val:
+                spot_mismatches.append(
+                    f"talk_{talk_id}: {field} mismatch — para={para_val!r}, talk={talk_val!r}"
+                )
+                spot_pass = False
+
+    spot_status = "PASS" if spot_pass else "FAIL"
+    print(f"  Spot-check: {len(spot_records)} records cross-referenced — {spot_status}")
+    if spot_mismatches:
+        for mm in spot_mismatches[:5]:
+            print(f"    - {mm}")
+
+    overall_passed = coverage_pass and spot_pass
+    status = "PASS" if overall_passed else "FAIL"
+    print(f"VER-06: Paragraph metadata enrichment ... {status}")
+
+    return {
+        "passed": overall_passed,
+        "coverage_check": {
+            "sample_size": len(sample_metas),
+            "enriched_count": enriched_count,
+            "coverage_pct": round(coverage_pct, 1),
+            "passed": coverage_pass,
+        },
+        "spot_check": {
+            "records_checked": len(spot_records),
+            "mismatches": spot_mismatches,
+            "passed": spot_pass,
+        },
+    }
+
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -791,18 +890,21 @@ def main() -> None:
     print()
     ver05_result = check_topics(client, ef)
     print()
+    ver06_result = check_paragraph_enrichment(client, ef)
+    print()
 
-    # Overall pass: VER-01, VER-03, VER-04, VER-05 are automated; VER-02 is manual review
+    # Overall pass: VER-01, VER-03, VER-04, VER-05, VER-06 are automated; VER-02 is manual review
     ver01_passed = ver01_result.get("passed", False)
     ver03_passed = ver03_result.get("passed", False)
     ver04_passed = ver04_result.get("passed", False)
     ver05_passed = ver05_result.get("passed", False)
-    overall_passed = ver01_passed and ver03_passed and ver04_passed and ver05_passed
+    ver06_passed = ver06_result.get("passed", False)
+    overall_passed = ver01_passed and ver03_passed and ver04_passed and ver05_passed and ver06_passed
 
-    automated_pass_count = sum([ver01_passed, ver03_passed, ver04_passed, ver05_passed])
+    automated_pass_count = sum([ver01_passed, ver03_passed, ver04_passed, ver05_passed, ver06_passed])
 
     print("=" * 60)
-    print(f"Overall: {automated_pass_count}/4 automated checks PASS | VER-02: manual review")
+    print(f"Overall: {automated_pass_count}/5 automated checks PASS | VER-02: manual review")
     print("=" * 60)
 
     # Build and write JSON report
@@ -813,6 +915,7 @@ def main() -> None:
         "ver_03": ver03_result,
         "ver_04": ver04_result,
         "ver_05": ver05_result,
+        "ver_06": ver06_result,
         "overall_passed": overall_passed,
     }
 

@@ -128,6 +128,7 @@ def prepare_talk_record(
 
 def prepare_paragraph_records(
     paragraphs: TalkParagraphs,
+    talk_metadata: TalkMetadata | None = None,
 ) -> tuple[list[tuple[str, dict[str, Any], str]], list[str]]:
     """
     Transform TalkParagraphs into ChromaDB records, splitting by source_type.
@@ -143,6 +144,9 @@ def prepare_paragraph_records(
 
     Args:
         paragraphs: Phase 2 output container.
+        talk_metadata: Optional Phase 1 metadata. When provided, speaker_name,
+            title, conference_year, and conference_month are injected into each
+            paragraph record's metadata for denormalized search results.
 
     Returns:
         (list_of_records, annotation_texts)
@@ -159,6 +163,12 @@ def prepare_paragraph_records(
         document = para.text
         raw_meta = asdict(para)
         flat_meta = _flatten_metadata(raw_meta)
+        # Inject talk-level fields when metadata is provided (D-01, D-05)
+        if talk_metadata is not None:
+            flat_meta["speaker_name"] = talk_metadata.speaker_name
+            flat_meta["title"] = talk_metadata.title
+            flat_meta["conference_year"] = talk_metadata.conference_year
+            flat_meta["conference_month"] = talk_metadata.conference_month
         doc_id = f"para_{para.paragraph_id}"
         records.append((document, flat_meta, doc_id))
 
@@ -275,7 +285,9 @@ def prepare_talk_bundle(
         return {"talks": [], "paragraphs": [], "citations": [], "footnotes": []}
 
     # Prepare paragraphs first to collect annotation texts
-    paragraph_records, annotation_texts = prepare_paragraph_records(paragraphs)
+    paragraph_records, annotation_texts = prepare_paragraph_records(
+        paragraphs, talk_metadata=metadata
+    )
 
     # Prepare talk record with annotations folded in
     talk_record = prepare_talk_record(metadata, annotation_texts)
