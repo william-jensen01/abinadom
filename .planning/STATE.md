@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: MCP Server
-status: Ready to plan
-stopped_at: Completed 09-server-foundation 09-01-PLAN.md
-last_updated: "2026-03-31T00:03:44.138Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 09.1-gap-identified-in-phase-10-plans 09.1-01-PLAN.md
+last_updated: "2026-04-01T22:17:21.723Z"
 progress:
-  total_phases: 3
+  total_phases: 4
   completed_phases: 1
-  total_plans: 1
+  total_plans: 2
   completed_plans: 1
 ---
 
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** All LDS content searchable by meaning — find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** Phase 09 — server-foundation
+**Current focus:** Phase 09.1 — gap-identified-in-phase-10-plans
 
 ## Current Position
 
-Phase: 10
-Plan: Not started
+Phase: 09.1 (gap-identified-in-phase-10-plans) — EXECUTING
+Plan: 1 of 1
 
 ## Performance Metrics
 
@@ -47,8 +47,13 @@ Plan: Not started
 
 *Updated after each plan completion*
 | Phase 09-server-foundation P01 | 15 | 3 tasks | 5 files |
+| Phase 09.1-gap-identified-in-phase-10-plans P01 | 9 | 2 tasks | 3 files |
 
 ## Accumulated Context
+
+### Roadmap Evolution
+
+- Phase 09.1 inserted after Phase 9: gap identified in phase 10 plans (URGENT)
 
 ### Decisions
 
@@ -61,6 +66,8 @@ Recent decisions affecting current work:
 - [Phase 09-server-foundation]: FastMCP lifespan @asynccontextmanager chosen over inline __main__ startup for server lifecycle integration
 - [Phase 09-server-foundation]: get_collection() not get_or_create_collection() as ChromaDB startup guard against silent empty DB creation
 - [Phase 09-server-foundation]: Startup order: path resolution → Ollama check → collection warmup (fail fast on cheapest checks first)
+- [Phase 09.1-gap-identified-in-phase-10-plans]: Inject speaker_name, title, conference_year, conference_month into paragraph ChromaDB records at load time rather than modifying ParagraphData model — keeps model stable (D-03) and eliminates per-result secondary lookup in search tool
+- [Phase 09.1-gap-identified-in-phase-10-plans]: Optional talk_metadata parameter (None default) on prepare_paragraph_records() preserves backward compatibility
 
 ### Pending Todos
 
@@ -79,6 +86,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-30T23:54:31.020Z
-Stopped at: Completed 09-server-foundation 09-01-PLAN.md
+Last session: 2026-04-01T22:17:05.990Z
+Stopped at: Completed 09.1-gap-identified-in-phase-10-plans 09.1-01-PLAN.md
 Resume file: None

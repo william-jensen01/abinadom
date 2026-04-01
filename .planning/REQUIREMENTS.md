@@ -10,9 +10,9 @@ Requirements for the MCP Server milestone. Each maps to roadmap phases.
 
 ### Foundation
 
-- [ ] **CORE-01**: Server resolves ChromaDB path to absolute at startup (prevents silent empty-DB creation when Claude Desktop spawns with unknown working directory)
-- [ ] **CORE-02**: Server performs Ollama health check at startup and fails fast with a clear error if unreachable
-- [ ] **CORE-03**: Server warms up all 4 ChromaDB collections at startup before accepting tool calls
+- [x] **CORE-01**: Server resolves ChromaDB path to absolute at startup (prevents silent empty-DB creation when Claude Desktop spawns with unknown working directory)
+- [x] **CORE-02**: Server performs Ollama health check at startup and fails fast with a clear error if unreachable
+- [x] **CORE-03**: Server warms up all 4 ChromaDB collections at startup before accepting tool calls
 - [ ] **CORE-04**: User can pass informal speaker names ("Holland", "Elder Holland") and server resolves to canonical form ("Jeffrey R. Holland")
 - [ ] **CORE-05**: User can pass informal year/season values ("2020", "April 2020") and server normalizes to structured metadata filters
 - [ ] **CORE-06**: User can pass collection aliases ("talks", "paragraphs", "citations", "footnotes") that resolve to internal ChromaDB collection names
@@ -27,7 +27,7 @@ Requirements for the MCP Server milestone. Each maps to roadmap phases.
 
 ### Integration
 
-- [ ] **INTG-01**: MCP server runs via stdio transport; all logging goes to stderr only (no stdout pollution)
+- [x] **INTG-01**: MCP server runs via stdio transport; all logging goes to stderr only (no stdout pollution)
 - [ ] **INTG-02**: User can connect to the MCP server from Claude Desktop via `claude_desktop_config.json` with absolute virtualenv path
 - [ ] **INTG-03**: Claude engages with LDS content conversationally via a system prompt that establishes its role as an informed discussion partner
 
@@ -59,9 +59,9 @@ Requirements for the MCP Server milestone. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | Phase 9 | Pending |
-| CORE-02 | Phase 9 | Pending |
-| CORE-03 | Phase 9 | Pending |
+| CORE-01 | Phase 9 | Complete |
+| CORE-02 | Phase 9 | Complete |
+| CORE-03 | Phase 9 | Complete |
 | CORE-04 | Phase 10 | Pending |
 | CORE-05 | Phase 10 | Pending |
 | CORE-06 | Phase 10 | Pending |
@@ -70,7 +70,7 @@ Requirements for the MCP Server milestone. Each maps to roadmap phases.
 | TOOL-03 | Phase 10 | Pending |
 | TOOL-04 | Phase 10 | Pending |
 | TOOL-05 | Phase 10 | Pending |
-| INTG-01 | Phase 9 | Pending |
+| INTG-01 | Phase 9 | Complete |
 | INTG-02 | Phase 11 | Pending |
 | INTG-03 | Phase 11 | Pending |
 
