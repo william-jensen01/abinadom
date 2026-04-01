@@ -343,6 +343,39 @@ class TestPrepareParagraphRecords:
         doc, meta, doc_id = records[0]
         assert "extraction_warnings" not in meta
 
+    def test_enrichment_injects_four_fields(self):
+        paras = make_talk_paragraphs([make_paragraph(paragraph_id=1), make_paragraph(paragraph_id=2)])
+        meta = make_talk_metadata()
+        records, _ = prepare_paragraph_records(paras, talk_metadata=meta)
+        assert len(records) == 2
+        for _, flat_meta, _ in records:
+            assert flat_meta["speaker_name"] == "Elder Tester"
+            assert flat_meta["title"] == "The Test Talk"
+            assert flat_meta["conference_year"] == 2020
+            assert flat_meta["conference_month"] == "April"
+
+    def test_enrichment_not_applied_to_annotations(self):
+        paras = make_talk_paragraphs([
+            make_paragraph(paragraph_id=1, source_type="annotation"),
+            make_paragraph(paragraph_id=2, source_type="p"),
+        ])
+        meta = make_talk_metadata()
+        records, annotations = prepare_paragraph_records(paras, talk_metadata=meta)
+        assert len(records) == 1
+        assert len(annotations) == 1
+        _, flat_meta, _ = records[0]
+        assert flat_meta["speaker_name"] == "Elder Tester"
+
+    def test_enrichment_absent_when_talk_metadata_none(self):
+        paras = make_talk_paragraphs([make_paragraph(paragraph_id=1)])
+        records, _ = prepare_paragraph_records(paras)
+        assert len(records) == 1
+        _, flat_meta, _ = records[0]
+        assert "speaker_name" not in flat_meta
+        assert "title" not in flat_meta
+        assert "conference_year" not in flat_meta
+        assert "conference_month" not in flat_meta
+
 
 # =============================================================================
 # Tests: prepare_citation_records
@@ -525,6 +558,22 @@ class TestPrepareTalkBundle:
         # Talk metadata has annotations field
         doc, meta, doc_id = result["talks"][0]
         assert meta.get("annotations") == "Annotation content."
+
+    def test_bundle_paragraph_records_contain_enriched_fields(self):
+        """prepare_talk_bundle passes talk_metadata to prepare_paragraph_records so paragraph records are enriched."""
+        metadata = make_talk_metadata()
+        p = make_paragraph(paragraph_id=88200001)
+        paragraphs = make_talk_paragraphs([p])
+        citations = make_talk_citations([])
+        footnotes = make_talk_footnotes([])
+        validation_report = make_valid_report()
+
+        result = prepare_talk_bundle(metadata, paragraphs, citations, footnotes, validation_report)
+
+        assert len(result["paragraphs"]) >= 1
+        _, para_meta, _ = result["paragraphs"][0]
+        assert "speaker_name" in para_meta
+        assert para_meta["speaker_name"] == "Elder Tester"
 
 
 # =============================================================================
