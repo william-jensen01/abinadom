@@ -517,3 +517,98 @@ class TestGetTalkTool:
         result = asyncio.run(get_talk(talk_id="not_valid_at_all", ctx=ctx))
 
         assert "Invalid talk_id format" in result
+
+
+# ---------------------------------------------------------------------------
+# INTG-02: OLLAMA_URL env var support
+# ---------------------------------------------------------------------------
+
+
+def test_ollama_url_env_override(monkeypatch):
+    """get_embedding_function() uses OLLAMA_URL env var when set."""
+    from unittest.mock import MagicMock, patch
+
+    monkeypatch.setenv("OLLAMA_URL", "http://custom:11434")
+
+    with patch(
+        "extractors.phase6_chromadb_loader.OllamaEmbeddingFunction"
+    ) as mock_ef_cls:
+        mock_ef_cls.return_value = MagicMock()
+        from extractors.phase6_chromadb_loader import get_embedding_function
+
+        get_embedding_function()
+
+    mock_ef_cls.assert_called_once_with(
+        model_name="nomic-embed-text",
+        url="http://custom:11434/api/embeddings",
+    )
+
+
+def test_get_embedding_function_url_param():
+    """get_embedding_function(url=...) uses the explicit url parameter."""
+    from unittest.mock import MagicMock, patch
+
+    with patch(
+        "extractors.phase6_chromadb_loader.OllamaEmbeddingFunction"
+    ) as mock_ef_cls:
+        mock_ef_cls.return_value = MagicMock()
+        from extractors.phase6_chromadb_loader import get_embedding_function
+
+        get_embedding_function(url="http://explicit:11434")
+
+    mock_ef_cls.assert_called_once_with(
+        model_name="nomic-embed-text",
+        url="http://explicit:11434/api/embeddings",
+    )
+
+
+def test_get_embedding_function_default_url(monkeypatch):
+    """get_embedding_function() defaults to localhost when OLLAMA_URL not set."""
+    from unittest.mock import MagicMock, patch
+
+    monkeypatch.delenv("OLLAMA_URL", raising=False)
+
+    with patch(
+        "extractors.phase6_chromadb_loader.OllamaEmbeddingFunction"
+    ) as mock_ef_cls:
+        mock_ef_cls.return_value = MagicMock()
+        from extractors.phase6_chromadb_loader import get_embedding_function
+
+        get_embedding_function()
+
+    mock_ef_cls.assert_called_once_with(
+        model_name="nomic-embed-text",
+        url="http://localhost:11434/api/embeddings",
+    )
+
+
+# ---------------------------------------------------------------------------
+# INTG-03: FastMCP instructions and tool docstrings
+# ---------------------------------------------------------------------------
+
+
+def test_mcp_has_instructions():
+    """FastMCP mcp instance has a non-empty instructions string mentioning corpus size."""
+    from server import mcp
+
+    assert mcp.settings.instructions is not None
+    assert len(mcp.settings.instructions) > 0
+    assert "5,838" in mcp.settings.instructions
+
+
+def test_search_docstring_has_collection_hint():
+    """search tool docstring contains collection hints for paragraphs, talks, citations."""
+    from server import search
+
+    doc = search.__doc__
+    assert "paragraphs" in doc
+    assert "talks" in doc
+    assert "citations" in doc
+
+
+def test_get_talk_docstring_has_workflow_hint():
+    """get_talk tool docstring contains guidance to search first."""
+    from server import get_talk
+
+    doc = get_talk.__doc__
+    assert "search" in doc.lower()
