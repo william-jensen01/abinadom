@@ -2,7 +2,7 @@
 MCP Server — LDS Scripture Citation Index
 
 Exposes the ChromaDB vector collections to Claude Desktop via stdio transport.
-Phase 9 builds startup validation only; tools are added in Phase 10.
+Phase 9 builds startup validation; Phase 10 adds search and get_talk tools.
 
 Startup sequence:
   1. Resolve ChromaDB path to absolute (CORE-01)
@@ -11,8 +11,13 @@ Startup sequence:
   4. Load all 4 collections into AppContext (CORE-03)
   5. Yield AppContext to tool calls via FastMCP lifespan
 
+MCP tools (Phase 10):
+  - search: semantic search across 4 collections with optional speaker/year/season filters
+  - get_talk: retrieve full ordered text of a conference talk by ID
+
 All logging goes to stderr only (INTG-01). Stdout is reserved for MCP JSON-RPC.
 """
+import json
 import logging
 import os
 import sys
@@ -21,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import chromadb
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP, Context
 
 from config.pipeline_config import CHROMADB_COLLECTION_NAMES
 from extractors.phase6_chromadb_loader import get_embedding_function
@@ -239,6 +244,128 @@ async def lifespan(server: FastMCP):
 
 
 mcp = FastMCP("lds-scripture-index", lifespan=lifespan)
+
+
+# ---------------------------------------------------------------------------
+# MCP tools — Phase 10 (search and get_talk)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def search(
+    query: str,
+    speaker: str | None = None,
+    year: int | None = None,
+    season: str | None = None,
+    collection: str = "paragraphs",
+    limit: int = 5,
+    ctx: Context = None,
+) -> str:
+    """Search LDS General Conference content by meaning.
+
+    Args:
+        query: Natural language search query.
+        speaker: Optional speaker name filter (substring match, e.g. "Holland").
+        year: Optional conference year filter (e.g. 2020).
+        season: Optional conference season filter ("April" or "October").
+        collection: Collection to search — "talks", "paragraphs" (default), "citations", or "footnotes".
+        limit: Number of results to return (default 5, max 20).
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    # CORE-06: validate collection alias
+    col = app.collections.get(collection)
+    if col is None:
+        return f"Unknown collection '{collection}'. Valid: talks, paragraphs, citations, footnotes."
+
+    # Clamp limit per TOOL-03
+    limit = max(1, min(limit, 20))
+
+    # CORE-05: build where filter (year/season only; speaker is post-filtered)
+    where = _build_where_filter(year=year, season=season)
+
+    # CORE-04: fetch extra results when speaker filter active to compensate for post-filter reduction
+    fetch_n = min(limit * 4, 80) if speaker else limit
+
+    # TOOL-01: semantic search via ChromaDB
+    result = col.query(
+        query_texts=[query],
+        n_results=fetch_n,
+        where=where,
+        include=["documents", "metadatas"],
+    )
+
+    # Zip documents and metadatas (query returns nested lists — [0] for first query)
+    docs = result["documents"][0] if result["documents"] else []
+    metas = result["metadatas"][0] if result["metadatas"] else []
+    items = list(zip(docs, metas))
+
+    # CORE-04: post-filter by speaker (case-insensitive substring match, per D-06)
+    if speaker:
+        items = [(d, m) for d, m in items if _matches_speaker(m.get("speaker_name", ""), speaker)]
+
+    # Truncate to requested limit
+    items = items[:limit]
+
+    if not items:
+        return "No results found."
+
+    # TOOL-03: format results — exactly 6 fields per D-01, no pipeline fields per D-04
+    results = [_format_search_result(d, m) for d, m in items]
+    return json.dumps(results, ensure_ascii=False, indent=2)
+
+
+@mcp.tool()
+async def get_talk(
+    talk_id: str,
+    ctx: Context = None,
+) -> str:
+    """Retrieve the full text of a General Conference talk by ID.
+
+    Args:
+        talk_id: Talk identifier (e.g. "talk_8820" or "8820").
+    """
+    app: AppContext = ctx.request_context.lifespan_context
+
+    # TOOL-04: parse talk_id to integer
+    talk_num = _parse_talk_id(talk_id)
+    if talk_num is None:
+        return f"Invalid talk_id format '{talk_id}'. Expected format: 'talk_8820' or '8820'."
+
+    # Get talk metadata for header (speaker, title, conference, session)
+    talks_col = app.collections["talks"]
+    talk_result = talks_col.get(ids=[f"talk_{talk_num}"], include=["metadatas"])
+
+    if not talk_result["metadatas"]:
+        return f"No talk found with ID '{talk_id}'."
+
+    tm = talk_result["metadatas"][0]
+    header = (
+        f"Speaker: {tm.get('speaker_name', '')}\n"
+        f"Title: {tm.get('title', '')}\n"
+        f"Conference: {tm.get('conference_month', '')} {tm.get('conference_year', '')}\n"
+        f"Session: {tm.get('session_description', '')}"
+    )
+
+    # TOOL-05: get all paragraphs for this talk, sorted by paragraph_number
+    paras_col = app.collections["paragraphs"]
+    para_result = paras_col.get(
+        where={"talk_id": {"$eq": talk_num}},
+        include=["documents", "metadatas"],
+    )
+
+    if not para_result["ids"]:
+        return f"No paragraphs found for talk_id '{talk_id}'."
+
+    # Sort by paragraph_number (narrative order per D-15/TOOL-05)
+    sorted_rows = sorted(
+        zip(para_result["documents"], para_result["metadatas"]),
+        key=lambda x: int(x[1].get("paragraph_number", 0)),
+    )
+
+    # Build output: header + blank line + paragraphs separated by blank lines (per D-14)
+    body = "\n\n".join(doc for doc, _meta in sorted_rows)
+    return f"{header}\n\n{body}"
 
 
 # ---------------------------------------------------------------------------
