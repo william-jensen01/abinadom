@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: MCP Server
-status: Ready to plan
-stopped_at: Completed 10-tools-normalization 10-02-PLAN.md
-last_updated: "2026-04-02T08:00:11.974Z"
+status: Ready to execute
+stopped_at: Completed 11-claude-desktop-integration 11-01-PLAN.md
+last_updated: "2026-04-02T19:52:07.925Z"
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 6
+  completed_plans: 5
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** All LDS content searchable by meaning — find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** Phase 10 — tools-normalization
+**Current focus:** Phase 11 — claude-desktop-integration
 
 ## Current Position
 
-Phase: 11
-Plan: Not started
+Phase: 11 (claude-desktop-integration) — EXECUTING
+Plan: 2 of 2
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Plan: Not started
 | Phase 09.1-gap-identified-in-phase-10-plans P01 | 9 | 2 tasks | 3 files |
 | Phase 10-tools-normalization P01 | 8 | 2 tasks | 2 files |
 | Phase 10-tools-normalization P02 | 7 | 2 tasks | 2 files |
+| Phase 11-claude-desktop-integration P01 | 5 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,8 @@ Recent decisions affecting current work:
 - [Phase 09.1-gap-identified-in-phase-10-plans]: Optional talk_metadata parameter (None default) on prepare_paragraph_records() preserves backward compatibility
 - [Phase 10-tools-normalization]: Helper functions are pure/sync — directly importable in tests without pytest-asyncio; _build_where_filter returns None not {} for no-filter case; speaker filtering is Python post-filter (chromadb 1.5.5  silently broken on metadata)
 - [Phase 10-tools-normalization]: Tools placed after mcp=FastMCP() line; Context defaults to None for testability; fetch_n multiplied by 4 for speaker filter pre-fetch; paragraph_number cast to int in sort key
+- [Phase 11-claude-desktop-integration]: mcp.instructions is a direct attribute on FastMCP (not mcp.settings.instructions)
+- [Phase 11-claude-desktop-integration]: OLLAMA_URL env var is a base URL (http://host:port); /api/embeddings suffix always appended in get_embedding_function
 
 ### Pending Todos
 
@@ -90,6 +93,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T07:51:56.224Z
-Stopped at: Completed 10-tools-normalization 10-02-PLAN.md
+Last session: 2026-04-02T19:52:07.920Z
+Stopped at: Completed 11-claude-desktop-integration 11-01-PLAN.md
 Resume file: None

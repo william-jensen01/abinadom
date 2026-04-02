@@ -28,8 +28,8 @@ Requirements for the MCP Server milestone. Each maps to roadmap phases.
 ### Integration
 
 - [x] **INTG-01**: MCP server runs via stdio transport; all logging goes to stderr only (no stdout pollution)
-- [ ] **INTG-02**: User can connect to the MCP server from Claude Desktop via `claude_desktop_config.json` with absolute virtualenv path
-- [ ] **INTG-03**: Claude engages with LDS content conversationally via a system prompt that establishes its role as an informed discussion partner
+- [x] **INTG-02**: User can connect to the MCP server from Claude Desktop via `claude_desktop_config.json` with absolute virtualenv path
+- [x] **INTG-03**: Claude engages with LDS content conversationally via a system prompt that establishes its role as an informed discussion partner
 
 ## Future Requirements
 
@@ -71,8 +71,8 @@ Requirements for the MCP Server milestone. Each maps to roadmap phases.
 | TOOL-04 | Phase 10 | Complete |
 | TOOL-05 | Phase 10 | Complete |
 | INTG-01 | Phase 9 | Complete |
-| INTG-02 | Phase 11 | Pending |
-| INTG-03 | Phase 11 | Pending |
+| INTG-02 | Phase 11 | Complete |
+| INTG-03 | Phase 11 | Complete |
 
 **Coverage:**
 - v2.0 requirements: 14 total
