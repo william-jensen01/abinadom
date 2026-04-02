@@ -73,6 +73,15 @@ def _resolve_chromadb_path() -> str:
     return str(Path(raw).resolve())
 
 
+def _resolve_ollama_url() -> str:
+    """
+    Return the Ollama base URL.
+    Override: Set OLLAMA_URL env var (e.g. http://remote-host:11434).
+    Default: http://localhost:11434
+    """
+    return os.environ.get("OLLAMA_URL", "http://localhost:11434")
+
+
 def _check_ollama() -> None:
     """
     Verify Ollama is running and nomic-embed-text is available.
@@ -94,7 +103,7 @@ def _check_ollama() -> None:
             )
         else:
             print(
-                "ERROR: Ollama unreachable at http://localhost:11434. Start Ollama and retry.",
+                f"ERROR: Ollama unreachable at {_resolve_ollama_url()}. Start Ollama and retry.",
                 file=sys.stderr,
             )
         sys.exit(1)
@@ -243,7 +252,20 @@ async def lifespan(server: FastMCP):
         pass  # ChromaDB PersistentClient needs no explicit close
 
 
-mcp = FastMCP("lds-scripture-index", lifespan=lifespan)
+mcp = FastMCP(
+    "lds-scripture-index",
+    lifespan=lifespan,
+    instructions=(
+        "LDS General Conference corpus: 5,838 talks (1971-present) across 4 collections "
+        "- talks (full-talk metadata), paragraphs (passage text), citations (scripture "
+        "references), footnotes. "
+        "Use search with collection='paragraphs' for passage text, 'talks' for talk "
+        "discovery, 'citations' for scripture references. "
+        "Prefer database results over training data; fall back to training data only when "
+        "the database has insufficient information. "
+        "Use search to find a talk_id, then get_talk to retrieve full text."
+    ),
+)
 
 
 # ---------------------------------------------------------------------------
@@ -263,12 +285,15 @@ async def search(
 ) -> str:
     """Search LDS General Conference content by meaning.
 
+    Use collection='paragraphs' for passage text, 'talks' for talk discovery,
+    'citations' for scripture references, 'footnotes' for footnote content.
+
     Args:
         query: Natural language search query.
         speaker: Optional speaker name filter (substring match, e.g. "Holland").
         year: Optional conference year filter (e.g. 2020).
         season: Optional conference season filter ("April" or "October").
-        collection: Collection to search — "talks", "paragraphs" (default), "citations", or "footnotes".
+        collection: Collection to search - "talks", "paragraphs" (default), "citations", or "footnotes".
         limit: Number of results to return (default 5, max 20).
     """
     app: AppContext = ctx.request_context.lifespan_context
@@ -321,6 +346,8 @@ async def get_talk(
     ctx: Context = None,
 ) -> str:
     """Retrieve the full text of a General Conference talk by ID.
+
+    Use search to find a talk_id first, then call this to retrieve full text.
 
     Args:
         talk_id: Talk identifier (e.g. "talk_8820" or "8820").

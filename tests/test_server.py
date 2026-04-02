@@ -591,9 +591,9 @@ def test_mcp_has_instructions():
     """FastMCP mcp instance has a non-empty instructions string mentioning corpus size."""
     from server import mcp
 
-    assert mcp.settings.instructions is not None
-    assert len(mcp.settings.instructions) > 0
-    assert "5,838" in mcp.settings.instructions
+    assert mcp.instructions is not None
+    assert len(mcp.instructions) > 0
+    assert "5,838" in mcp.instructions
 
 
 def test_search_docstring_has_collection_hint():

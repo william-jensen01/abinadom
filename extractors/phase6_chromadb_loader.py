@@ -14,6 +14,7 @@ Collections produced:
 """
 
 import logging
+import os
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -309,16 +310,18 @@ def prepare_talk_bundle(
 # =============================================================================
 
 
-def get_embedding_function() -> OllamaEmbeddingFunction:
+def get_embedding_function(url: str | None = None) -> OllamaEmbeddingFunction:
     """
     Return the OllamaEmbeddingFunction configured for nomic-embed-text.
 
-    Per D-14: pass this to get_or_create_collection() for all 4 collections.
-    Ollama must be running locally with nomic-embed-text pulled.
+    url: Optional base URL override. Defaults to OLLAMA_URL env var,
+    then http://localhost:11434. Pipeline callers (no argument) pick up
+    the env var automatically.
     """
+    base_url = url or os.environ.get("OLLAMA_URL", "http://localhost:11434")
     return OllamaEmbeddingFunction(
         model_name="nomic-embed-text",
-        url="http://localhost:11434/api/embeddings",
+        url=base_url + "/api/embeddings",
     )
 
 
