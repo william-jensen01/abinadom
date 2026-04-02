@@ -66,9 +66,9 @@ Plans:
   3. User can pass an informal date ("2020", "April 2020") and get results filtered to the right conference
   4. User can retrieve the full ordered text of a talk by ID, with paragraphs in narrative sequence
   5. Search results contain readable snippet text only — no internal pipeline fields exposed
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
-- [ ] 10-01-PLAN.md — TDD helper functions: _build_where_filter, _matches_speaker, _format_search_result, _parse_talk_id
+- [x] 10-01-PLAN.md — TDD helper functions: _build_where_filter, _matches_speaker, _format_search_result, _parse_talk_id
 - [ ] 10-02-PLAN.md — Implement search and get_talk MCP tools with integration tests
 
 ### Phase 11: Claude Desktop Integration
@@ -96,5 +96,5 @@ Plans:
 | 8. Topic Metadata | v1.0 | 1/1 | Complete | 2026-03-27 |
 | 9. Server Foundation | v2.0 | 0/1 | Planned    |  |
 | 9.1 Paragraph Metadata Enrichment | v2.0 | 0/1 | Planned | - |
-| 10. Tools & Normalization | v2.0 | 0/2 | Planned | - |
+| 10. Tools & Normalization | v2.0 | 1/2 | In Progress|  |
 | 11. Claude Desktop Integration | v2.0 | 0/? | Not started | - |

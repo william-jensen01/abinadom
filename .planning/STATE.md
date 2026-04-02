@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: MCP Server
-status: Ready to plan
-stopped_at: Completed 09.1-gap-identified-in-phase-10-plans 09.1-01-PLAN.md
-last_updated: "2026-04-01T22:25:29.620Z"
+status: Ready to execute
+stopped_at: Completed 10-tools-normalization 10-01-PLAN.md
+last_updated: "2026-04-02T07:37:30.379Z"
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 4
+  completed_plans: 3
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** All LDS content searchable by meaning — find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** Phase 09.1 — gap-identified-in-phase-10-plans
+**Current focus:** Phase 10 — tools-normalization
 
 ## Current Position
 
-Phase: 10
-Plan: Not started
+Phase: 10 (tools-normalization) — EXECUTING
+Plan: 2 of 2
 
 ## Performance Metrics
 
@@ -48,6 +48,7 @@ Plan: Not started
 *Updated after each plan completion*
 | Phase 09-server-foundation P01 | 15 | 3 tasks | 5 files |
 | Phase 09.1-gap-identified-in-phase-10-plans P01 | 9 | 2 tasks | 3 files |
+| Phase 10-tools-normalization P01 | 8 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,7 @@ Recent decisions affecting current work:
 - [Phase 09-server-foundation]: Startup order: path resolution → Ollama check → collection warmup (fail fast on cheapest checks first)
 - [Phase 09.1-gap-identified-in-phase-10-plans]: Inject speaker_name, title, conference_year, conference_month into paragraph ChromaDB records at load time rather than modifying ParagraphData model — keeps model stable (D-03) and eliminates per-result secondary lookup in search tool
 - [Phase 09.1-gap-identified-in-phase-10-plans]: Optional talk_metadata parameter (None default) on prepare_paragraph_records() preserves backward compatibility
+- [Phase 10-tools-normalization]: Helper functions are pure/sync — directly importable in tests without pytest-asyncio; _build_where_filter returns None not {} for no-filter case; speaker filtering is Python post-filter (chromadb 1.5.5  silently broken on metadata)
 
 ### Pending Todos
 
@@ -86,6 +88,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T22:17:05.990Z
-Stopped at: Completed 09.1-gap-identified-in-phase-10-plans 09.1-01-PLAN.md
+Last session: 2026-04-02T07:37:30.374Z
+Stopped at: Completed 10-tools-normalization 10-01-PLAN.md
 Resume file: None
