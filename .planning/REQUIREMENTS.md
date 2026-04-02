@@ -15,15 +15,15 @@ Requirements for the MCP Server milestone. Each maps to roadmap phases.
 - [x] **CORE-03**: Server warms up all 4 ChromaDB collections at startup before accepting tool calls
 - [x] **CORE-04**: User can pass informal speaker names ("Holland", "Elder Holland") and server resolves to canonical form ("Jeffrey R. Holland")
 - [x] **CORE-05**: User can pass informal year/season values ("2020", "April 2020") and server normalizes to structured metadata filters
-- [ ] **CORE-06**: User can pass collection aliases ("talks", "paragraphs", "citations", "footnotes") that resolve to internal ChromaDB collection names
+- [x] **CORE-06**: User can pass collection aliases ("talks", "paragraphs", "citations", "footnotes") that resolve to internal ChromaDB collection names
 
 ### Tools
 
-- [ ] **TOOL-01**: User can perform semantic search across any of the 4 collections with a natural language query
-- [ ] **TOOL-02**: User can filter search results by speaker, year, conference season, and/or collection
+- [x] **TOOL-01**: User can perform semantic search across any of the 4 collections with a natural language query
+- [x] **TOOL-02**: User can filter search results by speaker, year, conference season, and/or collection
 - [x] **TOOL-03**: Search returns readable snippet text (no internal pipeline fields), default 5 results, max 20
 - [x] **TOOL-04**: User can retrieve full ordered text of a talk by talk ID
-- [ ] **TOOL-05**: `get_talk` returns paragraphs sorted by narrative position (position field)
+- [x] **TOOL-05**: `get_talk` returns paragraphs sorted by narrative position (position field)
 
 ### Integration
 
@@ -64,12 +64,12 @@ Requirements for the MCP Server milestone. Each maps to roadmap phases.
 | CORE-03 | Phase 9 | Complete |
 | CORE-04 | Phase 10 | Complete |
 | CORE-05 | Phase 10 | Complete |
-| CORE-06 | Phase 10 | Pending |
-| TOOL-01 | Phase 10 | Pending |
-| TOOL-02 | Phase 10 | Pending |
+| CORE-06 | Phase 10 | Complete |
+| TOOL-01 | Phase 10 | Complete |
+| TOOL-02 | Phase 10 | Complete |
 | TOOL-03 | Phase 10 | Complete |
 | TOOL-04 | Phase 10 | Complete |
-| TOOL-05 | Phase 10 | Pending |
+| TOOL-05 | Phase 10 | Complete |
 | INTG-01 | Phase 9 | Complete |
 | INTG-02 | Phase 11 | Pending |
 | INTG-03 | Phase 11 | Pending |

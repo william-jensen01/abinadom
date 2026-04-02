@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: MCP Server
 status: Ready to execute
-stopped_at: Completed 10-tools-normalization 10-01-PLAN.md
-last_updated: "2026-04-02T07:37:30.379Z"
+stopped_at: Completed 10-tools-normalization 10-02-PLAN.md
+last_updated: "2026-04-02T07:51:56.229Z"
 progress:
   total_phases: 4
   completed_phases: 2
@@ -49,6 +49,7 @@ Plan: 2 of 2
 | Phase 09-server-foundation P01 | 15 | 3 tasks | 5 files |
 | Phase 09.1-gap-identified-in-phase-10-plans P01 | 9 | 2 tasks | 3 files |
 | Phase 10-tools-normalization P01 | 8 | 2 tasks | 2 files |
+| Phase 10-tools-normalization P02 | 7 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -70,6 +71,7 @@ Recent decisions affecting current work:
 - [Phase 09.1-gap-identified-in-phase-10-plans]: Inject speaker_name, title, conference_year, conference_month into paragraph ChromaDB records at load time rather than modifying ParagraphData model — keeps model stable (D-03) and eliminates per-result secondary lookup in search tool
 - [Phase 09.1-gap-identified-in-phase-10-plans]: Optional talk_metadata parameter (None default) on prepare_paragraph_records() preserves backward compatibility
 - [Phase 10-tools-normalization]: Helper functions are pure/sync — directly importable in tests without pytest-asyncio; _build_where_filter returns None not {} for no-filter case; speaker filtering is Python post-filter (chromadb 1.5.5  silently broken on metadata)
+- [Phase 10-tools-normalization]: Tools placed after mcp=FastMCP() line; Context defaults to None for testability; fetch_n multiplied by 4 for speaker filter pre-fetch; paragraph_number cast to int in sort key
 
 ### Pending Todos
 
@@ -88,6 +90,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T07:37:30.374Z
-Stopped at: Completed 10-tools-normalization 10-01-PLAN.md
+Last session: 2026-04-02T07:51:56.224Z
+Stopped at: Completed 10-tools-normalization 10-02-PLAN.md
 Resume file: None
