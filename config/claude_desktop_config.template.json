@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "lds-scripture-index": {
+      "command": "C:\\Users\\wbjen\\.virtualenvs\\LDS_MCP-4gXzNxfn\\Scripts\\python.exe",
+      "args": [
+        "C:\\Users\\wbjen\\OneDrive\\Documents\\LDS MCP\\server.py"
+      ],
+      "env": {
+        "CHROMADB_PATH": "C:\\Users\\wbjen\\OneDrive\\Documents\\LDS MCP\\data\\chromadb",
+        "OLLAMA_URL": "http://localhost:11434"
+      }
+    }
+  }
+}
