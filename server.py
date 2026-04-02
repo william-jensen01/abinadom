@@ -151,6 +151,74 @@ def _startup() -> AppContext:
 
 
 # ---------------------------------------------------------------------------
+# Pure helper functions — business logic for search and get_talk tools
+# ---------------------------------------------------------------------------
+
+
+def _build_where_filter(year: int | None, season: str | None) -> dict | None:
+    """
+    Build a ChromaDB `where` filter dict from optional year and season params.
+
+    Returns None (not {}) when no filters are provided — ChromaDB rejects empty
+    where dicts (Pitfall 6). Speaker filtering is NOT included here; it is
+    applied as a Python post-filter after the query (Pitfall 1 / D-06).
+    """
+    filters = []
+    if year is not None:
+        filters.append({"conference_year": {"$eq": year}})
+    if season is not None:
+        filters.append({"conference_month": {"$eq": season}})
+    if not filters:
+        return None
+    return filters[0] if len(filters) == 1 else {"$and": filters}
+
+
+def _matches_speaker(stored: str, query: str) -> bool:
+    """
+    Case-insensitive substring match on speaker name (D-06 / CORE-04).
+
+    Input "Holland" matches stored "Jeffrey R. Holland". Whitespace is stripped
+    from the query before comparison.
+    """
+    return query.strip().lower() in stored.lower()
+
+
+def _format_search_result(document: str, meta: dict) -> dict:
+    """
+    Build the 6-field public result dict from a ChromaDB document + metadata.
+
+    D-01: exactly 6 fields — snippet, speaker_name, title, conference_year,
+    conference_month, talk_id.
+    D-04: NO pipeline-internal fields (paragraph_id, word_count, text, text_raw,
+    source_type, speaker_id, conference_id, etc.).
+    Snippet comes from the document param (ChromaDB document text), NOT from
+    meta["text"] (Pitfall 3).
+    """
+    return {
+        "snippet": document,
+        "speaker_name": meta.get("speaker_name", ""),
+        "title": meta.get("title", ""),
+        "conference_year": int(meta.get("conference_year", 0)),
+        "conference_month": meta.get("conference_month", ""),
+        "talk_id": f"talk_{int(meta.get('talk_id', 0))}",
+    }
+
+
+def _parse_talk_id(talk_id: str) -> int | None:
+    """
+    Parse a talk_id string to an integer, accepting both "talk_8820" and "8820".
+
+    Returns None for strings that cannot be parsed (D-12 / TOOL-04).
+    Defensive: strips whitespace and lowercases before parsing.
+    """
+    normalized = talk_id.strip().lower().replace("talk_", "")
+    try:
+        return int(normalized)
+    except ValueError:
+        return None
+
+
+# ---------------------------------------------------------------------------
 # FastMCP server — lifespan runs startup validation (CORE-03 integration)
 # ---------------------------------------------------------------------------
 
