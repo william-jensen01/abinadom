@@ -28,7 +28,7 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
 **Milestone Goal:** Expose ChromaDB via a local MCP server so Claude Desktop can search by meaning, read full talks, and engage conversationally with General Conference content.
 
 - [ ] **Phase 9: Server Foundation** — Reliable server startup: absolute path resolution, Ollama health check, collection warmup, stdio transport
-- [ ] **Phase 10: Tools & Normalization** — Working `search` and `get_talk` tools with speaker/date/collection normalizers and clean output
+- [x] **Phase 10: Tools & Normalization** — Working `search` and `get_talk` tools with speaker/date/collection normalizers and clean output (completed 2026-04-02)
 - [ ] **Phase 11: Claude Desktop Integration** — End-to-end connection: Claude Desktop config wired and system prompt established
 
 ## Phase Details
@@ -66,7 +66,7 @@ Plans:
   3. User can pass an informal date ("2020", "April 2020") and get results filtered to the right conference
   4. User can retrieve the full ordered text of a talk by ID, with paragraphs in narrative sequence
   5. Search results contain readable snippet text only — no internal pipeline fields exposed
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [x] 10-01-PLAN.md — TDD helper functions: _build_where_filter, _matches_speaker, _format_search_result, _parse_talk_id
 - [ ] 10-02-PLAN.md — Implement search and get_talk MCP tools with integration tests
@@ -96,5 +96,5 @@ Plans:
 | 8. Topic Metadata | v1.0 | 1/1 | Complete | 2026-03-27 |
 | 9. Server Foundation | v2.0 | 0/1 | Planned    |  |
 | 9.1 Paragraph Metadata Enrichment | v2.0 | 0/1 | Planned | - |
-| 10. Tools & Normalization | v2.0 | 1/2 | In Progress|  |
+| 10. Tools & Normalization | v2.0 | 1/2 | Complete    | 2026-04-02 |
 | 11. Claude Desktop Integration | v2.0 | 0/? | Not started | - |
