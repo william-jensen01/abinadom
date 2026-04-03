@@ -28,6 +28,8 @@ from pathlib import Path
 
 import chromadb
 from mcp.server.fastmcp import FastMCP, Context
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 from config.pipeline_config import CHROMADB_COLLECTION_NAMES
 from config.ollama import resolve_ollama_url
@@ -392,6 +394,42 @@ async def get_talk(
     # Build output: header + blank line + paragraphs separated by blank lines (per D-14)
     body = "\n\n".join(doc for doc, _meta in sorted_rows)
     return f"{header}\n\n{body}"
+
+
+# ---------------------------------------------------------------------------
+# Health endpoint — live dependency checks (TRANS-02)
+# ---------------------------------------------------------------------------
+
+
+@mcp.custom_route("/health", methods=["GET"])
+async def health_check(request: Request) -> JSONResponse:
+    """Return server health with live Ollama and ChromaDB reachability checks."""
+    status = {"ollama": "reachable", "chromadb": "reachable"}
+    http_status = 200
+
+    # Ollama check: live embedding call (per D-09 — same approach as _check_ollama
+    # but without sys.exit on failure)
+    try:
+        ollama_url = resolve_ollama_url()
+        ef = get_embedding_function(url=ollama_url)
+        ef(["health"])
+    except Exception:
+        status["ollama"] = "unreachable"
+        http_status = 503
+
+    # ChromaDB check: connect and verify collections exist (per D-09 — reuses
+    # startup guard logic pattern without full count validation)
+    try:
+        path = _resolve_chromadb_path()
+        client = chromadb.PersistentClient(path=path)
+        for name in CHROMADB_COLLECTION_NAMES.values():
+            client.get_collection(name=name)
+    except Exception:
+        status["chromadb"] = "unreachable"
+        http_status = 503
+
+    payload = {"status": "ok" if http_status == 200 else "degraded", **status}
+    return JSONResponse(payload, status_code=http_status)
 
 
 # ---------------------------------------------------------------------------
