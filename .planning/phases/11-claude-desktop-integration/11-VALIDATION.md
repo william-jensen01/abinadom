@@ -1,9 +1,9 @@
 ---
 phase: 11
 slug: claude-desktop-integration
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-04-02
 ---
 
@@ -38,10 +38,10 @@ created: 2026-04-02
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 11-01-01 | 01 | 0 | INTG-02 | unit | `pipenv run py -m pytest tests/test_server.py -k ollama_url -x` | ❌ W0 | ⬜ pending |
-| 11-01-02 | 01 | 0 | INTG-02 | unit | `pipenv run py -m pytest tests/test_server.py -k embedding_function -x` | ❌ W0 | ⬜ pending |
-| 11-01-03 | 01 | 0 | INTG-03 | unit | `pipenv run py -m pytest tests/test_server.py -k instructions -x` | ❌ W0 | ⬜ pending |
-| 11-01-04 | 01 | 0 | INTG-03 | unit | `pipenv run py -m pytest tests/test_server.py -k docstring -x` | ❌ W0 | ⬜ pending |
+| 11-01-01 | 01 | 0 | INTG-02 | unit | `pipenv run py -m pytest tests/test_server.py -k ollama_url -x` | ✅ | ✅ green |
+| 11-01-02 | 01 | 0 | INTG-02 | unit | `pipenv run py -m pytest tests/test_server.py -k embedding_function -x` | ✅ | ✅ green |
+| 11-01-03 | 01 | 0 | INTG-03 | unit | `pipenv run py -m pytest tests/test_server.py -k instructions -x` | ✅ | ✅ green |
+| 11-01-04 | 01 | 0 | INTG-03 | unit | `pipenv run py -m pytest tests/test_server.py -k docstring -x` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -49,7 +49,7 @@ created: 2026-04-02
 
 ## Wave 0 Requirements
 
-- [ ] `tests/test_server.py` — add `test_ollama_url_env_override`, `test_get_embedding_function_url_param`, `test_mcp_has_instructions`, `test_search_docstring_has_collection_hint`, `test_get_talk_docstring_has_workflow_hint`
+- [x] `tests/test_server.py` — add `test_ollama_url_env_override`, `test_get_embedding_function_url_param`, `test_mcp_has_instructions`, `test_search_docstring_has_collection_hint`, `test_get_talk_docstring_has_workflow_hint`
 
 *All new tests go into the existing `tests/test_server.py` — no new file needed.*
 
@@ -66,11 +66,11 @@ created: 2026-04-02
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 15s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 15s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-04-02 (Phase 12 tech debt cleanup)
