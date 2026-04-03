@@ -29,6 +29,7 @@ import chromadb
 from mcp.server.fastmcp import FastMCP, Context
 
 from config.pipeline_config import CHROMADB_COLLECTION_NAMES
+from config.ollama import resolve_ollama_url
 from extractors.phase6_chromadb_loader import get_embedding_function
 
 # ---------------------------------------------------------------------------
@@ -73,15 +74,6 @@ def _resolve_chromadb_path() -> str:
     return str(Path(raw).resolve())
 
 
-def _resolve_ollama_url() -> str:
-    """
-    Return the Ollama base URL.
-    Override: Set OLLAMA_URL env var (e.g. http://remote-host:11434).
-    Default: http://localhost:11434
-    """
-    return os.environ.get("OLLAMA_URL", "http://localhost:11434")
-
-
 def _check_ollama() -> None:
     """
     Verify Ollama is running and nomic-embed-text is available.
@@ -91,7 +83,7 @@ def _check_ollama() -> None:
     error message on any exception.
     """
     try:
-        ollama_url = _resolve_ollama_url()
+        ollama_url = resolve_ollama_url()
         ef = get_embedding_function(url=ollama_url)
         ef(["health check"])
         logger.info("Ollama health check passed (nomic-embed-text ready)")

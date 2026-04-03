@@ -620,7 +620,7 @@ def test_get_talk_docstring_has_workflow_hint():
 
 
 def test_check_ollama_passes_resolved_url(monkeypatch):
-    """_check_ollama passes _resolve_ollama_url() result to get_embedding_function(url=...)."""
+    """_check_ollama passes resolve_ollama_url() result to get_embedding_function(url=...)."""
     monkeypatch.setenv("OLLAMA_URL", "http://custom-host:9999")
     captured_url = {}
 
