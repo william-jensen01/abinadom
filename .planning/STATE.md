@@ -6,7 +6,7 @@ status: Active
 stopped_at: ~
 last_updated: "2026-04-03T00:00:00.000Z"
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -19,35 +19,29 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** All LDS content searchable by meaning — find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** Planning next milestone (v3.0) — remote access and/or expanded content
+**Current focus:** Phase 13 — HTTP Transport (v3.0 Remote MCP)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-04-03 — Milestone v3.0 started
+Phase: 13 of 17 (HTTP Transport)
+Plan: 0 of ? in current phase
+Status: Ready to plan
+Last activity: 2026-04-03 — v3.0 roadmap created; Phases 13–17 defined
+
+Progress: [████████░░░░░░░░░░░░] v1.0 + v2.0 complete; v3.0 not started
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 0 (v2.0)
+- Total plans completed: 0 (v3.0)
 - Average duration: --
 - Total execution time: 0 hours
 
-**By Phase:**
+**By Phase (v2.0 reference):**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
-
-**Recent Trend:**
-
-- Last 5 plans: --
-- Trend: --
-
-*Updated after each plan completion*
 | Phase 09-server-foundation P01 | 15 | 3 tasks | 5 files |
 | Phase 09.1-gap-identified-in-phase-10-plans P01 | 9 | 2 tasks | 3 files |
 | Phase 10-tools-normalization P01 | 8 | 2 tasks | 2 files |
@@ -56,33 +50,31 @@ Last activity: 2026-04-03 — Milestone v3.0 started
 | Phase 11-claude-desktop-integration P02 | 10 | 2 tasks | 2 files |
 | Phase 12-tech-debt-validation-cleanup P01 | 30 | 3 tasks | 7 files |
 
+**Recent Trend:**
+
+- Last 5 plans: v2.0 plans ranged 5–30 min
+- Trend: Stable
+
+*Updated after each plan completion*
+
 ## Accumulated Context
 
 ### Roadmap Evolution
 
 - Phase 09.1 inserted after Phase 9: gap identified in phase 10 plans (URGENT)
+- v3.0: Caddy + cloudflared separated into Phase 16 (depends on working Compose stack in Phase 15)
+- v3.0: Auth module is a new module — does not touch existing MCP tools
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [Roadmap v2.0]: 3-phase structure — Foundation (startup) → Tools (search + get_talk) → Integration (Claude Desktop)
-- [Roadmap v2.0]: INTG-01 (stdio logging) assigned to Phase 9 — it is server infrastructure, not a tool concern
-- [Phase 08]: topics field uses List[str] with default_factory=list; GROUP_CONCAT uses pipe delimiter to match _flatten_metadata convention
-- [Phase 09-server-foundation]: FastMCP lifespan @asynccontextmanager chosen over inline __main__ startup for server lifecycle integration
-- [Phase 09-server-foundation]: get_collection() not get_or_create_collection() as ChromaDB startup guard against silent empty DB creation
-- [Phase 09-server-foundation]: Startup order: path resolution → Ollama check → collection warmup (fail fast on cheapest checks first)
-- [Phase 09.1-gap-identified-in-phase-10-plans]: Inject speaker_name, title, conference_year, conference_month into paragraph ChromaDB records at load time rather than modifying ParagraphData model — keeps model stable (D-03) and eliminates per-result secondary lookup in search tool
-- [Phase 09.1-gap-identified-in-phase-10-plans]: Optional talk_metadata parameter (None default) on prepare_paragraph_records() preserves backward compatibility
-- [Phase 10-tools-normalization]: Helper functions are pure/sync — directly importable in tests without pytest-asyncio; _build_where_filter returns None not {} for no-filter case; speaker filtering is Python post-filter (chromadb 1.5.5  silently broken on metadata)
-- [Phase 10-tools-normalization]: Tools placed after mcp=FastMCP() line; Context defaults to None for testability; fetch_n multiplied by 4 for speaker filter pre-fetch; paragraph_number cast to int in sort key
-- [Phase 11-claude-desktop-integration]: mcp.instructions is a direct attribute on FastMCP (not mcp.settings.instructions)
-- [Phase 11-claude-desktop-integration]: OLLAMA_URL env var is a base URL (http://host:port); /api/embeddings suffix always appended in get_embedding_function
-- [Phase 11-claude-desktop-integration]: Config template uses absolute virtualenv Python path as command field (D-01); no cwd field (D-02); CHROMADB_PATH and OLLAMA_URL in env block (D-03/D-04)
-- [Phase 11-claude-desktop-integration]: Two-layer prompting: FastMCP mcp.instructions (tool-level) + Project system prompt (adaptive persona: research assistant / discussion partner / study guide) with search-first behavior
-- [Phase 12-tech-debt-validation-cleanup]: _resolve_ollama_url() is single source of truth in server.py: resolved once, passed as url= to get_embedding_function, reused in error message
-- [Phase 12-tech-debt-validation-cleanup]: Phase 9.1 VER-06 documented as D-04 exception: live ChromaDB enrichment requires user --force re-run; unit tests for enrichment logic are green
+- [Phase 12]: _resolve_ollama_url() is single source of truth in server.py; resolved once, passed as url= to get_embedding_function
+- [Phase 11]: Two-layer prompting: FastMCP mcp.instructions (tool-level) + SYSTEM_PROMPT.md (adaptive persona)
+- [Phase 11]: OLLAMA_URL env var is a base URL; /api/embeddings suffix always appended in get_embedding_function
+- [Phase 10]: Speaker filtering is Python post-filter (ChromaDB 1.5.5 metadata string filters silently broken)
+- [Phase 09]: get_collection() not get_or_create_collection() as ChromaDB startup guard
 
 ### Pending Todos
 
@@ -101,6 +93,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T05:24:14.664Z
-Stopped at: Completed 12-tech-debt-validation-cleanup 12-01-PLAN.md
+Last session: 2026-04-03
+Stopped at: v3.0 roadmap created — Phase 13 ready to plan
 Resume file: None

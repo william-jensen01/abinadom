@@ -63,24 +63,24 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TRANS-01 | — | Pending |
-| TRANS-02 | — | Pending |
-| AUTH-01 | — | Pending |
-| AUTH-02 | — | Pending |
-| AUTH-03 | — | Pending |
-| DEPLOY-01 | — | Pending |
-| DEPLOY-02 | — | Pending |
-| DEPLOY-03 | — | Pending |
-| DEPLOY-04 | — | Pending |
-| DOCS-01 | — | Pending |
-| DOCS-02 | — | Pending |
-| DOCS-03 | — | Pending |
+| TRANS-01 | Phase 13 | Pending |
+| TRANS-02 | Phase 13 | Pending |
+| AUTH-01 | Phase 14 | Pending |
+| AUTH-02 | Phase 14 | Pending |
+| AUTH-03 | Phase 14 | Pending |
+| DEPLOY-01 | Phase 15 | Pending |
+| DEPLOY-02 | Phase 15 | Pending |
+| DEPLOY-03 | Phase 16 | Pending |
+| DEPLOY-04 | Phase 16 | Pending |
+| DOCS-01 | Phase 17 | Pending |
+| DOCS-02 | Phase 17 | Pending |
+| DOCS-03 | Phase 17 | Pending |
 
 **Coverage:**
 - v3.0 requirements: 12 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 12 ⚠️
+- Mapped to phases: 12 (100%)
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-03*
-*Last updated: 2026-04-03 after initial definition*
+*Last updated: 2026-04-03 — traceability filled after roadmap creation (Phases 13–17)*
