@@ -29,7 +29,7 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
 
 - [ ] **Phase 9: Server Foundation** — Reliable server startup: absolute path resolution, Ollama health check, collection warmup, stdio transport
 - [x] **Phase 10: Tools & Normalization** — Working `search` and `get_talk` tools with speaker/date/collection normalizers and clean output (completed 2026-04-02)
-- [ ] **Phase 11: Claude Desktop Integration** — End-to-end connection: Claude Desktop config wired and system prompt established
+- [x] **Phase 11: Claude Desktop Integration** — End-to-end connection: Claude Desktop config wired and system prompt established (completed 2026-04-03)
 
 ## Phase Details
 
@@ -79,10 +79,10 @@ Plans:
   1. Claude Desktop connects to the MCP server using an absolute virtualenv path in `claude_desktop_config.json` without errors
   2. Claude responds to LDS content questions conversationally, drawing on the `search` and `get_talk` tools without needing prompting from the user
   3. System prompt establishes Claude's role so that it synthesizes and discusses content rather than merely returning raw tool output
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [x] 11-01-PLAN.md — OLLAMA_URL env var support, FastMCP instructions, tool docstring hints, Wave 0 tests
-- [ ] 11-02-PLAN.md — Claude Desktop config template, system prompt deliverable, human connection verification
+- [x] 11-02-PLAN.md — Claude Desktop config template, system prompt deliverable, human connection verification
 
 ## Progress
 
@@ -99,4 +99,4 @@ Plans:
 | 9. Server Foundation | v2.0 | 0/1 | Planned    |  |
 | 9.1 Paragraph Metadata Enrichment | v2.0 | 0/1 | Planned | - |
 | 10. Tools & Normalization | v2.0 | 1/2 | Complete    | 2026-04-02 |
-| 11. Claude Desktop Integration | v2.0 | 1/2 | In Progress|  |
+| 11. Claude Desktop Integration | v2.0 | 2/2 | Complete   | 2026-04-03 |

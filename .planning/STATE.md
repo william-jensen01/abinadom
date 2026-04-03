@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: MCP Server
 status: Ready to execute
-stopped_at: Completed 11-claude-desktop-integration 11-01-PLAN.md
-last_updated: "2026-04-02T19:52:07.925Z"
+stopped_at: Completed 11-claude-desktop-integration 11-02-PLAN.md
+last_updated: "2026-04-03T02:20:40.460Z"
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State
@@ -51,6 +51,7 @@ Plan: 2 of 2
 | Phase 10-tools-normalization P01 | 8 | 2 tasks | 2 files |
 | Phase 10-tools-normalization P02 | 7 | 2 tasks | 2 files |
 | Phase 11-claude-desktop-integration P01 | 5 | 2 tasks | 3 files |
+| Phase 11-claude-desktop-integration P02 | 10 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,8 @@ Recent decisions affecting current work:
 - [Phase 10-tools-normalization]: Tools placed after mcp=FastMCP() line; Context defaults to None for testability; fetch_n multiplied by 4 for speaker filter pre-fetch; paragraph_number cast to int in sort key
 - [Phase 11-claude-desktop-integration]: mcp.instructions is a direct attribute on FastMCP (not mcp.settings.instructions)
 - [Phase 11-claude-desktop-integration]: OLLAMA_URL env var is a base URL (http://host:port); /api/embeddings suffix always appended in get_embedding_function
+- [Phase 11-claude-desktop-integration]: Config template uses absolute virtualenv Python path as command field (D-01); no cwd field (D-02); CHROMADB_PATH and OLLAMA_URL in env block (D-03/D-04)
+- [Phase 11-claude-desktop-integration]: Two-layer prompting: FastMCP mcp.instructions (tool-level) + Project system prompt (adaptive persona: research assistant / discussion partner / study guide) with search-first behavior
 
 ### Pending Todos
 
@@ -93,6 +96,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-02T19:52:07.920Z
-Stopped at: Completed 11-claude-desktop-integration 11-01-PLAN.md
+Last session: 2026-04-03T02:20:40.454Z
+Stopped at: Completed 11-claude-desktop-integration 11-02-PLAN.md
 Resume file: None
