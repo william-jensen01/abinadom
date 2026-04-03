@@ -29,7 +29,7 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - ✓ Post-run verification — record counts, semantic search, metadata filters, FK integrity — all passed — v1.0
 - ✓ Topic metadata enrichment — `TalkMetadata.topics: List[str]`, GROUP_CONCAT subquery, Phase 6 doc text, ChromaDB metadata — v1.0
 
-### Active
+### Active (v2.0 — all complete)
 
 <!-- Milestone 2: MCP Server — v2.0 -->
 
@@ -40,6 +40,7 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - ✓ Concise tool descriptions — minimal token overhead — Phase 11 (v2.0)
 - ✓ System prompt priming Claude to engage conversationally, not just retrieve — Phase 11 (v2.0)
 - ✓ Claude Desktop config wired and working end-to-end — Phase 11 (v2.0)
+- ✓ Tech debt cleanup — all 4 phase VALIDATION.md files Nyquist-compliant, SUMMARY frontmatter complete, OLLAMA_URL single-source consolidated — Phase 12 (v2.0)
 
 ### Out of Scope
 
@@ -89,4 +90,4 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - Claude Desktop config wired and working end-to-end
 
 ---
-*Last updated: 2026-04-03 — Phase 11 complete: Claude Desktop integration shipped — v2.0 MCP Server milestone delivered*
+*Last updated: 2026-04-03 — Phase 12 complete: v2.0 tech debt closed — milestone ready for archive*
