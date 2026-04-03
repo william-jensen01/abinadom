@@ -99,4 +99,4 @@ Plans:
 | 9. Server Foundation | v2.0 | 0/1 | Planned    |  |
 | 9.1 Paragraph Metadata Enrichment | v2.0 | 0/1 | Planned | - |
 | 10. Tools & Normalization | v2.0 | 1/2 | Complete    | 2026-04-02 |
-| 11. Claude Desktop Integration | v2.0 | 2/2 | Complete   | 2026-04-03 |
+| 11. Claude Desktop Integration | v2.0 | 2/2 | Complete    | 2026-04-03 |
