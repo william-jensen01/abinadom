@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 General Conference Pipeline** — Phases 1–8 (shipped 2026-03-27)
-- 📋 **v2.0 MCP Server** — Phases 9–11 (planned)
+- 📋 **v2.0 MCP Server** — Phases 9–12 (planned)
 
 ## Phases
 
@@ -27,7 +27,7 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
 
 **Milestone Goal:** Expose ChromaDB via a local MCP server so Claude Desktop can search by meaning, read full talks, and engage conversationally with General Conference content.
 
-- [ ] **Phase 9: Server Foundation** — Reliable server startup: absolute path resolution, Ollama health check, collection warmup, stdio transport
+- [x] **Phase 9: Server Foundation** — Reliable server startup: absolute path resolution, Ollama health check, collection warmup, stdio transport (completed 2026-04-02)
 - [x] **Phase 10: Tools & Normalization** — Working `search` and `get_talk` tools with speaker/date/collection normalizers and clean output (completed 2026-04-02)
 - [x] **Phase 11: Claude Desktop Integration** — End-to-end connection: Claude Desktop config wired and system prompt established (completed 2026-04-03)
 
@@ -42,9 +42,9 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
   2. Server launched without Ollama running exits immediately with a clear error message (not a cryptic stack trace)
   3. Server launched successfully has all 4 ChromaDB collections loaded before any tool call arrives
   4. All server log output goes to stderr; stdout carries only MCP protocol messages
-**Plans:** 0/1 plans executed
+**Plans:** 1/1 plans executed
 Plans:
-- [ ] 09-01-PLAN.md — Install mcp SDK, create server.py with startup validation, unit tests
+- [x] 09-01-PLAN.md — Install mcp SDK, create server.py with startup validation, unit tests
 
 ### Phase 09.1: Paragraph Metadata Enrichment (INSERTED)
 
@@ -54,7 +54,7 @@ Plans:
 **Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 09.1-01-PLAN.md — Enrich prepare_paragraph_records with talk metadata injection, add VER-06
+- [x] 09.1-01-PLAN.md — Enrich prepare_paragraph_records with talk metadata injection, add VER-06
 
 ### Phase 10: Tools & Normalization
 **Goal**: Users can perform semantic search and retrieve full talks through tools that accept natural language inputs and return clean, readable results
@@ -69,7 +69,7 @@ Plans:
 **Plans:** 2/2 plans complete
 Plans:
 - [x] 10-01-PLAN.md — TDD helper functions: _build_where_filter, _matches_speaker, _format_search_result, _parse_talk_id
-- [ ] 10-02-PLAN.md — Implement search and get_talk MCP tools with integration tests
+- [x] 10-02-PLAN.md — Implement search and get_talk MCP tools with integration tests
 
 ### Phase 11: Claude Desktop Integration
 **Goal**: Claude Desktop is connected to the MCP server and engages with LDS content as an informed discussion partner
@@ -84,6 +84,19 @@ Plans:
 - [x] 11-01-PLAN.md — OLLAMA_URL env var support, FastMCP instructions, tool docstring hints, Wave 0 tests
 - [x] 11-02-PLAN.md — Claude Desktop config template, system prompt deliverable, human connection verification
 
+### Phase 12: Tech Debt & Validation Cleanup
+**Goal:** Close all audit-identified tech debt so the v2.0 milestone can be archived cleanly: run Nyquist validation for all four phases, patch incomplete SUMMARY frontmatter, and consolidate the `_resolve_ollama_url()` double-read in server.py.
+**Depends on:** Phase 11
+**Requirements:** (none — no new requirements; addresses audit-identified tech debt only)
+**Gap Closure:** Closes tech_debt items from v2.0-MILESTONE-AUDIT.md
+**Success Criteria** (what must be TRUE):
+  1. All 4 VALIDATION.md files have `nyquist_compliant: true` (or documented exception)
+  2. 10-02-PLAN.md and 11-01-PLAN.md SUMMARY frontmatter lists their completed requirements
+  3. `_resolve_ollama_url()` is the single source of truth for OLLAMA_URL — `get_embedding_function()` receives it as a parameter
+**Plans:** 0/1 plans executed
+Plans:
+- [ ] 12-01-PLAN.md — Nyquist validation runs, SUMMARY frontmatter patches, OLLAMA_URL consolidation
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -96,7 +109,8 @@ Plans:
 | 6. Pipeline Orchestrator | v1.0 | 2/2 | Complete | 2026-03-26 |
 | 7. Full Run & Verification | v1.0 | 2/2 | Complete | 2026-03-27 |
 | 8. Topic Metadata | v1.0 | 1/1 | Complete | 2026-03-27 |
-| 9. Server Foundation | v2.0 | 0/1 | Planned    |  |
-| 9.1 Paragraph Metadata Enrichment | v2.0 | 0/1 | Planned | - |
-| 10. Tools & Normalization | v2.0 | 1/2 | Complete    | 2026-04-02 |
-| 11. Claude Desktop Integration | v2.0 | 2/2 | Complete    | 2026-04-03 |
+| 9. Server Foundation | v2.0 | 1/1 | Complete | 2026-04-02 |
+| 9.1 Paragraph Metadata Enrichment | v2.0 | 1/1 | Complete | 2026-04-02 |
+| 10. Tools & Normalization | v2.0 | 2/2 | Complete | 2026-04-02 |
+| 11. Claude Desktop Integration | v2.0 | 2/2 | Complete | 2026-04-03 |
+| 12. Tech Debt & Validation Cleanup | v2.0 | 0/1 | Planned | — |
