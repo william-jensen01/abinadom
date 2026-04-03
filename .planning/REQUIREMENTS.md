@@ -10,7 +10,7 @@ Requirements for the Remote MCP milestone. Each maps to roadmap phases.
 ### Transport
 
 - [x] **TRANS-01**: User can connect any MCP client (Claude.ai, ChatGPT, etc.) via Streamable HTTP URL
-- [ ] **TRANS-02**: Operator can verify server health via GET /health endpoint
+- [x] **TRANS-02**: Operator can verify server health via GET /health endpoint
 
 ### Auth
 
@@ -64,7 +64,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | TRANS-01 | Phase 13 | Complete |
-| TRANS-02 | Phase 13 | Pending |
+| TRANS-02 | Phase 13 | Complete |
 | AUTH-01 | Phase 14 | Pending |
 | AUTH-02 | Phase 14 | Pending |
 | AUTH-03 | Phase 14 | Pending |
