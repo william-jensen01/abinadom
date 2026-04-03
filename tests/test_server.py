@@ -636,3 +636,39 @@ def test_check_ollama_passes_resolved_url(monkeypatch):
 
     _check_ollama()
     assert captured_url["url"] == "http://custom-host:9999"
+
+
+# ---------------------------------------------------------------------------
+# TRANS-01: HTTP transport configuration
+# ---------------------------------------------------------------------------
+
+
+def test_mcp_host_port_defaults(monkeypatch):
+    monkeypatch.delenv("MCP_HOST", raising=False)
+    monkeypatch.delenv("MCP_PORT", raising=False)
+    from server import mcp
+    assert mcp.settings.host == "0.0.0.0"
+    assert mcp.settings.port == 8000
+
+
+def test_mcp_host_port_env_override(monkeypatch):
+    monkeypatch.setenv("MCP_HOST", "127.0.0.1")
+    monkeypatch.setenv("MCP_PORT", "9000")
+    import server
+    import importlib
+    importlib.reload(server)
+    assert server.mcp.settings.host == "127.0.0.1"
+    assert server.mcp.settings.port == 9000
+
+
+def test_entry_point_transport():
+    import server
+    import inspect
+    source = inspect.getsource(server)
+    assert 'transport="streamable-http"' in source
+
+
+def test_no_stdio_references():
+    import server, inspect
+    source = inspect.getsource(server)
+    assert "stdio" not in source.lower(), f"Found stdio reference in server.py source"
