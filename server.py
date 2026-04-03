@@ -91,7 +91,8 @@ def _check_ollama() -> None:
     error message on any exception.
     """
     try:
-        ef = get_embedding_function()
+        ollama_url = _resolve_ollama_url()
+        ef = get_embedding_function(url=ollama_url)
         ef(["health check"])
         logger.info("Ollama health check passed (nomic-embed-text ready)")
     except Exception as e:
@@ -103,7 +104,7 @@ def _check_ollama() -> None:
             )
         else:
             print(
-                f"ERROR: Ollama unreachable at {_resolve_ollama_url()}. Start Ollama and retry.",
+                f"ERROR: Ollama unreachable at {ollama_url}. Start Ollama and retry.",
                 file=sys.stderr,
             )
         sys.exit(1)
