@@ -672,3 +672,69 @@ def test_no_stdio_references():
     import server, inspect
     source = inspect.getsource(server)
     assert "stdio" not in source.lower(), f"Found stdio reference in server.py source"
+
+
+# ---------------------------------------------------------------------------
+# TRANS-02: Health endpoint
+# ---------------------------------------------------------------------------
+
+from starlette.testclient import TestClient
+
+
+def test_health_returns_200():
+    """GET /health returns 200 with ok status when both deps are reachable."""
+    mock_ef = MagicMock(return_value=[[0.1] * 10])
+    mock_ef_cls = MagicMock(return_value=mock_ef)
+    mock_client = MagicMock()
+    mock_client.get_collection.return_value = MagicMock()
+
+    with patch("server.get_embedding_function", mock_ef_cls), \
+         patch("server.chromadb.PersistentClient", return_value=mock_client):
+        from server import mcp
+        app = mcp.streamable_http_app()
+        client = TestClient(app)
+        response = client.get("/health")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "ok"
+    assert data["ollama"] == "reachable"
+    assert data["chromadb"] == "reachable"
+
+
+def test_health_ollama_down():
+    """GET /health returns 503 when Ollama is unreachable."""
+    mock_ef = MagicMock(side_effect=Exception("connection refused"))
+    mock_ef_cls = MagicMock(return_value=mock_ef)
+    mock_client = MagicMock()
+    mock_client.get_collection.return_value = MagicMock()
+
+    with patch("server.get_embedding_function", mock_ef_cls), \
+         patch("server.chromadb.PersistentClient", return_value=mock_client):
+        from server import mcp
+        app = mcp.streamable_http_app()
+        client = TestClient(app)
+        response = client.get("/health")
+
+    assert response.status_code == 503
+    data = response.json()
+    assert data["ollama"] == "unreachable"
+    assert data["status"] == "degraded"
+
+
+def test_health_chromadb_down():
+    """GET /health returns 503 when ChromaDB is unreachable."""
+    mock_ef = MagicMock(return_value=[[0.1] * 10])
+    mock_ef_cls = MagicMock(return_value=mock_ef)
+
+    with patch("server.get_embedding_function", mock_ef_cls), \
+         patch("server.chromadb.PersistentClient", side_effect=Exception("path not found")):
+        from server import mcp
+        app = mcp.streamable_http_app()
+        client = TestClient(app)
+        response = client.get("/health")
+
+    assert response.status_code == 503
+    data = response.json()
+    assert data["chromadb"] == "unreachable"
+    assert data["status"] == "degraded"
