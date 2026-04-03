@@ -44,7 +44,7 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 
 <!-- v3.0 Remote MCP — in progress -->
 
-- [ ] Streamable HTTP transport replacing stdio — mcp 1.26.0 transport swap
+- ✓ Streamable HTTP transport replacing stdio — `MCP_HOST`/`MCP_PORT` env vars, `GET /health` with live Ollama + ChromaDB checks — Phase 13 (v3.0)
 - [ ] Bearer token API keys with per-user usage tracking
 - [ ] Caddy reverse proxy for TLS termination
 - [ ] Cloudflare Tunnel for stable public URL (home IP hidden)
@@ -78,7 +78,7 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - **Architecture**: Layered, configuration-driven (`config/pipeline_config.py`), typed dataclasses, pure functions, idempotent; fail-fast (schema validation) + fail-safe (FK spot-check) hybrid; MCP server as read-only consumer of ChromaDB
 - **Processing model**: Per-talk streaming loop — Phases 1–6 run sequentially per talk; ChromaDB write buffer flushes every 1,000 talks
 - **ID strategy**: Existing SQLite primary keys (`talk_8820`, `para_156789`, etc.) for bidirectional lookups
-- **MCP server**: stdio transport, absolute path resolution, Ollama dependency check at startup, speaker post-filter (ChromaDB 1.5.5 metadata filter workaround)
+- **MCP server**: Streamable HTTP transport (MCP_HOST/MCP_PORT), absolute path resolution, Ollama dependency check at startup, speaker post-filter (ChromaDB 1.5.5 metadata filter workaround); `GET /health` endpoint returns live Ollama + ChromaDB status
 - **Next milestone**: v3.0 — Remote MCP: Streamable HTTP, bearer token auth, Docker Compose, Cloudflare Tunnel, VPS-portable
 
 ## Constraints
@@ -122,4 +122,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-03 — v3.0 milestone started, Remote MCP*
+*Last updated: 2026-04-03 — Phase 13 complete: Streamable HTTP transport + health endpoint*
