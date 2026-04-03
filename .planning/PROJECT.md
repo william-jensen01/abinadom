@@ -37,9 +37,9 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - ✓ Paragraph metadata enrichment — `prepare_paragraph_records()` injects `speaker_name`, `title`, `conference_year`, `conference_month` into ChromaDB paragraph metadata; VER-06 coverage check added — Phase 9.1 (v2.0)
 - ✓ MCP server with `search` tool — semantic search + metadata filters across 4 collections, speaker post-filter, collection validation — Phase 10 (v2.0)
 - ✓ MCP server with `get_talk` tool — full ordered talk content by ID, paragraphs sorted by paragraph_number — Phase 10 (v2.0)
-- [ ] Concise tool descriptions — minimal token overhead
-- [ ] System prompt priming Claude to engage conversationally, not just retrieve
-- [ ] Claude Desktop config wired and working end-to-end
+- ✓ Concise tool descriptions — minimal token overhead — Phase 11 (v2.0)
+- ✓ System prompt priming Claude to engage conversationally, not just retrieve — Phase 11 (v2.0)
+- ✓ Claude Desktop config wired and working end-to-end — Phase 11 (v2.0)
 
 ### Out of Scope
 
@@ -89,4 +89,4 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - Claude Desktop config wired and working end-to-end
 
 ---
-*Last updated: 2026-04-02 — Phase 10 complete: search and get_talk MCP tools shipped*
+*Last updated: 2026-04-03 — Phase 11 complete: Claude Desktop integration shipped — v2.0 MCP Server milestone delivered*
