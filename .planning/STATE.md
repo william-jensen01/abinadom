@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: MCP Server
-status: Milestone complete
-stopped_at: Completed 12-tech-debt-validation-cleanup 12-01-PLAN.md
-last_updated: "2026-04-03T05:27:19.177Z"
+status: Archived
+stopped_at: v2.0 milestone archived 2026-04-03
+last_updated: "2026-04-03T00:00:00.000Z"
 progress:
   total_phases: 5
   completed_phases: 5
@@ -16,10 +16,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-30)
+See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** All LDS content searchable by meaning — find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** Phase 12 — tech-debt-validation-cleanup
+**Current focus:** Planning next milestone (v3.0) — remote access and/or expanded content
 
 ## Current Position
 

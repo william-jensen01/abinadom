@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 General Conference Pipeline** — Phases 1–8 (shipped 2026-03-27)
-- 📋 **v2.0 MCP Server** — Phases 9–12 (planned)
+- ✅ **v2.0 MCP Server** — Phases 9–12 (shipped 2026-04-03)
 
 ## Phases
 
@@ -23,79 +23,18 @@ Full details: `.planning/milestones/v1.0-ROADMAP.md`
 
 </details>
 
-### v2.0 MCP Server (Planned)
+<details>
+<summary>✅ v2.0 MCP Server (Phases 9–12) — SHIPPED 2026-04-03</summary>
 
-**Milestone Goal:** Expose ChromaDB via a local MCP server so Claude Desktop can search by meaning, read full talks, and engage conversationally with General Conference content.
+- [x] Phase 9: Server Foundation (1/1 plans) — completed 2026-04-02
+- [x] Phase 9.1: Paragraph Metadata Enrichment (1/1 plans) — completed 2026-04-02
+- [x] Phase 10: Tools & Normalization (2/2 plans) — completed 2026-04-02
+- [x] Phase 11: Claude Desktop Integration (2/2 plans) — completed 2026-04-03
+- [x] Phase 12: Tech Debt & Validation Cleanup (1/1 plans) — completed 2026-04-03
 
-- [x] **Phase 9: Server Foundation** — Reliable server startup: absolute path resolution, Ollama health check, collection warmup, stdio transport (completed 2026-04-02)
-- [x] **Phase 10: Tools & Normalization** — Working `search` and `get_talk` tools with speaker/date/collection normalizers and clean output (completed 2026-04-02)
-- [x] **Phase 11: Claude Desktop Integration** — End-to-end connection: Claude Desktop config wired and system prompt established (completed 2026-04-03)
+Full details: `.planning/milestones/v2.0-ROADMAP.md`
 
-## Phase Details
-
-### Phase 9: Server Foundation
-**Goal**: The MCP server starts reliably, warms up all collections, and fails fast with actionable errors when dependencies are missing
-**Depends on**: Phase 8 (ChromaDB populated and verified)
-**Requirements**: CORE-01, CORE-02, CORE-03, INTG-01
-**Success Criteria** (what must be TRUE):
-  1. Server launched from any working directory finds ChromaDB collections (no silent empty-DB creation)
-  2. Server launched without Ollama running exits immediately with a clear error message (not a cryptic stack trace)
-  3. Server launched successfully has all 4 ChromaDB collections loaded before any tool call arrives
-  4. All server log output goes to stderr; stdout carries only MCP protocol messages
-**Plans:** 1/1 plans executed
-Plans:
-- [x] 09-01-PLAN.md — Install mcp SDK, create server.py with startup validation, unit tests
-
-### Phase 09.1: Paragraph Metadata Enrichment (INSERTED)
-
-**Goal:** Enrich paragraph ChromaDB records with talk-level metadata (speaker_name, title, conference_year, conference_month) so Phase 10 search results return the full 6-field shape without secondary lookup
-**Requirements**: Unblocks CORE-04, TOOL-01, TOOL-02, TOOL-03, TOOL-04, TOOL-05
-**Depends on:** Phase 9
-**Plans:** 1/1 plans complete
-
-Plans:
-- [x] 09.1-01-PLAN.md — Enrich prepare_paragraph_records with talk metadata injection, add VER-06
-
-### Phase 10: Tools & Normalization
-**Goal**: Users can perform semantic search and retrieve full talks through tools that accept natural language inputs and return clean, readable results
-**Depends on**: Phase 9
-**Requirements**: CORE-04, CORE-05, CORE-06, TOOL-01, TOOL-02, TOOL-03, TOOL-04, TOOL-05
-**Success Criteria** (what must be TRUE):
-  1. User can issue a natural-language query and receive relevant results from any of the 4 collections
-  2. User can pass an informal speaker name ("Holland", "Elder Holland") and get results attributed to the correct speaker
-  3. User can pass an informal date ("2020", "April 2020") and get results filtered to the right conference
-  4. User can retrieve the full ordered text of a talk by ID, with paragraphs in narrative sequence
-  5. Search results contain readable snippet text only — no internal pipeline fields exposed
-**Plans:** 2/2 plans complete
-Plans:
-- [x] 10-01-PLAN.md — TDD helper functions: _build_where_filter, _matches_speaker, _format_search_result, _parse_talk_id
-- [x] 10-02-PLAN.md — Implement search and get_talk MCP tools with integration tests
-
-### Phase 11: Claude Desktop Integration
-**Goal**: Claude Desktop is connected to the MCP server and engages with LDS content as an informed discussion partner
-**Depends on**: Phase 10
-**Requirements**: INTG-02, INTG-03
-**Success Criteria** (what must be TRUE):
-  1. Claude Desktop connects to the MCP server using an absolute virtualenv path in `claude_desktop_config.json` without errors
-  2. Claude responds to LDS content questions conversationally, drawing on the `search` and `get_talk` tools without needing prompting from the user
-  3. System prompt establishes Claude's role so that it synthesizes and discusses content rather than merely returning raw tool output
-**Plans:** 2/2 plans complete
-Plans:
-- [x] 11-01-PLAN.md — OLLAMA_URL env var support, FastMCP instructions, tool docstring hints, Wave 0 tests
-- [x] 11-02-PLAN.md — Claude Desktop config template, system prompt deliverable, human connection verification
-
-### Phase 12: Tech Debt & Validation Cleanup
-**Goal:** Close all audit-identified tech debt so the v2.0 milestone can be archived cleanly: run Nyquist validation for all four phases, patch incomplete SUMMARY frontmatter, and consolidate the `_resolve_ollama_url()` double-read in server.py.
-**Depends on:** Phase 11
-**Requirements:** (none — no new requirements; addresses audit-identified tech debt only)
-**Gap Closure:** Closes tech_debt items from v2.0-MILESTONE-AUDIT.md
-**Success Criteria** (what must be TRUE):
-  1. All 4 VALIDATION.md files have `nyquist_compliant: true` (or documented exception)
-  2. 10-02-PLAN.md and 11-01-PLAN.md SUMMARY frontmatter lists their completed requirements
-  3. `_resolve_ollama_url()` is the single source of truth for OLLAMA_URL — `get_embedding_function()` receives it as a parameter
-**Plans:** 1/1 plans complete
-Plans:
-- [x] 12-01-PLAN.md — Nyquist validation runs, SUMMARY frontmatter patches, OLLAMA_URL consolidation
+</details>
 
 ## Progress
 

@@ -29,9 +29,7 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - ✓ Post-run verification — record counts, semantic search, metadata filters, FK integrity — all passed — v1.0
 - ✓ Topic metadata enrichment — `TalkMetadata.topics: List[str]`, GROUP_CONCAT subquery, Phase 6 doc text, ChromaDB metadata — v1.0
 
-### Active (v2.0 — all complete)
-
-<!-- Milestone 2: MCP Server — v2.0 -->
+<!-- v2.0 MCP Server — shipped 2026-04-03 -->
 
 - ✓ MCP server foundation — FastMCP server with lifespan startup validation (ChromaDB path resolution, Ollama health check, 4-collection warmup, stderr-only logging) — Phase 9 (v2.0)
 - ✓ Paragraph metadata enrichment — `prepare_paragraph_records()` injects `speaker_name`, `title`, `conference_year`, `conference_month` into ChromaDB paragraph metadata; VER-06 coverage check added — Phase 9.1 (v2.0)
@@ -41,6 +39,8 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - ✓ System prompt priming Claude to engage conversationally, not just retrieve — Phase 11 (v2.0)
 - ✓ Claude Desktop config wired and working end-to-end — Phase 11 (v2.0)
 - ✓ Tech debt cleanup — all 4 phase VALIDATION.md files Nyquist-compliant, SUMMARY frontmatter complete, OLLAMA_URL single-source consolidated — Phase 12 (v2.0)
+
+### Active (v3.0 — next milestone)
 
 ### Out of Scope
 
@@ -53,11 +53,12 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 ## Context
 
 - **Data source**: BYU Scripture Citation Index SQLite database (5,838 General Conference talks via INNER JOIN conference_talk — GC-only, verified)
-- **Current state (v1.0)**: Full 8-phase pipeline shipped — Phases 1–6 extractors bug-free, tested, and loading to ChromaDB; `scripts/run_pipeline.py` orchestrates all 5,838 talks; ChromaDB holds 5,838 talks / 202,175 paragraphs / 67,307 citations / 25,608 footnotes
-- **Architecture**: Layered, configuration-driven (`config/pipeline_config.py`), typed dataclasses, pure functions, idempotent; fail-fast (schema validation) + fail-safe (FK spot-check) hybrid
+- **Current state (v2.0)**: Full MCP server shipped — FastMCP with startup validation, `search` and `get_talk` tools, Claude Desktop config template, system prompt, 38 server tests green; ChromaDB holds 5,838 talks / 202,175 paragraphs / 67,307 citations / 25,608 footnotes (paragraphs enriched with speaker/title/date metadata)
+- **Architecture**: Layered, configuration-driven (`config/pipeline_config.py`), typed dataclasses, pure functions, idempotent; fail-fast (schema validation) + fail-safe (FK spot-check) hybrid; MCP server as read-only consumer of ChromaDB
 - **Processing model**: Per-talk streaming loop — Phases 1–6 run sequentially per talk; ChromaDB write buffer flushes every 1,000 talks
 - **ID strategy**: Existing SQLite primary keys (`talk_8820`, `para_156789`, etc.) for bidirectional lookups
-- **Current milestone**: v2.0 MCP Server — local MCP server exposing `search` and `get_talk` tools to Claude Desktop for conversational exploration of GC talks
+- **MCP server**: stdio transport, absolute path resolution, Ollama dependency check at startup, speaker post-filter (ChromaDB 1.5.5 metadata filter workaround)
+- **Next milestone**: v3.0 — Remote access and/or expanded content (Journal of Discourse, scriptures)
 
 ## Constraints
 
@@ -76,18 +77,10 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 | MCP server as separate milestone | Pipeline correctness must be verified before building search layer on top | ✓ Good — Milestone 1 complete, ready for Milestone 2 |
 | 4 ChromaDB collections | Talks, paragraphs, citations, footnotes — separate by semantic role | ✓ Good — 5,838 talks / 202,175 paras / 67,307 citations / 25,608 footnotes |
 | Paragraph-level chunking | Preserves natural document structure; typical 200–800 tokens | ✓ Good |
+| FastMCP lifespan over __main__ startup | Cleaner lifecycle integration; startup errors surface before any tool call | ✓ Good — all 4 collections warm before first request |
+| Paragraph metadata denormalized at load time | Eliminates secondary ChromaDB lookup per search result | ✓ Good — Phase 9.1 insertion; VER-06 documents user --force re-run expectation |
+| Speaker filtering as Python post-filter | ChromaDB 1.5.5 metadata string filters silently broken | ✓ Good — workaround documented; pre-fetch 4× limit compensates |
+| Two-layer prompting (instructions + system prompt) | FastMCP instructions cover tool-level behavior; SYSTEM_PROMPT.md covers persona and synthesis style | ✓ Good — Claude engages conversationally without prompting |
 
 ---
-## Current Milestone: v2.0 MCP Server
-
-**Goal:** Expose ChromaDB via a local MCP server so Claude Desktop can have rich, conversational exploration of General Conference talks — searching by meaning, reading full talks, discussing LDS teachings as an informed partner.
-
-**Target features:**
-- `search` tool: semantic + metadata filters, server-side fuzzy normalization, collection parameter
-- `get_talk` tool: full ordered talk content by ID
-- Concise tool descriptions — minimal token overhead
-- System prompt priming Claude to engage conversationally
-- Claude Desktop config wired and working end-to-end
-
----
-*Last updated: 2026-04-03 — Phase 12 complete: v2.0 tech debt closed — milestone ready for archive*
+*Last updated: 2026-04-03 after v2.0 milestone — MCP server shipped, Claude Desktop connected end-to-end*
