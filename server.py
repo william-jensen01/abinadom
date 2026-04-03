@@ -1,8 +1,9 @@
 """
 MCP Server — LDS Scripture Citation Index
 
-Exposes the ChromaDB vector collections to Claude Desktop via stdio transport.
+Exposes the ChromaDB vector collections via Streamable HTTP transport.
 Phase 9 builds startup validation; Phase 10 adds search and get_talk tools.
+Phase 13 swaps to HTTP transport with configurable host/port.
 
 Startup sequence:
   1. Resolve ChromaDB path to absolute (CORE-01)
@@ -15,7 +16,7 @@ MCP tools (Phase 10):
   - search: semantic search across 4 collections with optional speaker/year/season filters
   - get_talk: retrieve full ordered text of a conference talk by ID
 
-All logging goes to stderr only (INTG-01). Stdout is reserved for MCP JSON-RPC.
+All logging goes to stderr only.
 """
 import json
 import logging
@@ -245,9 +246,14 @@ async def lifespan(server: FastMCP):
         pass  # ChromaDB PersistentClient needs no explicit close
 
 
+MCP_HOST = os.environ.get("MCP_HOST", "0.0.0.0")
+MCP_PORT = int(os.environ.get("MCP_PORT", "8000"))
+
 mcp = FastMCP(
     "lds-scripture-index",
     lifespan=lifespan,
+    host=MCP_HOST,
+    port=MCP_PORT,
     instructions=(
         "LDS General Conference corpus: 5,838 talks (1971-present) across 4 collections "
         "- talks (full-talk metadata), paragraphs (passage text), citations (scripture "
@@ -389,8 +395,8 @@ async def get_talk(
 
 
 # ---------------------------------------------------------------------------
-# Entry point — stdio transport, no stdout output before MCP loop (INTG-01)
+# Entry point — Streamable HTTP transport (TRANS-01)
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    mcp.run(transport="stdio")
+    mcp.run(transport="streamable-http")
