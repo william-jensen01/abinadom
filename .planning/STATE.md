@@ -2,14 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Remote MCP
-status: Active
-stopped_at: ~
-last_updated: "2026-04-03T00:00:00.000Z"
+status: planning
+stopped_at: Completed 13-http-transport-01-PLAN.md
+last_updated: "2026-04-03T23:30:57.434Z"
+last_activity: 2026-04-03 — v3.0 roadmap created; Phases 13–17 defined
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
 ---
 
 # Project State
@@ -56,6 +57,7 @@ Progress: [████████░░░░░░░░░░░░] v1.0 + 
 - Trend: Stable
 
 *Updated after each plan completion*
+| Phase 13-http-transport P01 | 5 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -75,6 +77,8 @@ Recent decisions affecting current work:
 - [Phase 11]: OLLAMA_URL env var is a base URL; /api/embeddings suffix always appended in get_embedding_function
 - [Phase 10]: Speaker filtering is Python post-filter (ChromaDB 1.5.5 metadata string filters silently broken)
 - [Phase 09]: get_collection() not get_or_create_collection() as ChromaDB startup guard
+- [Phase 13-http-transport]: MCP_HOST defaults to 0.0.0.0 (all interfaces) — required for container/VPS deployment
+- [Phase 13-http-transport]: MCP_HOST/MCP_PORT resolved at module level so importlib.reload picks up patched env vars in tests
 
 ### Pending Todos
 
@@ -93,6 +97,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03
-Stopped at: v3.0 roadmap created — Phase 13 ready to plan
+Last session: 2026-04-03T23:30:57.429Z
+Stopped at: Completed 13-http-transport-01-PLAN.md
 Resume file: None

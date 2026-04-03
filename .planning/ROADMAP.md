@@ -57,9 +57,9 @@ Full details: `.planning/milestones/v2.0-ROADMAP.md`
   1. An MCP client pointed at the server's HTTP URL receives valid MCP responses (search and get_talk tools work)
   2. A GET request to /health returns 200 with a machine-readable status payload
   3. The stdio transport path is removed; the server starts cleanly with no stdio references
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
-- [ ] 13-01-PLAN.md — Swap stdio to streamable-http transport, wire MCP_HOST/MCP_PORT env vars
+- [x] 13-01-PLAN.md — Swap stdio to streamable-http transport, wire MCP_HOST/MCP_PORT env vars
 - [ ] 13-02-PLAN.md — Add GET /health endpoint with live Ollama and ChromaDB dependency checks
 
 ### Phase 14: Auth Module
@@ -123,7 +123,7 @@ Plans:
 | 10. Tools & Normalization | v2.0 | 2/2 | Complete | 2026-04-02 |
 | 11. Claude Desktop Integration | v2.0 | 2/2 | Complete | 2026-04-03 |
 | 12. Tech Debt & Validation Cleanup | v2.0 | 1/1 | Complete | 2026-04-03 |
-| 13. HTTP Transport | v3.0 | 0/2 | Not started | - |
+| 13. HTTP Transport | v3.0 | 1/2 | In Progress|  |
 | 14. Auth Module | v3.0 | 0/? | Not started | - |
 | 15. Docker Compose & Config | v3.0 | 0/? | Not started | - |
 | 16. Caddy & Cloudflare Tunnel | v3.0 | 0/? | Not started | - |
