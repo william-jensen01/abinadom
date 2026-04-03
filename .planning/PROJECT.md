@@ -40,7 +40,16 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - ✓ Claude Desktop config wired and working end-to-end — Phase 11 (v2.0)
 - ✓ Tech debt cleanup — all 4 phase VALIDATION.md files Nyquist-compliant, SUMMARY frontmatter complete, OLLAMA_URL single-source consolidated — Phase 12 (v2.0)
 
-### Active (v3.0 — next milestone)
+### Active (v3.0 — Remote MCP)
+
+<!-- v3.0 Remote MCP — in progress -->
+
+- [ ] Streamable HTTP transport replacing stdio — mcp 1.26.0 transport swap
+- [ ] Bearer token API keys with per-user usage tracking
+- [ ] Caddy reverse proxy for TLS termination
+- [ ] Cloudflare Tunnel for stable public URL (home IP hidden)
+- [ ] Docker Compose deployment (mcp-server + ollama sidecars)
+- [ ] Env-var driven config (12-factor, VPS-portable)
 
 ### Out of Scope
 
@@ -50,6 +59,18 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - Web scraping — HTML is read from SQLite only, no live fetching
 - Multi-user / hosted deployment — personal use only
 
+## Current Milestone: v3.0 Remote MCP
+
+**Goal:** Move from stdio/local to a cloud-portable HTTP MCP server accessible from any frontier LLM client.
+
+**Target features:**
+- Streamable HTTP transport (replaces stdio)
+- Bearer token API keys — per-user, usage tracked
+- Caddy reverse proxy (TLS termination)
+- Cloudflare Tunnel (stable public URL, home IP hidden)
+- Docker Compose deployment (mcp-server + ollama)
+- Env-var driven config (12-factor, VPS-portable)
+
 ## Context
 
 - **Data source**: BYU Scripture Citation Index SQLite database (5,838 General Conference talks via INNER JOIN conference_talk — GC-only, verified)
@@ -58,7 +79,7 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - **Processing model**: Per-talk streaming loop — Phases 1–6 run sequentially per talk; ChromaDB write buffer flushes every 1,000 talks
 - **ID strategy**: Existing SQLite primary keys (`talk_8820`, `para_156789`, etc.) for bidirectional lookups
 - **MCP server**: stdio transport, absolute path resolution, Ollama dependency check at startup, speaker post-filter (ChromaDB 1.5.5 metadata filter workaround)
-- **Next milestone**: v3.0 — Remote access and/or expanded content (Journal of Discourse, scriptures)
+- **Next milestone**: v3.0 — Remote MCP: Streamable HTTP, bearer token auth, Docker Compose, Cloudflare Tunnel, VPS-portable
 
 ## Constraints
 
@@ -83,4 +104,22 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 | Two-layer prompting (instructions + system prompt) | FastMCP instructions cover tool-level behavior; SYSTEM_PROMPT.md covers persona and synthesis style | ✓ Good — Claude engages conversationally without prompting |
 
 ---
-*Last updated: 2026-04-03 after v2.0 milestone — MCP server shipped, Claude Desktop connected end-to-end*
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd:transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd:complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
+
+---
+*Last updated: 2026-04-03 — v3.0 milestone started, Remote MCP*
