@@ -612,3 +612,27 @@ def test_get_talk_docstring_has_workflow_hint():
 
     doc = get_talk.__doc__
     assert "search" in doc.lower()
+
+
+# ---------------------------------------------------------------------------
+# OLLAMA_URL consolidation: _check_ollama passes resolved URL to get_embedding_function
+# ---------------------------------------------------------------------------
+
+
+def test_check_ollama_passes_resolved_url(monkeypatch):
+    """_check_ollama passes _resolve_ollama_url() result to get_embedding_function(url=...)."""
+    monkeypatch.setenv("OLLAMA_URL", "http://custom-host:9999")
+    captured_url = {}
+
+    from extractors.phase6_chromadb_loader import get_embedding_function as original_get_ef
+
+    def mock_get_ef(url=None):
+        captured_url["url"] = url
+        mock_ef = lambda texts: [[0.1] * 10]
+        return mock_ef
+
+    monkeypatch.setattr("server.get_embedding_function", mock_get_ef)
+    from server import _check_ollama
+
+    _check_ollama()
+    assert captured_url["url"] == "http://custom-host:9999"

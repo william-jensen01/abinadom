@@ -93,9 +93,9 @@ Plans:
   1. All 4 VALIDATION.md files have `nyquist_compliant: true` (or documented exception)
   2. 10-02-PLAN.md and 11-01-PLAN.md SUMMARY frontmatter lists their completed requirements
   3. `_resolve_ollama_url()` is the single source of truth for OLLAMA_URL — `get_embedding_function()` receives it as a parameter
-**Plans:** 0/1 plans executed
+**Plans:** 1/1 plans complete
 Plans:
-- [ ] 12-01-PLAN.md — Nyquist validation runs, SUMMARY frontmatter patches, OLLAMA_URL consolidation
+- [x] 12-01-PLAN.md — Nyquist validation runs, SUMMARY frontmatter patches, OLLAMA_URL consolidation
 
 ## Progress
 
@@ -113,4 +113,4 @@ Plans:
 | 9.1 Paragraph Metadata Enrichment | v2.0 | 1/1 | Complete | 2026-04-02 |
 | 10. Tools & Normalization | v2.0 | 2/2 | Complete | 2026-04-02 |
 | 11. Claude Desktop Integration | v2.0 | 2/2 | Complete | 2026-04-03 |
-| 12. Tech Debt & Validation Cleanup | v2.0 | 0/1 | Planned | — |
+| 12. Tech Debt & Validation Cleanup | v2.0 | 1/1 | Complete   | 2026-04-03 |

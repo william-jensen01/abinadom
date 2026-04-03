@@ -39,6 +39,12 @@ key-decisions:
   - "fetch_n multiplied by 4 when speaker filter active (capped at 80) to compensate for post-filter reduction"
   - "get_talk sorts paragraphs by paragraph_number as int to ensure narrative order"
 
+requirements-completed:
+  - CORE-06
+  - TOOL-01
+  - TOOL-02
+  - TOOL-05
+
 # Metrics
 duration: 7min
 completed: 2026-04-02

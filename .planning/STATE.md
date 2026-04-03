@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: MCP Server
 status: Milestone complete
-stopped_at: Completed 11-claude-desktop-integration 11-02-PLAN.md
-last_updated: "2026-04-03T02:46:47.346Z"
+stopped_at: Completed 12-tech-debt-validation-cleanup 12-01-PLAN.md
+last_updated: "2026-04-03T05:24:14.669Z"
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 6
-  completed_plans: 6
+  total_phases: 5
+  completed_phases: 5
+  total_plans: 7
+  completed_plans: 7
 ---
 
 # Project State
@@ -52,6 +52,7 @@ Plan: Not started
 | Phase 10-tools-normalization P02 | 7 | 2 tasks | 2 files |
 | Phase 11-claude-desktop-integration P01 | 5 | 2 tasks | 3 files |
 | Phase 11-claude-desktop-integration P02 | 10 | 2 tasks | 2 files |
+| Phase 12-tech-debt-validation-cleanup P01 | 30 | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,8 @@ Recent decisions affecting current work:
 - [Phase 11-claude-desktop-integration]: OLLAMA_URL env var is a base URL (http://host:port); /api/embeddings suffix always appended in get_embedding_function
 - [Phase 11-claude-desktop-integration]: Config template uses absolute virtualenv Python path as command field (D-01); no cwd field (D-02); CHROMADB_PATH and OLLAMA_URL in env block (D-03/D-04)
 - [Phase 11-claude-desktop-integration]: Two-layer prompting: FastMCP mcp.instructions (tool-level) + Project system prompt (adaptive persona: research assistant / discussion partner / study guide) with search-first behavior
+- [Phase 12-tech-debt-validation-cleanup]: _resolve_ollama_url() is single source of truth in server.py: resolved once, passed as url= to get_embedding_function, reused in error message
+- [Phase 12-tech-debt-validation-cleanup]: Phase 9.1 VER-06 documented as D-04 exception: live ChromaDB enrichment requires user --force re-run; unit tests for enrichment logic are green
 
 ### Pending Todos
 
@@ -96,6 +99,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-03T02:20:40.454Z
-Stopped at: Completed 11-claude-desktop-integration 11-02-PLAN.md
+Last session: 2026-04-03T05:24:14.664Z
+Stopped at: Completed 12-tech-debt-validation-cleanup 12-01-PLAN.md
 Resume file: None
