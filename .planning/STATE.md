@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Remote MCP
 status: completed
-stopped_at: "Completed 14-02 and 14-03: BearerAuthMiddleware + manage_keys CLI"
-last_updated: "2026-04-04T08:28:33.510Z"
+stopped_at: "Completed 15-01: Dockerfile and build artifacts"
+last_updated: "2026-04-04T18:39:54.329Z"
 last_activity: 2026-04-04
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
+  total_plans: 7
+  completed_plans: 6
 ---
 
 # Project State
@@ -61,6 +61,7 @@ Progress: [████████░░░░░░░░░░░░] v1.0 + 
 | Phase 14-auth-module P01 | 4 | 1 tasks | 3 files |
 | Phase 14-auth-module P02 | 15 | 2 tasks | 5 files |
 | Phase 14-auth-module P03 | 3 | 1 tasks | 2 files |
+| Phase 15-docker-compose-config P01 | 4 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -89,6 +90,8 @@ Recent decisions affecting current work:
 - [Phase 14-02]: _extract_tool_name logs all authenticated methods by name (initialize, tools/list, tools/call) per AUTH-03 literal requirement
 - [Phase 14-auth-module]: sqlite3.IntegrityError caught at CLI boundary for clean user-facing errors (no traceback)
 - [Phase 14-auth-module]: manage_keys.py AUTH_DB_PATH defaults to Path(__file__).parent.parent / auth.db (not cwd)
+- [Phase 15-docker-compose-config]: python:3.12-slim chosen as Docker base image — onnxruntime lacks Python 3.14 wheels
+- [Phase 15-docker-compose-config]: requirements.txt committed to git from Pipfile.lock — avoids pipenv in Docker build stage
 
 ### Pending Todos
 
@@ -107,6 +110,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-04T08:20:00Z
-Stopped at: Completed 14-02 and 14-03: BearerAuthMiddleware + manage_keys CLI
+Last session: 2026-04-04T18:39:54.323Z
+Stopped at: Completed 15-01: Dockerfile and build artifacts
 Resume file: None
