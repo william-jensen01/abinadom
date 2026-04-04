@@ -1,12 +1,18 @@
 """
 Unit tests for auth.store — SqliteKeyStore and KeyStore ABC.
+Integration tests for auth.middleware — BearerAuthMiddleware.
 
-Covers AUTH-01 (key issuance) and AUTH-03 (usage logging) behaviors.
+Covers AUTH-01 (key issuance), AUTH-02 (bearer enforcement), and
+AUTH-03 (usage logging) behaviors.
 Each test uses tmp_path for an isolated auth.db — no shared state.
 """
 import sqlite3
 
 import pytest
+from starlette.applications import Starlette
+from starlette.responses import PlainTextResponse
+from starlette.routing import Route
+from starlette.testclient import TestClient
 
 from auth.store import KeyStore, SqliteKeyStore
 
@@ -197,3 +203,170 @@ def test_keystore_is_abc():
     # Attempting to instantiate should raise TypeError
     with pytest.raises(TypeError):
         KeyStore()
+
+
+# ---------------------------------------------------------------------------
+# BearerAuthMiddleware integration tests (AUTH-02, AUTH-03)
+# ---------------------------------------------------------------------------
+
+
+def _make_test_app(store):
+    """Create a minimal Starlette test app with BearerAuthMiddleware mounted."""
+    from auth.middleware import BearerAuthMiddleware
+
+    async def homepage(request):
+        return PlainTextResponse("OK")
+
+    async def health(request):
+        return PlainTextResponse("healthy")
+
+    app = Starlette(routes=[
+        Route("/mcp", homepage, methods=["POST"]),
+        Route("/health", health, methods=["GET"]),
+    ])
+    app.add_middleware(BearerAuthMiddleware, store=store)
+    return TestClient(app, raise_server_exceptions=False)
+
+
+@pytest.fixture()
+def test_app(tmp_path):
+    """Provide a test app + store pair with a fresh auth.db per test."""
+    db_path = str(tmp_path / "auth.db")
+    store = SqliteKeyStore(db_path)
+    client = _make_test_app(store)
+    return client, store
+
+
+def test_health_bypass(test_app):
+    """GET /health with no Authorization header returns 200 (not 401)."""
+    client, _ = test_app
+    response = client.get("/health")
+    assert response.status_code == 200
+
+
+def test_no_token_returns_401(test_app):
+    """POST /mcp with no Authorization header returns 401 with 'Missing bearer token'."""
+    client, _ = test_app
+    response = client.post("/mcp", json={"method": "tools/list"})
+    assert response.status_code == 401
+    assert "Missing bearer token" in response.text
+
+
+def test_invalid_token_returns_401(test_app):
+    """POST /mcp with invalid Bearer token returns 401 with 'Invalid token'."""
+    client, _ = test_app
+    response = client.post(
+        "/mcp",
+        json={"method": "tools/list"},
+        headers={"Authorization": "Bearer bad-token"},
+    )
+    assert response.status_code == 401
+    assert "Invalid token" in response.text
+
+
+def test_valid_token_passes_through(test_app):
+    """POST /mcp with a valid bearer token returns status != 401 (passes to app)."""
+    client, store = test_app
+    token = store.create_key("testuser")
+    response = client.post(
+        "/mcp",
+        json={"method": "tools/list"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code != 401
+
+
+def test_usage_logged_on_valid_request(tmp_path):
+    """After a valid authenticated request, usage_log has 1 row with correct key_name."""
+    import sqlite3 as _sqlite3
+
+    db_path = str(tmp_path / "auth.db")
+    store = SqliteKeyStore(db_path)
+    token = store.create_key("alice")
+    client = _make_test_app(store)
+    client.post(
+        "/mcp",
+        json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+              "params": {"name": "search", "arguments": {}}},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    conn = _sqlite3.connect(db_path)
+    rows = conn.execute("SELECT key_name, tool_name FROM usage_log").fetchall()
+    conn.close()
+    assert len(rows) == 1
+    assert rows[0][0] == "alice"
+    assert rows[0][1] == "search"
+
+
+# ---------------------------------------------------------------------------
+# _extract_tool_name unit tests (AUTH-03)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_extract_tool_name_tools_call():
+    """_extract_tool_name with tools/call body returns the tool name 'search'."""
+    from auth.middleware import _extract_tool_name
+    from starlette.requests import Request
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/mcp",
+        "query_string": b"",
+        "headers": [(b"content-type", b"application/json")],
+    }
+    body = b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search","arguments":{}}}'
+
+    async def receive():
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    request = Request(scope, receive)
+    result = await _extract_tool_name(request)
+    assert result == "search"
+
+
+@pytest.mark.anyio
+async def test_extract_tool_name_other_method():
+    """_extract_tool_name with initialize body returns 'initialize'."""
+    from auth.middleware import _extract_tool_name
+    from starlette.requests import Request
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/mcp",
+        "query_string": b"",
+        "headers": [(b"content-type", b"application/json")],
+    }
+    body = b'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
+
+    async def receive():
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    request = Request(scope, receive)
+    result = await _extract_tool_name(request)
+    assert result == "initialize"
+
+
+@pytest.mark.anyio
+async def test_extract_tool_name_bad_body():
+    """_extract_tool_name with invalid JSON returns 'unknown'."""
+    from auth.middleware import _extract_tool_name
+    from starlette.requests import Request
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/mcp",
+        "query_string": b"",
+        "headers": [],
+    }
+    body = b"not-json-at-all"
+
+    async def receive():
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    request = Request(scope, receive)
+    result = await _extract_tool_name(request)
+    assert result == "unknown"
