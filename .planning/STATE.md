@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Remote MCP
 status: executing
-stopped_at: "Completed 16-01: infra Compose stack (Caddy + cloudflared)"
-last_updated: "2026-04-04T21:11:31.053Z"
+stopped_at: "Checkpoint 16-02-T2: awaiting human verify of HTTPS endpoint"
+last_updated: "2026-04-04T21:14:40.567Z"
 last_activity: 2026-04-04
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 9
-  completed_plans: 8
+  completed_plans: 9
 ---
 
 # Project State
@@ -118,6 +118,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-04T21:11:31.048Z
-Stopped at: Completed 16-01: infra Compose stack (Caddy + cloudflared)
+Last session: 2026-04-04T21:14:40.561Z
+Stopped at: Checkpoint 16-02-T2: awaiting human verify of HTTPS endpoint
 Resume file: None

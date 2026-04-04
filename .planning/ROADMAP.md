@@ -44,7 +44,7 @@ Full details: `.planning/milestones/v2.0-ROADMAP.md`
 - [x] **Phase 13: HTTP Transport** — Swap stdio transport for Streamable HTTP; expose health endpoint (completed 2026-04-03)
 - [x] **Phase 14: Auth Module** — Bearer token API key issuance, request validation, and per-request usage logging (completed 2026-04-04)
 - [x] **Phase 15: Docker Compose & Config** — Containerize the full stack with env-var driven configuration (completed 2026-04-04)
-- [ ] **Phase 16: Caddy & Cloudflare Tunnel** — TLS termination and stable public URL via Caddy + cloudflared in Compose
+- [x] **Phase 16: Caddy & Cloudflare Tunnel** — TLS termination and stable public URL via Caddy + cloudflared in Compose (completed 2026-04-04)
 - [ ] **Phase 17: Operator Docs** — Connection guide, self-deploy guide, and key management guide
 
 ## Phase Details
@@ -101,10 +101,10 @@ Plans:
   2. The host machine's IP address is not revealed to clients; all traffic routes through Cloudflare
   3. Caddy and cloudflared run as services inside the Compose stack — no separate install steps on the host
   4. Restarting the Compose stack restores the public URL automatically (tunnel token persists via env var)
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [x] 16-01-PLAN.md — Create infra/ Compose stack (Caddy + cloudflared) and wire MCP into proxy network
-- [ ] 16-02-PLAN.md — Setup walkthrough document and end-to-end HTTPS verification
+- [x] 16-02-PLAN.md — Setup walkthrough document and end-to-end HTTPS verification
 
 ### Phase 17: Operator Docs
 **Goal**: Any user or operator can onboard, deploy, or manage keys without asking the author
@@ -136,5 +136,5 @@ Plans:
 | 13. HTTP Transport | v3.0 | 2/2 | Complete    | 2026-04-03 |
 | 14. Auth Module | v3.0 | 2/3 | Complete    | 2026-04-04 |
 | 15. Docker Compose & Config | v3.0 | 2/2 | Complete    | 2026-04-04 |
-| 16. Caddy & Cloudflare Tunnel | v3.0 | 1/2 | In Progress|  |
+| 16. Caddy & Cloudflare Tunnel | v3.0 | 2/2 | Complete   | 2026-04-04 |
 | 17. Operator Docs | v3.0 | 0/? | Not started | - |
