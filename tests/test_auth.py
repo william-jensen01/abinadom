@@ -4,7 +4,11 @@ Unit tests for auth.store — SqliteKeyStore and KeyStore ABC.
 Covers AUTH-01 (key issuance) and AUTH-03 (usage logging) behaviors.
 Each test uses tmp_path for an isolated auth.db — no shared state.
 """
+import os
 import sqlite3
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -197,3 +201,80 @@ def test_keystore_is_abc():
     # Attempting to instantiate should raise TypeError
     with pytest.raises(TypeError):
         KeyStore()
+
+
+# ---------------------------------------------------------------------------
+# CLI integration tests — manage_keys.py
+# ---------------------------------------------------------------------------
+
+# Project root is two directories up from this test file (tests/ → project root)
+_PROJECT_ROOT = str(Path(__file__).parent.parent)
+_MANAGE_KEYS = str(Path(__file__).parent.parent / "scripts" / "manage_keys.py")
+
+
+def _run_manage_keys(args: list, db_path: str) -> subprocess.CompletedProcess:
+    """Run manage_keys.py with a given arg list and an isolated AUTH_DB_PATH."""
+    return subprocess.run(
+        [sys.executable, _MANAGE_KEYS] + args,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "AUTH_DB_PATH": db_path},
+        cwd=_PROJECT_ROOT,
+    )
+
+
+def test_create_command(tmp_path):
+    """create --name <key> exits 0 and prints the key name and a token."""
+    db_path = str(tmp_path / "auth.db")
+    result = _run_manage_keys(["create", "--name", "test-key"], db_path)
+    assert result.returncode == 0, f"Expected exit 0, got {result.returncode}. stderr: {result.stderr}"
+    assert "test-key" in result.stdout
+    # Token should be printed — a non-empty line beyond the key name line
+    assert "it will not be shown again" in result.stdout
+
+
+def test_create_duplicate(tmp_path):
+    """Creating a duplicate name exits non-zero with a clear error (not a traceback)."""
+    db_path = str(tmp_path / "auth.db")
+    # First creation succeeds
+    first = _run_manage_keys(["create", "--name", "dup"], db_path)
+    assert first.returncode == 0
+
+    # Second creation fails with a clear error message
+    second = _run_manage_keys(["create", "--name", "dup"], db_path)
+    assert second.returncode != 0, "Expected non-zero exit for duplicate key name"
+    # Must be a clear error message, not a raw Python traceback
+    assert "Traceback" not in second.stderr, "Must not show raw traceback on duplicate"
+    # The error message should mention the duplicate name
+    combined = second.stdout + second.stderr
+    assert "dup" in combined or "Error" in combined or "already" in combined
+
+
+def test_list_command(tmp_path):
+    """list exits 0 and shows all key names."""
+    db_path = str(tmp_path / "auth.db")
+    _run_manage_keys(["create", "--name", "alice"], db_path)
+    _run_manage_keys(["create", "--name", "bob"], db_path)
+
+    result = _run_manage_keys(["list"], db_path)
+    assert result.returncode == 0, f"Expected exit 0. stderr: {result.stderr}"
+    assert "alice" in result.stdout
+    assert "bob" in result.stdout
+
+
+def test_revoke_command(tmp_path):
+    """revoke --name <key> exits 0 and stdout contains 'revoked'."""
+    db_path = str(tmp_path / "auth.db")
+    _run_manage_keys(["create", "--name", "temp"], db_path)
+
+    result = _run_manage_keys(["revoke", "--name", "temp"], db_path)
+    assert result.returncode == 0, f"Expected exit 0. stderr: {result.stderr}"
+    assert "revoked" in result.stdout.lower() or "revoked" in result.stdout
+
+
+def test_revoke_nonexistent(tmp_path):
+    """revoke --name <nonexistent> exits 1 and stderr contains 'No key named'."""
+    db_path = str(tmp_path / "auth.db")
+    result = _run_manage_keys(["revoke", "--name", "ghost"], db_path)
+    assert result.returncode == 1, f"Expected exit 1. Got {result.returncode}"
+    assert "No key named" in result.stderr
