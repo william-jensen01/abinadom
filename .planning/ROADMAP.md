@@ -42,7 +42,7 @@ Full details: `.planning/milestones/v2.0-ROADMAP.md`
 **Milestone Goal:** Move from stdio/local to a cloud-portable HTTP MCP server accessible from any frontier LLM client, with bearer token auth and a Docker Compose deployment stack.
 
 - [x] **Phase 13: HTTP Transport** — Swap stdio transport for Streamable HTTP; expose health endpoint (completed 2026-04-03)
-- [ ] **Phase 14: Auth Module** — Bearer token API key issuance, request validation, and per-request usage logging
+- [x] **Phase 14: Auth Module** — Bearer token API key issuance, request validation, and per-request usage logging (completed 2026-04-04)
 - [ ] **Phase 15: Docker Compose & Config** — Containerize the full stack with env-var driven configuration
 - [ ] **Phase 16: Caddy & Cloudflare Tunnel** — TLS termination and stable public URL via Caddy + cloudflared in Compose
 - [ ] **Phase 17: Operator Docs** — Connection guide, self-deploy guide, and key management guide
@@ -71,7 +71,7 @@ Plans:
   2. A request without a bearer token, or with an invalid token, receives a 401 response and never reaches a tool
   3. A valid authenticated request is stored in the usage log with tool name, timestamp, and user identity
   4. Existing tool behavior (search, get_talk) is unchanged for authenticated requests
-**Plans:** 3/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 - [x] 14-01-PLAN.md — KeyStore ABC and SqliteKeyStore implementation with full test coverage
 - [x] 14-02-PLAN.md — BearerAuthMiddleware and server.py entry point wiring
@@ -128,7 +128,7 @@ Plans:
 | 11. Claude Desktop Integration | v2.0 | 2/2 | Complete | 2026-04-03 |
 | 12. Tech Debt & Validation Cleanup | v2.0 | 1/1 | Complete | 2026-04-03 |
 | 13. HTTP Transport | v3.0 | 2/2 | Complete    | 2026-04-03 |
-| 14. Auth Module | v3.0 | 2/3 | In Progress|  |
+| 14. Auth Module | v3.0 | 2/3 | Complete    | 2026-04-04 |
 | 15. Docker Compose & Config | v3.0 | 0/? | Not started | - |
 | 16. Caddy & Cloudflare Tunnel | v3.0 | 0/? | Not started | - |
 | 17. Operator Docs | v3.0 | 0/? | Not started | - |
