@@ -14,9 +14,9 @@ Requirements for the Remote MCP milestone. Each maps to roadmap phases.
 
 ### Auth
 
-- [ ] **AUTH-01**: Operator can issue a named API key for a user
+- [x] **AUTH-01**: Operator can issue a named API key for a user
 - [ ] **AUTH-02**: Server rejects requests without a valid bearer token with 401
-- [ ] **AUTH-03**: Server logs tool name, timestamp, and user for every authenticated request
+- [x] **AUTH-03**: Server logs tool name, timestamp, and user for every authenticated request
 
 ### Deployment
 
@@ -65,9 +65,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | TRANS-01 | Phase 13 | Complete |
 | TRANS-02 | Phase 13 | Complete |
-| AUTH-01 | Phase 14 | Pending |
+| AUTH-01 | Phase 14 | Complete |
 | AUTH-02 | Phase 14 | Pending |
-| AUTH-03 | Phase 14 | Pending |
+| AUTH-03 | Phase 14 | Complete |
 | DEPLOY-01 | Phase 15 | Pending |
 | DEPLOY-02 | Phase 15 | Pending |
 | DEPLOY-03 | Phase 16 | Pending |
