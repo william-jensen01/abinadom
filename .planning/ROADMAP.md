@@ -101,9 +101,9 @@ Plans:
   2. The host machine's IP address is not revealed to clients; all traffic routes through Cloudflare
   3. Caddy and cloudflared run as services inside the Compose stack — no separate install steps on the host
   4. Restarting the Compose stack restores the public URL automatically (tunnel token persists via env var)
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 Plans:
-- [ ] 16-01-PLAN.md — Create infra/ Compose stack (Caddy + cloudflared) and wire MCP into proxy network
+- [x] 16-01-PLAN.md — Create infra/ Compose stack (Caddy + cloudflared) and wire MCP into proxy network
 - [ ] 16-02-PLAN.md — Setup walkthrough document and end-to-end HTTPS verification
 
 ### Phase 17: Operator Docs
@@ -136,5 +136,5 @@ Plans:
 | 13. HTTP Transport | v3.0 | 2/2 | Complete    | 2026-04-03 |
 | 14. Auth Module | v3.0 | 2/3 | Complete    | 2026-04-04 |
 | 15. Docker Compose & Config | v3.0 | 2/2 | Complete    | 2026-04-04 |
-| 16. Caddy & Cloudflare Tunnel | v3.0 | 0/2 | Not started | - |
+| 16. Caddy & Cloudflare Tunnel | v3.0 | 1/2 | In Progress|  |
 | 17. Operator Docs | v3.0 | 0/? | Not started | - |

@@ -22,8 +22,8 @@ Requirements for the Remote MCP milestone. Each maps to roadmap phases.
 
 - [x] **DEPLOY-01**: Operator can run full stack via `docker compose up` (mcp-server + ollama)
 - [x] **DEPLOY-02**: All secrets and paths configurable via .env file — no hardcoded values
-- [ ] **DEPLOY-03**: Caddy reverse proxy handles TLS termination inside Compose stack
-- [ ] **DEPLOY-04**: cloudflared in Compose stack exposes stable public URL via Cloudflare Tunnel
+- [x] **DEPLOY-03**: Caddy reverse proxy handles TLS termination inside Compose stack
+- [x] **DEPLOY-04**: cloudflared in Compose stack exposes stable public URL via Cloudflare Tunnel
 
 ### Docs
 
@@ -70,8 +70,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTH-03 | Phase 14 | Complete |
 | DEPLOY-01 | Phase 15 | Complete |
 | DEPLOY-02 | Phase 15 | Complete |
-| DEPLOY-03 | Phase 16 | Pending |
-| DEPLOY-04 | Phase 16 | Pending |
+| DEPLOY-03 | Phase 16 | Complete |
+| DEPLOY-04 | Phase 16 | Complete |
 | DOCS-01 | Phase 17 | Pending |
 | DOCS-02 | Phase 17 | Pending |
 | DOCS-03 | Phase 17 | Pending |

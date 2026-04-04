@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Remote MCP
 status: executing
-stopped_at: "Completed 15-02: docker-compose.yml and .env.example"
-last_updated: "2026-04-04T19:23:06.365Z"
+stopped_at: "Completed 16-01: infra Compose stack (Caddy + cloudflared)"
+last_updated: "2026-04-04T21:11:31.053Z"
 last_activity: 2026-04-04
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 9
+  completed_plans: 8
 ---
 
 # Project State
@@ -20,12 +20,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** All LDS content searchable by meaning — find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** Phase 15 — docker-compose-config
+**Current focus:** Phase 16 — caddy-cloudflare-tunnel
 
 ## Current Position
 
-Phase: 16
-Plan: Not started
+Phase: 16 (caddy-cloudflare-tunnel) — EXECUTING
+Plan: 2 of 2
 Status: Ready to execute
 Last activity: 2026-04-04
 
@@ -63,6 +63,7 @@ Progress: [████████░░░░░░░░░░░░] v1.0 + 
 | Phase 14-auth-module P03 | 3 | 1 tasks | 2 files |
 | Phase 15-docker-compose-config P01 | 4 | 2 tasks | 4 files |
 | Phase 15-docker-compose-config P02 | 15 | 3 tasks | 2 files |
+| Phase 16-caddy-cloudflare-tunnel P01 | 3 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,9 @@ Recent decisions affecting current work:
 - [Phase 15-docker-compose-config]: No version: key in docker-compose.yml — deprecated in Compose v2 spec
 - [Phase 15-docker-compose-config]: Single mcp-server service only — Ollama runs on host (operator-managed), no Compose-managed Ollama container
 - [Phase 15-docker-compose-config]: CHROMADB_PATH and AUTH_DB_PATH not settable in .env — fixed container-internal paths; only mount source paths (CHROMADB_DATA_PATH, AUTH_DATA_PATH) are operator-configurable
+- [Phase 16-caddy-cloudflare-tunnel]: infra/ stack owns proxy network (no external:true in infra); MCP stack joins as external:true — correct multi-stack Docker pattern per D-04
+- [Phase 16-caddy-cloudflare-tunnel]: TUNNEL_TOKEN env var pattern (remotely-managed tunnel) — no credentials file on disk, ingress in Cloudflare dashboard
+- [Phase 16-caddy-cloudflare-tunnel]: mcp-server ports: removed — internal-only, reachable by Caddy on proxy network only (D-05)
 
 ### Pending Todos
 
@@ -114,6 +118,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-04T19:12:31.658Z
-Stopped at: Completed 15-02: docker-compose.yml and .env.example
+Last session: 2026-04-04T21:11:31.048Z
+Stopped at: Completed 16-01: infra Compose stack (Caddy + cloudflared)
 Resume file: None
