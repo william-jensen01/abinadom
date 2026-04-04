@@ -132,6 +132,6 @@ Plans:
 | 12. Tech Debt & Validation Cleanup | v2.0 | 1/1 | Complete | 2026-04-03 |
 | 13. HTTP Transport | v3.0 | 2/2 | Complete    | 2026-04-03 |
 | 14. Auth Module | v3.0 | 2/3 | Complete    | 2026-04-04 |
-| 15. Docker Compose & Config | v3.0 | 2/2 | Complete   | 2026-04-04 |
+| 15. Docker Compose & Config | v3.0 | 2/2 | Complete    | 2026-04-04 |
 | 16. Caddy & Cloudflare Tunnel | v3.0 | 0/? | Not started | - |
 | 17. Operator Docs | v3.0 | 0/? | Not started | - |
