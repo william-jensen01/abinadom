@@ -127,6 +127,11 @@
 - `tests/test_phase6_orchestrator.py`
 - `tests/test_server.py`
 
+### infra/
+- `infra/docker-compose.yml` — Shared reverse-proxy Compose stack (Caddy + cloudflared)
+- `infra/Caddyfile` — Subdomain routing config (bind-mounted into Caddy container)
+- `infra/.env.example` — Operator-facing env vars for infra stack (TUNNEL_TOKEN, DOMAIN)
+
 ## Process
 
 - Do not open database files directly, instead use `scripts/db_schema_extractor.py` with specific arguments.

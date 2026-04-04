@@ -1,8 +1,6 @@
 services:
   mcp-server:
     build: .
-    ports:
-      - "${MCP_PORT:-8000}:${MCP_PORT:-8000}"
     env_file:
       - .env
     volumes:
@@ -17,3 +15,10 @@ services:
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
+    name: proxy
