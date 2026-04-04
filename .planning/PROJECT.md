@@ -46,11 +46,10 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 
 - ✓ Streamable HTTP transport replacing stdio — `MCP_HOST`/`MCP_PORT` env vars, `GET /health` with live Ollama + ChromaDB checks — Phase 13 (v3.0)
 - ✓ Bearer token auth module — KeyStore ABC + SqliteKeyStore, BearerAuthMiddleware (all routes except /health), manage_keys.py CLI, per-request usage logging — Phase 14 (v3.0)
-- [ ] Docker Compose deployment (mcp-server + ollama sidecars)
+- ✓ Docker Compose deployment — Dockerfile (python:3.12-slim), docker-compose.yml (bind mounts, healthcheck, env_file), .env.example (5 operator vars), requirements.txt pinned from Pipfile.lock — Phase 15 (v3.0)
 - [ ] Caddy reverse proxy for TLS termination
 - [ ] Cloudflare Tunnel for stable public URL (home IP hidden)
-- [ ] Docker Compose deployment (mcp-server + ollama sidecars)
-- [ ] Env-var driven config (12-factor, VPS-portable)
+- [ ] Operator docs (connection guide, self-deploy guide, key management)
 
 ### Out of Scope
 
@@ -79,8 +78,9 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - **Architecture**: Layered, configuration-driven (`config/pipeline_config.py`), typed dataclasses, pure functions, idempotent; fail-fast (schema validation) + fail-safe (FK spot-check) hybrid; MCP server as read-only consumer of ChromaDB
 - **Processing model**: Per-talk streaming loop — Phases 1–6 run sequentially per talk; ChromaDB write buffer flushes every 1,000 talks
 - **ID strategy**: Existing SQLite primary keys (`talk_8820`, `para_156789`, etc.) for bidirectional lookups
-- **MCP server**: Streamable HTTP transport (MCP_HOST/MCP_PORT), absolute path resolution, Ollama dependency check at startup, speaker post-filter (ChromaDB 1.5.5 metadata filter workaround); `GET /health` endpoint returns live Ollama + ChromaDB status
-- **Next milestone**: v3.0 — Remote MCP: Streamable HTTP, bearer token auth, Docker Compose, Cloudflare Tunnel, VPS-portable
+- **MCP server**: Streamable HTTP transport (MCP_HOST/MCP_PORT), absolute path resolution, Ollama dependency check at startup, speaker post-filter (ChromaDB 1.5.5 metadata filter workaround); `GET /health` endpoint returns live Ollama + ChromaDB status; Bearer token auth via BearerAuthMiddleware
+- **Deployment**: Dockerfile (python:3.12-slim, /data/ bind mounts), docker-compose.yml (single mcp-server service, Ollama operator-managed on host), .env.example (5 vars: OLLAMA_URL, MCP_HOST, MCP_PORT, CHROMADB_DATA_PATH, AUTH_DATA_PATH)
+- **Next**: Phase 16 — Caddy + Cloudflare Tunnel for TLS and stable public URL
 
 ## Constraints
 
