@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Remote MCP
 status: executing
-stopped_at: "Completed 14-03: manage_keys.py CLI for API key management"
-last_updated: "2026-04-04T08:12:46.288Z"
+stopped_at: "Completed 14-02 and 14-03: BearerAuthMiddleware + manage_keys CLI"
+last_updated: "2026-04-04T08:20:00Z"
 last_activity: 2026-04-04
 progress:
   total_phases: 5
@@ -26,8 +26,8 @@ See: .planning/PROJECT.md (updated 2026-04-03)
 
 Phase: 14 (auth-module) — EXECUTING
 Plan: 2 of 3
-Status: Ready to execute
-Last activity: 2026-04-04
+Status: Wave 2 complete — all plans executed
+Last activity: 2026-04-04 -- Phase 14 Plans 02 and 03 completed
 
 Progress: [████████░░░░░░░░░░░░] v1.0 + v2.0 complete; v3.0 not started
 
@@ -59,6 +59,7 @@ Progress: [████████░░░░░░░░░░░░] v1.0 + 
 *Updated after each plan completion*
 | Phase 13-http-transport P02 | 6 | 2 tasks | 2 files |
 | Phase 14-auth-module P01 | 4 | 1 tasks | 3 files |
+| Phase 14-auth-module P02 | 15 | 2 tasks | 5 files |
 | Phase 14-auth-module P03 | 3 | 1 tasks | 2 files |
 
 ## Accumulated Context
@@ -84,6 +85,8 @@ Recent decisions affecting current work:
 - [Phase 14-auth-module]: KeyStore implemented as ABC (not Protocol) for explicit TypeError on direct instantiation — testable and verifiable
 - [Phase 14-auth-module]: Per-operation sqlite3 connections (_connect() per method) for thread safety in async uvicorn context
 - [Phase 14-auth-module]: idx_usage_key index on usage_log added proactively — zero cost now, avoids migration when AUTH-06 usage admin is added
+- [Phase 14-02]: mcp.run() replaced with mcp.streamable_http_app() + app.add_middleware() + uvicorn.run() — only way to inject ASGI middleware
+- [Phase 14-02]: _extract_tool_name logs all authenticated methods by name (initialize, tools/list, tools/call) per AUTH-03 literal requirement
 - [Phase 14-auth-module]: sqlite3.IntegrityError caught at CLI boundary for clean user-facing errors (no traceback)
 - [Phase 14-auth-module]: manage_keys.py AUTH_DB_PATH defaults to Path(__file__).parent.parent / auth.db (not cwd)
 
@@ -104,6 +107,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-04T08:12:46.282Z
-Stopped at: Completed 14-03: manage_keys.py CLI for API key management
+Last session: 2026-04-04T08:20:00Z
+Stopped at: Completed 14-02 and 14-03: BearerAuthMiddleware + manage_keys CLI
 Resume file: None
