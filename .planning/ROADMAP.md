@@ -71,11 +71,11 @@ Plans:
   2. A request without a bearer token, or with an invalid token, receives a 401 response and never reaches a tool
   3. A valid authenticated request is stored in the usage log with tool name, timestamp, and user identity
   4. Existing tool behavior (search, get_talk) is unchanged for authenticated requests
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 Plans:
 - [x] 14-01-PLAN.md — KeyStore ABC and SqliteKeyStore implementation with full test coverage
 - [ ] 14-02-PLAN.md — BearerAuthMiddleware and server.py entry point wiring
-- [ ] 14-03-PLAN.md — manage_keys.py CLI script for key issuance, revocation, and listing
+- [x] 14-03-PLAN.md — manage_keys.py CLI script for key issuance, revocation, and listing
 **UI hint**: no
 
 ### Phase 15: Docker Compose & Config
@@ -128,7 +128,7 @@ Plans:
 | 11. Claude Desktop Integration | v2.0 | 2/2 | Complete | 2026-04-03 |
 | 12. Tech Debt & Validation Cleanup | v2.0 | 1/1 | Complete | 2026-04-03 |
 | 13. HTTP Transport | v3.0 | 2/2 | Complete    | 2026-04-03 |
-| 14. Auth Module | v3.0 | 1/3 | In Progress|  |
+| 14. Auth Module | v3.0 | 2/3 | In Progress|  |
 | 15. Docker Compose & Config | v3.0 | 0/? | Not started | - |
 | 16. Caddy & Cloudflare Tunnel | v3.0 | 0/? | Not started | - |
 | 17. Operator Docs | v3.0 | 0/? | Not started | - |

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Remote MCP
 status: executing
-stopped_at: "Completed 14-01: KeyStore ABC and SqliteKeyStore auth storage layer"
-last_updated: "2026-04-04T08:03:57.756Z"
-last_activity: 2026-04-03
+stopped_at: "Completed 14-03: manage_keys.py CLI for API key management"
+last_updated: "2026-04-04T08:12:46.288Z"
+last_activity: 2026-04-04
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 5
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** All LDS content searchable by meaning — find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** Phase 13 — http-transport
+**Current focus:** Phase 14 — auth-module
 
 ## Current Position
 
-Phase: 14
-Plan: Not started
+Phase: 14 (auth-module) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-04-03
+Last activity: 2026-04-04
 
 Progress: [████████░░░░░░░░░░░░] v1.0 + v2.0 complete; v3.0 not started
 
@@ -59,6 +59,7 @@ Progress: [████████░░░░░░░░░░░░] v1.0 + 
 *Updated after each plan completion*
 | Phase 13-http-transport P02 | 6 | 2 tasks | 2 files |
 | Phase 14-auth-module P01 | 4 | 1 tasks | 3 files |
+| Phase 14-auth-module P03 | 3 | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -83,6 +84,8 @@ Recent decisions affecting current work:
 - [Phase 14-auth-module]: KeyStore implemented as ABC (not Protocol) for explicit TypeError on direct instantiation — testable and verifiable
 - [Phase 14-auth-module]: Per-operation sqlite3 connections (_connect() per method) for thread safety in async uvicorn context
 - [Phase 14-auth-module]: idx_usage_key index on usage_log added proactively — zero cost now, avoids migration when AUTH-06 usage admin is added
+- [Phase 14-auth-module]: sqlite3.IntegrityError caught at CLI boundary for clean user-facing errors (no traceback)
+- [Phase 14-auth-module]: manage_keys.py AUTH_DB_PATH defaults to Path(__file__).parent.parent / auth.db (not cwd)
 
 ### Pending Todos
 
@@ -101,6 +104,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-04T08:03:57.751Z
-Stopped at: Completed 14-01: KeyStore ABC and SqliteKeyStore auth storage layer
+Last session: 2026-04-04T08:12:46.282Z
+Stopped at: Completed 14-03: manage_keys.py CLI for API key management
 Resume file: None
