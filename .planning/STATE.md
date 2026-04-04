@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Remote MCP
 status: executing
-stopped_at: "Completed 15-01: Dockerfile and build artifacts"
-last_updated: "2026-04-04T18:39:54.329Z"
+stopped_at: "Completed 15-02: docker-compose.yml and .env.example"
+last_updated: "2026-04-04T19:12:31.664Z"
 last_activity: 2026-04-04
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 7
-  completed_plans: 6
+  completed_plans: 7
 ---
 
 # Project State
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-04-03)
 ## Current Position
 
 Phase: 15 (docker-compose-config) — EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 15
-Last activity: 2026-04-04 -- Phase 15 execution started
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-04-04
 
 Progress: [████████░░░░░░░░░░░░] v1.0 + v2.0 complete; v3.0 not started
 
@@ -62,6 +62,7 @@ Progress: [████████░░░░░░░░░░░░] v1.0 + 
 | Phase 14-auth-module P02 | 15 | 2 tasks | 5 files |
 | Phase 14-auth-module P03 | 3 | 1 tasks | 2 files |
 | Phase 15-docker-compose-config P01 | 4 | 2 tasks | 4 files |
+| Phase 15-docker-compose-config P02 | 15 | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,9 @@ Recent decisions affecting current work:
 - [Phase 14-auth-module]: manage_keys.py AUTH_DB_PATH defaults to Path(__file__).parent.parent / auth.db (not cwd)
 - [Phase 15-docker-compose-config]: python:3.12-slim chosen as Docker base image — onnxruntime lacks Python 3.14 wheels
 - [Phase 15-docker-compose-config]: requirements.txt committed to git from Pipfile.lock — avoids pipenv in Docker build stage
+- [Phase 15-docker-compose-config]: No version: key in docker-compose.yml — deprecated in Compose v2 spec
+- [Phase 15-docker-compose-config]: Single mcp-server service only — Ollama runs on host (operator-managed), no Compose-managed Ollama container
+- [Phase 15-docker-compose-config]: CHROMADB_PATH and AUTH_DB_PATH not settable in .env — fixed container-internal paths; only mount source paths (CHROMADB_DATA_PATH, AUTH_DATA_PATH) are operator-configurable
 
 ### Pending Todos
 
@@ -110,6 +114,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-04T18:39:54.323Z
-Stopped at: Completed 15-01: Dockerfile and build artifacts
+Last session: 2026-04-04T19:12:31.658Z
+Stopped at: Completed 15-02: docker-compose.yml and .env.example
 Resume file: None

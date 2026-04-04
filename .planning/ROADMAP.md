@@ -43,7 +43,7 @@ Full details: `.planning/milestones/v2.0-ROADMAP.md`
 
 - [x] **Phase 13: HTTP Transport** — Swap stdio transport for Streamable HTTP; expose health endpoint (completed 2026-04-03)
 - [x] **Phase 14: Auth Module** — Bearer token API key issuance, request validation, and per-request usage logging (completed 2026-04-04)
-- [ ] **Phase 15: Docker Compose & Config** — Containerize the full stack with env-var driven configuration
+- [x] **Phase 15: Docker Compose & Config** — Containerize the full stack with env-var driven configuration (completed 2026-04-04)
 - [ ] **Phase 16: Caddy & Cloudflare Tunnel** — TLS termination and stable public URL via Caddy + cloudflared in Compose
 - [ ] **Phase 17: Operator Docs** — Connection guide, self-deploy guide, and key management guide
 
@@ -87,10 +87,10 @@ Plans:
   2. A .env.example file documents every configurable value; changing a value in .env takes effect on next compose up
   3. No secrets or absolute paths appear in any tracked file (Dockerfile, compose.yml, server.py)
   4. An operator on a fresh VPS can bring up the stack by copying the repo and editing .env
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 Plans:
 - [x] 15-01-PLAN.md — Generate requirements.txt, update .gitignore, create Dockerfile and .dockerignore
-- [ ] 15-02-PLAN.md — Create docker-compose.yml with healthcheck/bind mounts and .env.example
+- [x] 15-02-PLAN.md — Create docker-compose.yml with healthcheck/bind mounts and .env.example
 
 ### Phase 16: Caddy & Cloudflare Tunnel
 **Goal**: The server is reachable at a stable public HTTPS URL without exposing the host IP
@@ -132,6 +132,6 @@ Plans:
 | 12. Tech Debt & Validation Cleanup | v2.0 | 1/1 | Complete | 2026-04-03 |
 | 13. HTTP Transport | v3.0 | 2/2 | Complete    | 2026-04-03 |
 | 14. Auth Module | v3.0 | 2/3 | Complete    | 2026-04-04 |
-| 15. Docker Compose & Config | v3.0 | 1/2 | In Progress|  |
+| 15. Docker Compose & Config | v3.0 | 2/2 | Complete   | 2026-04-04 |
 | 16. Caddy & Cloudflare Tunnel | v3.0 | 0/? | Not started | - |
 | 17. Operator Docs | v3.0 | 0/? | Not started | - |
