@@ -45,7 +45,8 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 <!-- v3.0 Remote MCP — in progress -->
 
 - ✓ Streamable HTTP transport replacing stdio — `MCP_HOST`/`MCP_PORT` env vars, `GET /health` with live Ollama + ChromaDB checks — Phase 13 (v3.0)
-- [ ] Bearer token API keys with per-user usage tracking
+- ✓ Bearer token auth module — KeyStore ABC + SqliteKeyStore, BearerAuthMiddleware (all routes except /health), manage_keys.py CLI, per-request usage logging — Phase 14 (v3.0)
+- [ ] Docker Compose deployment (mcp-server + ollama sidecars)
 - [ ] Caddy reverse proxy for TLS termination
 - [ ] Cloudflare Tunnel for stable public URL (home IP hidden)
 - [ ] Docker Compose deployment (mcp-server + ollama sidecars)
@@ -122,4 +123,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-03 — Phase 13 complete: Streamable HTTP transport + health endpoint*
+*Last updated: 2026-04-04 — Phase 14 complete: Bearer token auth module (KeyStore, BearerAuthMiddleware, manage_keys CLI)*
