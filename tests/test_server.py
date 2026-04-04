@@ -662,10 +662,27 @@ def test_mcp_host_port_env_override(monkeypatch):
 
 
 def test_entry_point_transport():
+    """Phase 14: entry point uses streamable_http_app() + uvicorn (not mcp.run).
+
+    mcp.run() does not expose the Starlette app for middleware injection.
+    The new entry point calls mcp.streamable_http_app(), injects
+    BearerAuthMiddleware, and runs via uvicorn.run().
+    """
     import server
     import inspect
     source = inspect.getsource(server)
-    assert 'transport="streamable-http"' in source
+    assert "streamable_http_app()" in source, (
+        "server.py entry point must use mcp.streamable_http_app() (not mcp.run())"
+    )
+    assert "uvicorn.run(" in source, (
+        "server.py entry point must use uvicorn.run() to support middleware injection"
+    )
+    assert "add_middleware(BearerAuthMiddleware" in source, (
+        "server.py must mount BearerAuthMiddleware via add_middleware()"
+    )
+    assert 'mcp.run(transport="streamable-http")' not in source, (
+        "Old mcp.run() entry point must be removed — it cannot accept middleware"
+    )
 
 
 def test_no_stdio_references():

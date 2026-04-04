@@ -4,6 +4,7 @@ MCP Server — LDS Scripture Citation Index
 Exposes the ChromaDB vector collections via Streamable HTTP transport.
 Phase 9 builds startup validation; Phase 10 adds search and get_talk tools.
 Phase 13 swaps to HTTP transport with configurable host/port.
+Phase 14 adds bearer token authentication via BearerAuthMiddleware.
 
 Startup sequence:
   1. Resolve ChromaDB path to absolute (CORE-01)
@@ -15,6 +16,10 @@ Startup sequence:
 MCP tools (Phase 10):
   - search: semantic search across 4 collections with optional speaker/year/season filters
   - get_talk: retrieve full ordered text of a conference talk by ID
+
+Auth (Phase 14):
+  - Bearer token enforcement via BearerAuthMiddleware on all routes except /health
+  - AUTH_DB_PATH env var configures auth.db location (default: project_root/auth.db)
 
 All logging goes to stderr only.
 """
@@ -34,6 +39,8 @@ from starlette.responses import JSONResponse
 from config.pipeline_config import CHROMADB_COLLECTION_NAMES
 from config.ollama import resolve_ollama_url
 from extractors.phase6_chromadb_loader import get_embedding_function
+from auth.store import SqliteKeyStore
+from auth.middleware import BearerAuthMiddleware
 
 # ---------------------------------------------------------------------------
 # Logging — must be configured before anything else writes to stderr (INTG-01)
@@ -250,6 +257,10 @@ async def lifespan(server: FastMCP):
 
 MCP_HOST = os.environ.get("MCP_HOST", "0.0.0.0")
 MCP_PORT = int(os.environ.get("MCP_PORT", "8000"))
+AUTH_DB_PATH = os.environ.get(
+    "AUTH_DB_PATH",
+    str(Path(__file__).parent.resolve() / "auth.db"),
+)
 
 mcp = FastMCP(
     "lds-scripture-index",
@@ -437,4 +448,8 @@ async def health_check(request: Request) -> JSONResponse:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    mcp.run(transport="streamable-http")
+    import uvicorn
+    store = SqliteKeyStore(AUTH_DB_PATH)
+    app = mcp.streamable_http_app()
+    app.add_middleware(BearerAuthMiddleware, store=store)
+    uvicorn.run(app, host=MCP_HOST, port=int(MCP_PORT))
