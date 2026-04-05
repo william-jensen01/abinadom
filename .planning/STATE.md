@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Remote MCP
 status: executing
-stopped_at: "Checkpoint 16-02-T2: awaiting human verify of HTTPS endpoint"
-last_updated: "2026-04-04T21:14:40.567Z"
-last_activity: 2026-04-04
+stopped_at: Quick task 260404-qft complete — port 7363 change applied
+last_updated: "2026-04-05T04:20:20.103Z"
+last_activity: 2026-04-05
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 4
   total_plans: 9
   completed_plans: 9
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-04-03)
 
 ## Current Position
 
-Phase: 16 (caddy-cloudflare-tunnel) — EXECUTING
-Plan: 2 of 2
+Phase: 999.1
+Plan: Not started
 Status: Ready to execute
-Last activity: 2026-04-04
+Last activity: 2026-04-05
 
 Progress: [████████░░░░░░░░░░░░] v1.0 + v2.0 complete; v3.0 not started
 
