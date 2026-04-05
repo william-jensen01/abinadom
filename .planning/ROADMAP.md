@@ -138,3 +138,16 @@ Plans:
 | 15. Docker Compose & Config | v3.0 | 2/2 | Complete    | 2026-04-04 |
 | 16. Caddy & Cloudflare Tunnel | v3.0 | 2/2 | Complete   | 2026-04-04 |
 | 17. Operator Docs | v3.0 | 0/? | Not started | - |
+
+## Backlog
+
+### Phase 999.1: OAuth 2.0 Support for Claude Desktop Remote MCP (BACKLOG)
+
+**Goal:** Add OAuth 2.0 to the MCP server so Claude Desktop can authenticate via its remote MCP OAuth flow
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Context: Claude Desktop's "Add MCP Server" dialog only supports OAuth Client ID + Secret — no Bearer token field. The current API key auth (Authorization: Bearer) is incompatible. Server needs to implement `/.well-known/oauth-authorization-server`, a token endpoint, and redirect-based auth flow so Claude Desktop can complete the OAuth handshake.
+
+Plans:
+- [ ] TBD (promote with /gsd:review-backlog when ready)
