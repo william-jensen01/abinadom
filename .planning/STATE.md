@@ -111,11 +111,11 @@ None yet.
 
 ### Quick Tasks Completed
 
-| # | Description | Date | Commit | Directory |
-|---|-------------|------|--------|-----------|
-| 260320-hr5 | backfill_talk_kicker not writing updates | 2026-03-20 | 8ba4345 | [260320-hr5](./quick/260320-hr5-backfill-talk-kicker-not-writing-updates/) |
-| 260323-0jy | Fix sqlite3.OperationalError no such column URI_L/URI_GC | 2026-03-23 | cc87f51 | [260323-0jy](./quick/260323-0jy-fix-sqlite3-operationalerror-no-such-col/) |
-| 260404-qft | Update MCP server default port from 8000 to 7363 | 2026-04-04 | ca0b3ef | [260404-qft](./quick/260404-qft-update-mcp-server-port-to-7363/) |
+| # | Description | Date | Commit | Status | Directory |
+|---|-------------|------|--------|--------|-----------|
+| 260320-hr5 | backfill_talk_kicker not writing updates | 2026-03-20 | 8ba4345 | | [260320-hr5](./quick/260320-hr5-backfill-talk-kicker-not-writing-updates/) |
+| 260323-0jy | Fix sqlite3.OperationalError no such column URI_L/URI_GC | 2026-03-23 | cc87f51 | | [260323-0jy](./quick/260323-0jy-fix-sqlite3-operationalerror-no-such-col/) |
+| 260404-qft | Update MCP server default port from 8000 to 7363 | 2026-04-05 | ca0b3ef | Verified | [260404-qft](./quick/260404-qft-update-mcp-server-port-to-7363/) |
 
 ## Session Continuity
 
