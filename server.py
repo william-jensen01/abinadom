@@ -256,7 +256,7 @@ async def lifespan(server: FastMCP):
 
 
 MCP_HOST = os.environ.get("MCP_HOST", "0.0.0.0")
-MCP_PORT = int(os.environ.get("MCP_PORT", "8000"))
+MCP_PORT = int(os.environ.get("MCP_PORT", "7363"))
 AUTH_DB_PATH = os.environ.get(
     "AUTH_DB_PATH",
     str(Path(__file__).parent.resolve() / "auth.db"),

@@ -65,7 +65,7 @@ While still on your tunnel's configuration page:
 > **Why HTTP and not HTTPS?**  
 > Cloudflare terminates external TLS at the edge. Traffic between cloudflared and Caddy travels on the internal Docker network — plain HTTP is correct here. If you set the service type to HTTPS, cloudflared will attempt a TLS handshake with Caddy, which is not configured for TLS in this deployment, and requests will fail.
 >
-> The correct routing chain is: `Internet → Cloudflare edge (TLS) → cloudflared → caddy:80 (HTTP) → mcp-server:8000`
+> The correct routing chain is: `Internet → Cloudflare edge (TLS) → cloudflared → caddy:80 (HTTP) → mcp-server:7363`
 
 ---
 

@@ -3,5 +3,5 @@
 }
 
 mcp.{$DOMAIN} {
-    reverse_proxy mcp-server:8000
+    reverse_proxy mcp-server:7363
 }

@@ -16,8 +16,8 @@ ENV AUTH_DB_PATH=/data/auth.db
 
 # Default host/port — overridable via .env / env_file in compose
 ENV MCP_HOST=0.0.0.0
-ENV MCP_PORT=8000
+ENV MCP_PORT=7363
 
-EXPOSE 8000
+EXPOSE 7363
 
 CMD ["python", "server.py"]
