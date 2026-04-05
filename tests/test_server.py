@@ -648,7 +648,7 @@ def test_mcp_host_port_defaults(monkeypatch):
     monkeypatch.delenv("MCP_PORT", raising=False)
     from server import mcp
     assert mcp.settings.host == "0.0.0.0"
-    assert mcp.settings.port == 8000
+    assert mcp.settings.port == 7363
 
 
 def test_mcp_host_port_env_override(monkeypatch):
