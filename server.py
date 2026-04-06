@@ -5,6 +5,7 @@ Exposes the ChromaDB vector collections via Streamable HTTP transport.
 Phase 9 builds startup validation; Phase 10 adds search and get_talk tools.
 Phase 13 swaps to HTTP transport with configurable host/port.
 Phase 14 adds bearer token authentication via BearerAuthMiddleware.
+Phase 16.1 adds OAuth 2.1 via Auth0 JWT verification (DualTokenVerifier).
 
 Startup sequence:
   1. Resolve ChromaDB path to absolute (CORE-01)
@@ -17,8 +18,11 @@ MCP tools (Phase 10):
   - search: semantic search across 4 collections with optional speaker/year/season filters
   - get_talk: retrieve full ordered text of a conference talk by ID
 
-Auth (Phase 14):
-  - Bearer token enforcement via BearerAuthMiddleware on all routes except /health
+Auth (Phase 14/16.1):
+  - OAuth 2.1: When AUTH0_DOMAIN is set, FastMCP receives AuthSettings + DualTokenVerifier
+    (Auth0 JWT + static bearer token fallback). SDK handles enforcement internally.
+  - Static-only fallback: When AUTH0_DOMAIN is unset, BearerAuthMiddleware is added as
+    standalone ASGI middleware (Phase 14 backward-compatible mode).
   - AUTH_DB_PATH env var configures auth.db location (default: project_root/auth.db)
 
 All logging goes to stderr only.
@@ -39,8 +43,9 @@ from starlette.responses import JSONResponse
 from config.pipeline_config import CHROMADB_COLLECTION_NAMES
 from config.ollama import resolve_ollama_url
 from extractors.phase6_chromadb_loader import get_embedding_function
+from mcp.server.auth.settings import AuthSettings
+from auth.oauth import Auth0JWTVerifier, DualTokenVerifier
 from auth.store import SqliteKeyStore
-from auth.middleware import BearerAuthMiddleware
 
 # ---------------------------------------------------------------------------
 # Logging — must be configured before anything else writes to stderr (INTG-01)
@@ -261,6 +266,24 @@ AUTH_DB_PATH = os.environ.get(
     "AUTH_DB_PATH",
     str(Path(__file__).parent.resolve() / "auth.db"),
 )
+AUTH0_DOMAIN = os.environ.get("AUTH0_DOMAIN", "")
+AUTH0_AUDIENCE = os.environ.get("AUTH0_AUDIENCE", "")
+MCP_BASE_URL = os.environ.get("MCP_BASE_URL", "")
+
+# OAuth 2.1 auth — active only when Auth0 is configured (D-01, D-02)
+_auth_settings = None
+_token_verifier = None
+if AUTH0_DOMAIN and AUTH0_AUDIENCE:
+    _store = SqliteKeyStore(AUTH_DB_PATH)
+    _jwt_verifier = Auth0JWTVerifier(AUTH0_DOMAIN, AUTH0_AUDIENCE)
+    _token_verifier = DualTokenVerifier(_jwt_verifier, _store)
+    _auth_settings = AuthSettings(
+        issuer_url=f"https://{AUTH0_DOMAIN}/",
+        resource_server_url=f"{MCP_BASE_URL}/mcp" if MCP_BASE_URL else f"http://{MCP_HOST}:{MCP_PORT}/mcp",
+    )
+    logger.info("OAuth 2.1 enabled (Auth0 domain: %s)", AUTH0_DOMAIN)
+else:
+    logger.info("OAuth 2.1 disabled (AUTH0_DOMAIN not set) — static bearer tokens only")
 
 mcp = FastMCP(
     "lds-scripture-index",
@@ -277,6 +300,8 @@ mcp = FastMCP(
         "the database has insufficient information. "
         "Use search to find a talk_id, then get_talk to retrieve full text."
     ),
+    auth=_auth_settings,
+    token_verifier=_token_verifier,
 )
 
 
@@ -444,12 +469,41 @@ async def health_check(request: Request) -> JSONResponse:
 
 
 # ---------------------------------------------------------------------------
+# Auth0 discovery proxy — RFC 8414 (Phase 16.1)
+# ---------------------------------------------------------------------------
+
+
+@mcp.custom_route("/.well-known/oauth-authorization-server", methods=["GET"])
+async def auth_server_metadata(request: Request) -> JSONResponse:
+    """Proxy Auth0's OAuth authorization server metadata (RFC 8414).
+
+    Claude clients may request this from the MCP server domain directly
+    rather than following the authorization_servers array in the protected
+    resource metadata. This proxy ensures compatibility.
+    """
+    if not AUTH0_DOMAIN:
+        return JSONResponse(
+            {"error": "OAuth not configured"},
+            status_code=404,
+        )
+    import httpx
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(
+            f"https://{AUTH0_DOMAIN}/.well-known/openid-configuration"
+        )
+        return JSONResponse(resp.json(), status_code=resp.status_code)
+
+
+# ---------------------------------------------------------------------------
 # Entry point — Streamable HTTP transport (TRANS-01)
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     import uvicorn
-    store = SqliteKeyStore(AUTH_DB_PATH)
     app = mcp.streamable_http_app()
-    app.add_middleware(BearerAuthMiddleware, store=store)
+    if not _auth_settings:
+        # Fallback: Phase 14 standalone bearer auth (no OAuth configured)
+        from auth.middleware import BearerAuthMiddleware
+        store = SqliteKeyStore(AUTH_DB_PATH)
+        app.add_middleware(BearerAuthMiddleware, store=store)
     uvicorn.run(app, host=MCP_HOST, port=int(MCP_PORT))
