@@ -69,6 +69,11 @@
 ### Root
 - `server.py` — MCP server entry point (FastMCP, stdio transport)
 
+### auth/
+- `auth/middleware.py` — Bearer token authentication middleware (Phase 14)
+- `auth/store.py` — KeyStore ABC and SqliteKeyStore (Phase 14)
+- `auth/oauth.py` — Auth0 JWT verification and DualTokenVerifier (Phase 16.1)
+
 ### docs/
 - `docs/PIPELINE_SPEC.md` — Full pipeline specification
 - `docs/PROJECT.md` — Project overview
@@ -126,6 +131,8 @@
 - `tests/test_phase6.py`
 - `tests/test_phase6_orchestrator.py`
 - `tests/test_server.py`
+- `tests/test_oauth.py`
+- `tests/test_auth.py`
 
 ### infra/
 - `infra/docker-compose.yml` — Shared reverse-proxy Compose stack (Caddy + cloudflared)
