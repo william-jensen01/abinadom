@@ -110,12 +110,16 @@ Plans:
 ### Phase 16.1: OAuth 2.0 for Claude Desktop
 **Goal**: Claude Desktop can connect to the remote MCP server via its built-in OAuth flow
 **Depends on**: Phase 16
-**Requirements**: TBD
+**Requirements**: OAUTH-01, OAUTH-02, OAUTH-03
 **Success Criteria** (what must be TRUE):
   1. Claude Desktop's "Add MCP Server" dialog completes the OAuth handshake against this server
-  2. Server implements `/.well-known/oauth-authorization-server`, a token endpoint, and redirect-based auth flow
+  2. Server implements `/.well-known/oauth-protected-resource/mcp` (RFC 9728) and proxies `/.well-known/oauth-authorization-server` to Auth0
   3. Existing bearer token auth for other clients remains functional
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 16.1-01-PLAN.md — Auth0JWTVerifier and DualTokenVerifier with full test coverage
+- [ ] 16.1-02-PLAN.md — Wire OAuth into FastMCP constructor, Auth0 discovery proxy, env config
+- [ ] 16.1-03-PLAN.md — Auth0 tenant setup (operator) and end-to-end verification
 
 ### Phase 17: Operator Docs
 **Goal**: Any user or operator can onboard, deploy, or manage keys without asking the author
@@ -148,5 +152,5 @@ Plans:
 | 14. Auth Module | v3.0 | 2/3 | Complete    | 2026-04-04 |
 | 15. Docker Compose & Config | v3.0 | 2/2 | Complete    | 2026-04-04 |
 | 16. Caddy & Cloudflare Tunnel | v3.0 | 2/2 | Complete    | 2026-04-05 |
-| 16.1 OAuth 2.0 for Claude Desktop | v3.0 | 0/? | Not started | - |
+| 16.1 OAuth 2.0 for Claude Desktop | v3.0 | 0/3 | Not started | - |
 | 17. Operator Docs | v3.0 | 0/? | Not started | - |

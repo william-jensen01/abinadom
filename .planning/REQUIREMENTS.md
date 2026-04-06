@@ -18,6 +18,12 @@ Requirements for the Remote MCP milestone. Each maps to roadmap phases.
 - [ ] **AUTH-02**: Server rejects requests without a valid bearer token with 401
 - [x] **AUTH-03**: Server logs tool name, timestamp, and user for every authenticated request
 
+### OAuth
+
+- [ ] **OAUTH-01**: Claude Desktop (or Claude Code CLI) completes OAuth 2.1 handshake against the MCP server via Auth0
+- [ ] **OAUTH-02**: Server validates Auth0-issued JWTs and static bearer tokens (dual-path authentication)
+- [ ] **OAUTH-03**: Server serves `/.well-known/oauth-protected-resource/mcp` (RFC 9728) and proxies `/.well-known/oauth-authorization-server` to Auth0
+
 ### Deployment
 
 - [x] **DEPLOY-01**: Operator can run full stack via `docker compose up` (mcp-server + ollama)
@@ -50,12 +56,13 @@ Deferred to future milestones. Tracked but not in current roadmap.
 
 | Feature | Reason |
 |---------|--------|
-| OAuth 2.1 | Complexity not warranted at current scale; upgrade path preserved |
+| Custom Authorization Server | Auth0 handles all AS responsibilities (D-01) |
 | stdio fallback | Desktop use case retired; HTTP transport replaces it |
 | Usage admin endpoint | Nice-to-have; logs in SQLite are accessible directly |
 | Rate limiting | Audience is trusted users; defer until abuse is observed |
 | Remote/hosted ChromaDB | Local volume mount sufficient; VPS migration is a copy operation |
 | Web UI for key management | CLI/script sufficient for operator |
+| Per-user scopes / RBAC | All users get same tools; defer until differentiation needed |
 
 ## Traceability
 
@@ -68,6 +75,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTH-01 | Phase 14 | Complete |
 | AUTH-02 | Phase 14 | Pending |
 | AUTH-03 | Phase 14 | Complete |
+| OAUTH-01 | Phase 16.1 | Pending |
+| OAUTH-02 | Phase 16.1 | Pending |
+| OAUTH-03 | Phase 16.1 | Pending |
 | DEPLOY-01 | Phase 15 | Complete |
 | DEPLOY-02 | Phase 15 | Complete |
 | DEPLOY-03 | Phase 16 | Complete |
@@ -77,10 +87,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOCS-03 | Phase 17 | Pending |
 
 **Coverage:**
-- v3.0 requirements: 12 total
-- Mapped to phases: 12 (100%)
+- v3.0 requirements: 15 total
+- Mapped to phases: 15 (100%)
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-03*
-*Last updated: 2026-04-03 — traceability filled after roadmap creation (Phases 13–17)*
+*Last updated: 2026-04-06 — added OAUTH-01/02/03 for Phase 16.1*
