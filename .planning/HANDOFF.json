@@ -1,0 +1,79 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-04-07T03:08:41.686Z",
+  "phase": "16.1",
+  "phase_name": "OAuth 2.0 for Claude Desktop",
+  "phase_dir": ".planning/phases/16.1-oauth-2-0-support-for-claude-desktop-remote-mcp",
+  "plan": 4,
+  "task": 0,
+  "total_tasks": 0,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": 1,
+      "name": "Update CONTEXT.md — drop D-08 dual-path, pivot to mcpauth resource-server mode",
+      "status": "done",
+      "commit": "f413857"
+    },
+    {
+      "id": 2,
+      "name": "Update ROADMAP.md — update plan count to 4, add 16.1-04 corrective plan, update success criteria #3",
+      "status": "done",
+      "commit": "f413857"
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": 3,
+      "name": "Spawn gsd-planner to create 16.1-04-PLAN.md (corrective mcpauth implementation)",
+      "status": "not_started"
+    },
+    {
+      "id": 4,
+      "name": "Run gsd-plan-checker on 16.1-04-PLAN.md",
+      "status": "not_started"
+    },
+    {
+      "id": 5,
+      "name": "Execute 16.1-04-PLAN.md via /gsd-execute-phase",
+      "status": "not_started"
+    },
+    {
+      "id": 6,
+      "name": "Operator setup: Auth0 tenant config + end-to-end verification (16.1-03-PLAN.md — human action plan)",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [],
+  "human_actions_pending": [
+    {
+      "action": "Auth0 tenant configuration (dashboard steps)",
+      "context": "16.1-03-PLAN.md documents the required Auth0 setup — create tenant, create API, enable social logins, configure PKCE, add Claude callback URL",
+      "blocking": false
+    }
+  ],
+  "decisions": [
+    {
+      "decision": "Drop static bearer token auth (BearerAuthMiddleware / SqliteKeyStore) entirely",
+      "rationale": "User confirmed no interest in maintaining dual-path; Auth0 JWT is the sole auth path",
+      "phase": "16.1"
+    },
+    {
+      "decision": "Use mcpauth in resource-server mode with bearer_auth_middleware('jwt', resource=...)",
+      "rationale": "Original plans 01-02 used mcp.server.auth SDK internals instead of mcpauth as specified in CONTEXT D-06/D-07",
+      "phase": "16.1"
+    },
+    {
+      "decision": "Move /health out of @mcp.custom_route into outer Starlette router",
+      "rationale": "mcpauth bearer_auth_middleware protects all routes under Mount('/') — /health must be public",
+      "phase": "16.1"
+    }
+  ],
+  "uncommitted_files": [
+    ".planning/STATE.md",
+    "auth/oauth.py",
+    "server.py"
+  ],
+  "next_action": "Run /gsd-plan-phase to spawn gsd-planner for 16.1-04-PLAN.md (corrective mcpauth implementation). Skip research — RESEARCH.md exists. The planner should read updated 16.1-CONTEXT.md before planning.",
+  "context_notes": "Plans 01-02 implemented wrong approach (custom PyJWT/Auth0JWTVerifier using mcp.server.auth). Corrective plan 04 must: install mcpauth, rewrite auth/oauth.py using MCPAuth resource-server mode, rewrite server.py to use resource_metadata_router()+bearer_auth_middleware('jwt'), remove auth=/token_verifier= from FastMCP, move /health to outer Starlette router, rewrite tests/test_oauth.py. auth/oauth.py and server.py have WRONG implementation currently (uncommitted changes from plans 01-02 execution)."
+}
