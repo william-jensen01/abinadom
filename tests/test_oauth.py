@@ -2,19 +2,23 @@
 Unit tests for auth.oauth — JWKSVerifier (algorithm-agnostic JWT verification).
 
 Covers:
-  1. test_verify_rs256_valid        -- RS256 signed JWT returns decoded payload
-  2. test_verify_es256_valid        -- ES256 signed JWT returns decoded payload
-  3. test_verify_none_rejected      -- JWT with alg=none returns None
-  4. test_verify_unknown_alg_rejected -- JWT with alg="FAKE" returns None
-  5. test_verify_expired_rejected   -- Expired JWT returns None
-  6. test_verify_wrong_audience_rejected -- Wrong aud returns None
-  7. test_verify_wrong_issuer_rejected   -- Wrong iss returns None
-  8. test_verify_hs256_with_secret  -- HS256 JWT with correct secret returns payload
-  9. test_verify_hs256_without_secret_rejected -- HS256 with no client_secret returns None
+  1.  test_verify_rs256_valid                  -- RS256 signed JWT returns decoded payload
+  2.  test_verify_es256_valid                  -- ES256 signed JWT returns decoded payload
+  3.  test_verify_none_rejected                -- JWT with alg=none returns None
+  4.  test_verify_unknown_alg_rejected         -- JWT with alg="FAKE" returns None
+  5.  test_verify_expired_rejected             -- Expired JWT returns None
+  6.  test_verify_wrong_audience_rejected      -- Wrong aud returns None
+  7.  test_verify_wrong_issuer_rejected        -- Wrong iss returns None
+  8.  test_verify_hs256_with_secret            -- HS256 JWT with correct secret returns payload
+  9.  test_verify_hs256_without_secret_rejected -- HS256 with no client_secret returns None
+  10. test_verify_jwe_dir_a256gcm              -- JWE (alg=dir, enc=A256GCM) decrypts and verifies
+  11. test_verify_jwe_no_secret_rejected       -- JWE without client_secret returns None
+  12. test_verify_jwe_wrong_key_rejected       -- JWE with wrong key returns None
 
 All tests avoid real HTTP calls to Auth0. RSA/EC key generation uses the
 cryptography library (already installed as a PyJWT[crypto] dependency).
 """
+import base64
 import time
 import pytest
 from unittest.mock import MagicMock, patch
@@ -228,6 +232,91 @@ def test_verify_hs256_without_secret_rejected():
         secret,
         algorithm="HS256",
     )
+
+    result = verifier.verify_token(token)
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# JWE tests (alg=dir, enc=A256GCM — Auth0 DCR encrypted tokens)
+# ---------------------------------------------------------------------------
+
+
+def _make_jwe_token(inner_jwt: str, key_bytes: bytes) -> str:
+    """Build a minimal JWE compact token (alg=dir, enc=A256GCM) for testing."""
+    import os
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    header = base64.urlsafe_b64encode(
+        b'{"alg":"dir","enc":"A256GCM"}'
+    ).rstrip(b"=").decode()
+    encrypted_key = ""  # empty for alg=dir
+    iv = os.urandom(12)
+    iv_b64 = base64.urlsafe_b64encode(iv).rstrip(b"=").decode()
+    aad = header.encode("ascii")
+    aesgcm = AESGCM(key_bytes)
+    ct_and_tag = aesgcm.encrypt(iv, inner_jwt.encode(), aad)
+    # cryptography returns ciphertext+tag concatenated; split off last 16 bytes as tag
+    ciphertext, tag = ct_and_tag[:-16], ct_and_tag[-16:]
+    ct_b64 = base64.urlsafe_b64encode(ciphertext).rstrip(b"=").decode()
+    tag_b64 = base64.urlsafe_b64encode(tag).rstrip(b"=").decode()
+    return f"{header}.{encrypted_key}.{iv_b64}.{ct_b64}.{tag_b64}"
+
+
+def test_verify_jwe_dir_a256gcm(rsa_private_key):
+    """JWE (alg=dir, enc=A256GCM) token decrypts and inner JWT verifies."""
+    # 32-byte key, base64url-encoded (simulates AUTH0_CLIENT_SECRET)
+    raw_key = b"testjwekey0123456789abcdefghijkl"  # exactly 32 bytes
+    client_secret = base64.urlsafe_b64encode(raw_key).rstrip(b"=").decode()
+
+    verifier = _make_verifier(client_secret=client_secret)
+
+    inner_jwt = jwt.encode(
+        {"sub": "jwe-user", "aud": FAKE_AUDIENCE, "iss": FAKE_ISSUER, "exp": int(time.time()) + 300},
+        rsa_private_key,
+        algorithm="RS256",
+    )
+    token = _make_jwe_token(inner_jwt, raw_key)
+
+    verifier._jwks_client.get_signing_key_from_jwt.return_value = _mock_signing_key(
+        rsa_private_key.public_key()
+    )
+
+    result = verifier.verify_token(token)
+    assert result is not None
+    assert result["sub"] == "jwe-user"
+
+
+def test_verify_jwe_no_secret_rejected(rsa_private_key):
+    """JWE token without client_secret configured returns None."""
+    raw_key = b"testjwekey0123456789abcdefghijkl"
+    verifier = _make_verifier(client_secret=None)
+
+    inner_jwt = jwt.encode(
+        {"sub": "jwe-user2", "aud": FAKE_AUDIENCE, "iss": FAKE_ISSUER, "exp": int(time.time()) + 300},
+        rsa_private_key,
+        algorithm="RS256",
+    )
+    token = _make_jwe_token(inner_jwt, raw_key)
+
+    result = verifier.verify_token(token)
+    assert result is None
+
+
+def test_verify_jwe_wrong_key_rejected(rsa_private_key):
+    """JWE token encrypted with a different key returns None."""
+    raw_key = b"testjwekey0123456789abcdefghijkl"
+    wrong_key = b"wrongkey0123456789abcdefghijklmn"
+    wrong_secret = base64.urlsafe_b64encode(wrong_key).rstrip(b"=").decode()
+
+    verifier = _make_verifier(client_secret=wrong_secret)
+
+    inner_jwt = jwt.encode(
+        {"sub": "jwe-user3", "aud": FAKE_AUDIENCE, "iss": FAKE_ISSUER, "exp": int(time.time()) + 300},
+        rsa_private_key,
+        algorithm="RS256",
+    )
+    token = _make_jwe_token(inner_jwt, raw_key)
 
     result = verifier.verify_token(token)
     assert result is None
