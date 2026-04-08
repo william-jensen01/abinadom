@@ -73,12 +73,23 @@ class JWKSVerifier:
             header = jwt.get_unverified_header(token)
         except jwt.PyJWTError as exc:
             segments = token.count(".")
+            # Attempt to decode the first segment independently so we can log the
+            # full header even when PyJWT refuses the whole token (e.g. JWE tokens).
+            import base64 as _b64
+            first_seg = token.split(".")[0]
+            # base64url requires padding to a multiple of 4
+            padded = first_seg + "=" * (-len(first_seg) % 4)
+            try:
+                import json as _json
+                decoded_header = _json.loads(_b64.urlsafe_b64decode(padded))
+            except Exception:
+                decoded_header = "<undecodable>"
             logger.warning(
-                "JWT header decode failed (%s) — token has %d dot(s), len=%d, prefix=%r",
+                "JWT header decode failed (%s) — segments=%d len=%d header=%s",
                 exc,
                 segments,
                 len(token),
-                token[:20],
+                decoded_header,
             )
             return None
 
