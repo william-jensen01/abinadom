@@ -4,13 +4,14 @@ milestone: v3.0
 milestone_name: Remote MCP
 status: executing
 stopped_at: Quick task 260404-qft complete — port 7363 change applied
-last_updated: "2026-04-05T04:20:20.103Z"
-last_activity: 2026-04-05
+last_updated: "2026-04-08T06:14:02.336Z"
+last_activity: 2026-04-08 -- Phase 16.1 execution started
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 9
-  completed_plans: 9
+  total_plans: 13
+  completed_plans: 11
+  percent: 85
 ---
 
 # Project State
@@ -20,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** All LDS content searchable by meaning — find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** Phase 16 — caddy-cloudflare-tunnel
+**Current focus:** Phase 16.1 — oauth-2-0-support-for-claude-desktop-remote-mcp
 
 ## Current Position
 
-Phase: 999.1
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-04-05
+Phase: 16.1 (oauth-2-0-support-for-claude-desktop-remote-mcp) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 16.1
+Last activity: 2026-04-08 -- Phase 16.1 execution started
 
 Progress: [████████░░░░░░░░░░░░] v1.0 + v2.0 complete; v3.0 not started
 
