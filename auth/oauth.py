@@ -72,7 +72,14 @@ class JWKSVerifier:
         try:
             header = jwt.get_unverified_header(token)
         except jwt.PyJWTError as exc:
-            logger.warning("JWT header decode failed: %s", exc)
+            segments = token.count(".")
+            logger.warning(
+                "JWT header decode failed (%s) — token has %d dot(s), len=%d, prefix=%r",
+                exc,
+                segments,
+                len(token),
+                token[:20],
+            )
             return None
 
         alg = header.get("alg", "")
