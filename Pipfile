@@ -12,6 +12,7 @@ chromadb = "*"
 ollama = "*"
 tqdm = "*"
 mcp = "*"
+mcpauth = "*"
 
 [dev-packages]
 pytest = "*"
