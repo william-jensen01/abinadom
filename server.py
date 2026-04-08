@@ -517,7 +517,7 @@ def build_app():
                   endpoint=_auth_server_metadata),            # Auth0 raw OIDC proxy (optional)
             Mount("/", app=mcp_app, middleware=[bearer_auth]),  # MCP behind JWT auth
         ]
-        return Starlette(routes=routes, lifespan=mcp_app.lifespan)
+        return Starlette(routes=routes)
     else:
         # Static-only fallback: Phase 14 BearerAuthMiddleware (no Auth0 configured)
         from auth.middleware import BearerAuthMiddleware
