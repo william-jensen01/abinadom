@@ -488,11 +488,17 @@ async def _auth_server_metadata(request: Request) -> JSONResponse:
 
 
 # ---------------------------------------------------------------------------
-# Entry point — Streamable HTTP transport (TRANS-01)
+# App factory — builds full Starlette app with /health and auth wiring
 # ---------------------------------------------------------------------------
 
-if __name__ == "__main__":
-    import uvicorn
+
+def build_app():
+    """Build and return the full Starlette application.
+
+    Wires /health (public), mcpauth JWT middleware (OAuth mode), or
+    BearerAuthMiddleware (static-only fallback) depending on env vars.
+    Used by __main__ and by tests.
+    """
     from starlette.applications import Starlette
     from starlette.middleware import Middleware
     from starlette.routing import Route, Mount
@@ -511,15 +517,23 @@ if __name__ == "__main__":
                   endpoint=_auth_server_metadata),            # Auth0 raw OIDC proxy (optional)
             Mount("/", app=mcp_app, middleware=[bearer_auth]),  # MCP behind JWT auth
         ]
-        app = Starlette(routes=routes, lifespan=mcp_app.lifespan)
+        return Starlette(routes=routes, lifespan=mcp_app.lifespan)
     else:
         # Static-only fallback: Phase 14 BearerAuthMiddleware (no Auth0 configured)
         from auth.middleware import BearerAuthMiddleware
         store = SqliteKeyStore(AUTH_DB_PATH)
         mcp_app.add_middleware(BearerAuthMiddleware, store=store)
-        app = Starlette(routes=[
+        return Starlette(routes=[
             Route("/health", endpoint=health_check),
             Mount("/", app=mcp_app),
         ])
 
+
+# ---------------------------------------------------------------------------
+# Entry point — Streamable HTTP transport (TRANS-01)
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    import uvicorn
+    app = build_app()
     uvicorn.run(app, host=MCP_HOST, port=int(MCP_PORT))

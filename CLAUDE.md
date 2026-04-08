@@ -72,7 +72,7 @@
 ### auth/
 - `auth/middleware.py` — Bearer token authentication middleware (Phase 14)
 - `auth/store.py` — KeyStore ABC and SqliteKeyStore (Phase 14)
-- `auth/oauth.py` — Auth0 JWT verification and DualTokenVerifier (Phase 16.1)
+- `auth/oauth.py` — mcpauth resource-server setup for Auth0 JWT verification (Phase 16.1)
 
 ### docs/
 - `docs/PIPELINE_SPEC.md` — Full pipeline specification

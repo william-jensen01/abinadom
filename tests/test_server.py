@@ -707,8 +707,8 @@ def test_health_returns_200():
 
     with patch("server.get_embedding_function", mock_ef_cls), \
          patch("server.chromadb.PersistentClient", return_value=mock_client):
-        from server import mcp
-        app = mcp.streamable_http_app()
+        from server import build_app
+        app = build_app()
         client = TestClient(app)
         response = client.get("/health")
 
@@ -728,8 +728,8 @@ def test_health_ollama_down():
 
     with patch("server.get_embedding_function", mock_ef_cls), \
          patch("server.chromadb.PersistentClient", return_value=mock_client):
-        from server import mcp
-        app = mcp.streamable_http_app()
+        from server import build_app
+        app = build_app()
         client = TestClient(app)
         response = client.get("/health")
 
@@ -746,8 +746,8 @@ def test_health_chromadb_down():
 
     with patch("server.get_embedding_function", mock_ef_cls), \
          patch("server.chromadb.PersistentClient", side_effect=Exception("path not found")):
-        from server import mcp
-        app = mcp.streamable_http_app()
+        from server import build_app
+        app = build_app()
         client = TestClient(app)
         response = client.get("/health")
 
