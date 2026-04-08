@@ -5,7 +5,7 @@ Exposes the ChromaDB vector collections via Streamable HTTP transport.
 Phase 9 builds startup validation; Phase 10 adds search and get_talk tools.
 Phase 13 swaps to HTTP transport with configurable host/port.
 Phase 14 adds bearer token authentication via BearerAuthMiddleware.
-Phase 16.1 adds OAuth 2.1 via Auth0 JWT verification (DualTokenVerifier).
+Phase 16.1 adds OAuth 2.1 via mcpauth resource-server mode (Auth0 JWT).
 
 Startup sequence:
   1. Resolve ChromaDB path to absolute (CORE-01)
@@ -19,10 +19,11 @@ MCP tools (Phase 10):
   - get_talk: retrieve full ordered text of a conference talk by ID
 
 Auth (Phase 14/16.1):
-  - OAuth 2.1: When AUTH0_DOMAIN is set, FastMCP receives AuthSettings + DualTokenVerifier
-    (Auth0 JWT + static bearer token fallback). SDK handles enforcement internally.
-  - Static-only fallback: When AUTH0_DOMAIN is unset, BearerAuthMiddleware is added as
-    standalone ASGI middleware (Phase 14 backward-compatible mode).
+  - OAuth 2.1: When AUTH0_DOMAIN is set, mcpauth handles JWT validation at the
+    Starlette ASGI layer (bearer_auth_middleware). OAuth authorization server metadata
+    served by mcpauth's metadata_route.
+  - Static-only fallback: When AUTH0_DOMAIN is unset, BearerAuthMiddleware is added
+    (Phase 14 backward-compatible mode).
   - AUTH_DB_PATH env var configures auth.db location (default: project_root/auth.db)
 
 All logging goes to stderr only.
@@ -43,8 +44,7 @@ from starlette.responses import JSONResponse
 from config.pipeline_config import CHROMADB_COLLECTION_NAMES
 from config.ollama import resolve_ollama_url
 from extractors.phase6_chromadb_loader import get_embedding_function
-from mcp.server.auth.settings import AuthSettings
-from auth.oauth import Auth0JWTVerifier, DualTokenVerifier
+from auth.oauth import build_mcp_auth
 from auth.store import SqliteKeyStore
 
 # ---------------------------------------------------------------------------
@@ -270,20 +270,17 @@ AUTH0_DOMAIN = os.environ.get("AUTH0_DOMAIN", "")
 AUTH0_AUDIENCE = os.environ.get("AUTH0_AUDIENCE", "")
 MCP_BASE_URL = os.environ.get("MCP_BASE_URL", "")
 
-# OAuth 2.1 auth — active only when Auth0 is configured (D-01, D-02)
-_auth_settings = None
-_token_verifier = None
-if AUTH0_DOMAIN and AUTH0_AUDIENCE:
-    _store = SqliteKeyStore(AUTH_DB_PATH)
-    _jwt_verifier = Auth0JWTVerifier(AUTH0_DOMAIN, AUTH0_AUDIENCE)
-    _token_verifier = DualTokenVerifier(_jwt_verifier, _store)
-    _auth_settings = AuthSettings(
-        issuer_url=f"https://{AUTH0_DOMAIN}/",
-        resource_server_url=f"{MCP_BASE_URL}/mcp" if MCP_BASE_URL else f"http://{MCP_HOST}:{MCP_PORT}/mcp",
-    )
-    logger.info("OAuth 2.1 enabled (Auth0 domain: %s)", AUTH0_DOMAIN)
+# OAuth 2.1 via mcpauth — active only when Auth0 is configured (D-01, D-02, D-06)
+_mcp_auth = None
+if AUTH0_DOMAIN and AUTH0_AUDIENCE and MCP_BASE_URL:
+    try:
+        _mcp_auth = build_mcp_auth(AUTH0_DOMAIN, MCP_BASE_URL)
+        logger.info("OAuth 2.1 enabled via mcpauth (Auth0 domain: %s)", AUTH0_DOMAIN)
+    except Exception as exc:
+        logger.error("Failed to initialize mcpauth (Auth0 unreachable?): %s", exc)
+        logger.error("OAuth 2.1 DISABLED — server will not accept JWT tokens")
 else:
-    logger.info("OAuth 2.1 disabled (AUTH0_DOMAIN not set) — static bearer tokens only")
+    logger.info("OAuth 2.1 disabled (AUTH0_DOMAIN/MCP_BASE_URL not set) — static bearer tokens only")
 
 mcp = FastMCP(
     "lds-scripture-index",
@@ -300,8 +297,6 @@ mcp = FastMCP(
         "the database has insufficient information. "
         "Use search to find a talk_id, then get_talk to retrieve full text."
     ),
-    auth=_auth_settings,
-    token_verifier=_token_verifier,
 )
 
 
@@ -437,7 +432,6 @@ async def get_talk(
 # ---------------------------------------------------------------------------
 
 
-@mcp.custom_route("/health", methods=["GET"])
 async def health_check(request: Request) -> JSONResponse:
     """Return server health with live Ollama and ChromaDB reachability checks."""
     status = {"ollama": "reachable", "chromadb": "reachable"}
@@ -473,8 +467,7 @@ async def health_check(request: Request) -> JSONResponse:
 # ---------------------------------------------------------------------------
 
 
-@mcp.custom_route("/.well-known/oauth-authorization-server", methods=["GET"])
-async def auth_server_metadata(request: Request) -> JSONResponse:
+async def _auth_server_metadata(request: Request) -> JSONResponse:
     """Proxy Auth0's OAuth authorization server metadata (RFC 8414).
 
     Claude clients may request this from the MCP server domain directly
@@ -500,10 +493,33 @@ async def auth_server_metadata(request: Request) -> JSONResponse:
 
 if __name__ == "__main__":
     import uvicorn
-    app = mcp.streamable_http_app()
-    if not _auth_settings:
-        # Fallback: Phase 14 standalone bearer auth (no OAuth configured)
+    from starlette.applications import Starlette
+    from starlette.middleware import Middleware
+    from starlette.routing import Route, Mount
+
+    mcp_app = mcp.streamable_http_app()
+
+    if _mcp_auth is not None:
+        # OAuth mode: mcpauth handles JWT validation at ASGI layer
+        bearer_auth = Middleware(
+            _mcp_auth.bearer_auth_middleware("jwt", audience=MCP_BASE_URL)
+        )
+        routes = [
+            Route("/health", endpoint=health_check),          # public — no auth
+            _mcp_auth.metadata_route(),                       # /.well-known/oauth-authorization-server
+            Route("/.well-known/oauth-authorization-server-proxy",
+                  endpoint=_auth_server_metadata),            # Auth0 raw OIDC proxy (optional)
+            Mount("/", app=mcp_app, middleware=[bearer_auth]),  # MCP behind JWT auth
+        ]
+        app = Starlette(routes=routes, lifespan=mcp_app.lifespan)
+    else:
+        # Static-only fallback: Phase 14 BearerAuthMiddleware (no Auth0 configured)
         from auth.middleware import BearerAuthMiddleware
         store = SqliteKeyStore(AUTH_DB_PATH)
-        app.add_middleware(BearerAuthMiddleware, store=store)
+        mcp_app.add_middleware(BearerAuthMiddleware, store=store)
+        app = Starlette(routes=[
+            Route("/health", endpoint=health_check),
+            Mount("/", app=mcp_app),
+        ])
+
     uvicorn.run(app, host=MCP_HOST, port=int(MCP_PORT))
