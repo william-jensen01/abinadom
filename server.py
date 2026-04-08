@@ -5,7 +5,7 @@ Exposes the ChromaDB vector collections via Streamable HTTP transport.
 Phase 9 builds startup validation; Phase 10 adds search and get_talk tools.
 Phase 13 swaps to HTTP transport with configurable host/port.
 Phase 14 adds bearer token authentication via BearerAuthMiddleware.
-Phase 16.1 adds OAuth 2.1 via mcpauth resource-server mode (Auth0 JWT).
+Phase 16.1 adds OAuth 2.1 via algorithm-agnostic JWT verification (Auth0 JWKS + PyJWT).
 
 Startup sequence:
   1. Resolve ChromaDB path to absolute (CORE-01)
@@ -19,9 +19,9 @@ MCP tools (Phase 10):
   - get_talk: retrieve full ordered text of a conference talk by ID
 
 Auth (Phase 14/16.1):
-  - OAuth 2.1: When AUTH0_DOMAIN is set, mcpauth handles JWT validation at the
-    Starlette ASGI layer (bearer_auth_middleware). OAuth authorization server metadata
-    served by mcpauth's metadata_route.
+  - OAuth 2.1: When AUTH0_DOMAIN is set, JWKSVerifier handles JWT validation via
+    JWTAuthMiddleware at the Starlette ASGI layer. RFC 9728 protected resource metadata
+    and RFC 8414 authorization server metadata are served as discovery endpoints.
   - Static-only fallback: When AUTH0_DOMAIN is unset, BearerAuthMiddleware is added
     (Phase 14 backward-compatible mode).
   - AUTH_DB_PATH env var configures auth.db location (default: project_root/auth.db)
@@ -38,13 +38,14 @@ from pathlib import Path
 
 import chromadb
 from mcp.server.fastmcp import FastMCP, Context
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from config.pipeline_config import CHROMADB_COLLECTION_NAMES
 from config.ollama import resolve_ollama_url
 from extractors.phase6_chromadb_loader import get_embedding_function
-from auth.oauth import build_mcp_auth
+from auth.oauth import JWKSVerifier
 from auth.store import SqliteKeyStore
 
 # ---------------------------------------------------------------------------
@@ -268,19 +269,20 @@ AUTH_DB_PATH = os.environ.get(
 )
 AUTH0_DOMAIN = os.environ.get("AUTH0_DOMAIN", "")
 AUTH0_AUDIENCE = os.environ.get("AUTH0_AUDIENCE", "")
+AUTH0_CLIENT_SECRET = os.environ.get("AUTH0_CLIENT_SECRET", "")
 MCP_BASE_URL = os.environ.get("MCP_BASE_URL", "")
 
-# OAuth 2.1 via mcpauth — active only when Auth0 is configured (D-01, D-02, D-06)
-_mcp_auth = None
-if AUTH0_DOMAIN and AUTH0_AUDIENCE and MCP_BASE_URL:
-    try:
-        _mcp_auth = build_mcp_auth(AUTH0_DOMAIN, MCP_BASE_URL)
-        logger.info("OAuth 2.1 enabled via mcpauth (Auth0 domain: %s)", AUTH0_DOMAIN)
-    except Exception as exc:
-        logger.error("Failed to initialize mcpauth (Auth0 unreachable?): %s", exc)
-        logger.error("OAuth 2.1 DISABLED — server will not accept JWT tokens")
+# JWT verification via JWKSVerifier — active only when Auth0 is configured (D-01, D-02)
+_jwt_verifier: JWKSVerifier | None = None
+if AUTH0_DOMAIN and AUTH0_AUDIENCE:
+    _jwt_verifier = JWKSVerifier(
+        domain=AUTH0_DOMAIN,
+        audience=AUTH0_AUDIENCE,
+        client_secret=AUTH0_CLIENT_SECRET or None,
+    )
+    logger.info("JWT verification enabled (Auth0 domain: %s)", AUTH0_DOMAIN)
 else:
-    logger.info("OAuth 2.1 disabled (AUTH0_DOMAIN/MCP_BASE_URL not set) — static bearer tokens only")
+    logger.info("JWT verification disabled (AUTH0_DOMAIN/AUTH0_AUDIENCE not set)")
 
 mcp = FastMCP(
     "lds-scripture-index",
@@ -463,6 +465,33 @@ async def health_check(request: Request) -> JSONResponse:
 
 
 # ---------------------------------------------------------------------------
+# RFC 9728 — OAuth 2.0 Protected Resource Metadata (Phase 16.1)
+# ---------------------------------------------------------------------------
+
+
+async def _protected_resource_metadata(request: Request) -> JSONResponse:
+    """Serve OAuth 2.0 Protected Resource Metadata (RFC 9728).
+
+    Tells MCP clients which authorization server handles tokens for this resource.
+    Required by MCP spec for OAuth discovery.
+    Paths: /.well-known/oauth-protected-resource
+           /.well-known/oauth-protected-resource/mcp
+    """
+    if not AUTH0_DOMAIN or not MCP_BASE_URL:
+        return JSONResponse({"error": "OAuth not configured"}, status_code=404)
+
+    doc = {
+        "resource": MCP_BASE_URL,
+        "authorization_servers": [f"https://{AUTH0_DOMAIN}"],
+        "bearer_methods_supported": ["header"],
+    }
+    response = JSONResponse(doc)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+    return response
+
+
+# ---------------------------------------------------------------------------
 # Auth0 discovery proxy — RFC 8414 (Phase 16.1)
 # ---------------------------------------------------------------------------
 
@@ -488,6 +517,52 @@ async def _auth_server_metadata(request: Request) -> JSONResponse:
 
 
 # ---------------------------------------------------------------------------
+# JWT auth middleware — enforces Auth0 JWT on all protected routes (Phase 16.1)
+# ---------------------------------------------------------------------------
+
+
+class JWTAuthMiddleware(BaseHTTPMiddleware):
+    """Starlette middleware that enforces Auth0 JWT authentication.
+
+    All routes except PUBLIC_PATHS require a valid JWT in the Authorization header.
+    On 401, includes WWW-Authenticate with resource_metadata URL per RFC 9728.
+    """
+
+    def __init__(self, app, verifier: JWKSVerifier) -> None:
+        super().__init__(app)
+        self._verifier = verifier
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        auth_header = request.headers.get("authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return self._unauthorized("Missing bearer token")
+
+        token = auth_header[len("Bearer "):]
+        payload = self._verifier.verify_token(token)
+        if payload is None:
+            return self._unauthorized("Invalid or expired token")
+
+        return await call_next(request)
+
+    def _unauthorized(self, detail: str) -> Response:
+        headers = {}
+        if MCP_BASE_URL:
+            rm_url = f"{MCP_BASE_URL}/.well-known/oauth-protected-resource"
+            headers["WWW-Authenticate"] = (
+                f'Bearer resource_metadata="{rm_url}", error="invalid_token"'
+            )
+        else:
+            headers["WWW-Authenticate"] = 'Bearer error="invalid_token"'
+
+        return Response(
+            json.dumps({"error": detail}),
+            status_code=401,
+            media_type="application/json",
+            headers=headers,
+        )
+
+
+# ---------------------------------------------------------------------------
 # App factory — builds full Starlette app with /health and auth wiring
 # ---------------------------------------------------------------------------
 
@@ -495,9 +570,10 @@ async def _auth_server_metadata(request: Request) -> JSONResponse:
 def build_app():
     """Build and return the full Starlette application.
 
-    Wires /health (public), mcpauth JWT middleware (OAuth mode), or
-    BearerAuthMiddleware (static-only fallback) depending on env vars.
-    Used by __main__ and by tests.
+    When AUTH0_DOMAIN is set: JWT auth via JWKSVerifier on the MCP mount,
+    plus RFC 9728 and RFC 8414 discovery endpoints.
+
+    When AUTH0_DOMAIN is unset: static bearer token fallback (Phase 14).
     """
     from starlette.applications import Starlette
     from starlette.middleware import Middleware
@@ -505,17 +581,23 @@ def build_app():
 
     mcp_app = mcp.streamable_http_app()
 
-    if _mcp_auth is not None:
-        # OAuth mode: mcpauth handles JWT validation at ASGI layer
-        bearer_auth = Middleware(
-            _mcp_auth.bearer_auth_middleware("jwt", audience=MCP_BASE_URL)
-        )
+    if _jwt_verifier is not None:
+        jwt_auth = Middleware(JWTAuthMiddleware, verifier=_jwt_verifier)
         routes = [
-            Route("/health", endpoint=health_check),          # public — no auth
-            _mcp_auth.metadata_route(),                       # /.well-known/oauth-authorization-server
-            Route("/.well-known/oauth-authorization-server-proxy",
-                  endpoint=_auth_server_metadata),            # Auth0 raw OIDC proxy (optional)
-            Mount("/", app=mcp_app, middleware=[bearer_auth]),  # MCP behind JWT auth
+            Route("/health", endpoint=health_check),
+            Route(
+                "/.well-known/oauth-protected-resource",
+                endpoint=_protected_resource_metadata,
+            ),
+            Route(
+                "/.well-known/oauth-protected-resource/mcp",
+                endpoint=_protected_resource_metadata,
+            ),
+            Route(
+                "/.well-known/oauth-authorization-server",
+                endpoint=_auth_server_metadata,
+            ),
+            Mount("/", app=mcp_app, middleware=[jwt_auth]),
         ]
         return Starlette(routes=routes)
     else:
