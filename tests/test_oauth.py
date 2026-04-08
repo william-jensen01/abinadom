@@ -204,7 +204,7 @@ def test_verify_wrong_issuer_rejected(rsa_private_key):
 
 def test_verify_hs256_with_secret():
     """HS256 JWT with correct client_secret returns decoded payload."""
-    secret = "super-secret-key-for-testing"
+    secret = "super-secret-key-for-testing-abc"  # 32 bytes
     verifier = _make_verifier(client_secret=secret)
 
     token = jwt.encode(
@@ -222,7 +222,7 @@ def test_verify_hs256_without_secret_rejected():
     """HS256 JWT when no client_secret configured returns None."""
     verifier = _make_verifier(client_secret=None)
 
-    secret = "some-secret"
+    secret = "some-secret-key-for-testing-abcd"  # 32 bytes
     token = jwt.encode(
         {"sub": "user7", "aud": FAKE_AUDIENCE, "iss": FAKE_ISSUER, "exp": int(time.time()) + 300},
         secret,
