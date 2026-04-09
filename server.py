@@ -716,14 +716,17 @@ def build_app() -> FastAPI:
         return await _auth_server_metadata(request)
 
     @app.head("/")
+    @app.head("/mcp")
     async def mcp_head() -> Response:
         return Response(status_code=200, headers={"MCP-Protocol-Version": "2025-06-18"})
 
     @app.get("/")
+    @app.get("/mcp")
     async def mcp_get() -> Response:
         return Response(status_code=405, headers={"Allow": "POST, HEAD, DELETE"})
 
     @app.post("/")
+    @app.post("/mcp")
     async def mcp_dispatcher(request: Request) -> Response:
         body = await request.json()
         method = body.get("method")
@@ -755,6 +758,7 @@ def build_app() -> FastAPI:
             return _error_response(req_id, -32601, f"Method not found: {method}", 404)
 
     @app.delete("/")
+    @app.delete("/mcp")
     async def mcp_delete(request: Request) -> Response:
         session_id = request.headers.get("MCP-Session-Id", "")
         _sessions.pop(session_id, None)
