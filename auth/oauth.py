@@ -1,14 +1,11 @@
 """
 Algorithm-agnostic JWT verification via PyJWT + Auth0 JWKS.
 
-Inspects the JWT header to determine the signing algorithm, then verifies
-using the appropriate key material:
-  - JWE (4 dots, alg=dir, enc=A256GCM): decrypt with AUTH0_CLIENT_SECRET,
-    then verify the inner signed JWT.
-  - Asymmetric (RS256/RS384/RS512/PS256/PS384/PS512/ES256/ES384/ES512):
-    Fetch public key from Auth0 JWKS endpoint via PyJWKClient.
-  - Symmetric (HS256/HS384/HS512): Verify with AUTH0_CLIENT_SECRET env var.
-  - none / unknown: Reject with 401.
+Inspects the JWT header for `kid` claim presence to determine verification path:
+  - JWE (4 dots): Route to Auth0 /userinfo for server-side validation.
+  - JWT with `kid`: Fetch public key from Auth0 JWKS endpoint via PyJWKClient.
+  - JWT without `kid` (HS256, DCR clients): Validate via Auth0 /userinfo endpoint.
+  - Malformed token (header decode fails): Fallback to /userinfo validation.
 
 Design decisions:
   D-01: Auth0 is the Authorization Server.
@@ -19,6 +16,7 @@ import base64
 import json
 import logging
 
+import httpx
 import jwt
 from jwt import PyJWKClient
 
@@ -33,16 +31,11 @@ def _b64d(s: str) -> bytes:
 class JWKSVerifier:
     """Algorithm-agnostic JWT verifier using PyJWT and Auth0 JWKS.
 
-    Transparently handles JWE (encrypted) tokens by decrypting them first,
-    then verifies the inner signed JWT via JWKS or HMAC.
+    Routes tokens based on `kid` presence in the JWT header:
+    - kid present → JWKS asymmetric verification
+    - kid absent → Auth0 /userinfo server-side validation
+    - JWE (4 dots) → Auth0 /userinfo server-side validation
     """
-
-    ASYMMETRIC_ALGORITHMS = [
-        "RS256", "RS384", "RS512",
-        "PS256", "PS384", "PS512",
-        "ES256", "ES384", "ES512",
-    ]
-    SYMMETRIC_ALGORITHMS = ["HS256", "HS384", "HS512"]
 
     def __init__(
         self,
@@ -55,12 +48,13 @@ class JWKSVerifier:
         Args:
             domain: Auth0 tenant domain, e.g. "my-tenant.auth0.com".
             audience: Expected JWT audience (the MCP server's public URL).
-            client_secret: Optional client secret. Used for HMAC (HS*) token
-                verification and for decrypting JWE tokens (alg=dir).
+            client_secret: Optional client secret (retained for JWE decryption
+                if needed; not used in kid-based routing path).
         """
         self._issuer = f"https://{domain}/"
         self._audience = audience
         self._client_secret = client_secret
+        self._domain = domain
         jwks_uri = f"https://{domain}/.well-known/jwks.json"
         # PyJWKClient caches keys with a 300 s TTL and auto-refreshes on
         # unknown kid — no per-request network call in the common case.
@@ -69,35 +63,72 @@ class JWKSVerifier:
     def verify_token(self, token: str) -> dict | None:
         """Verify a JWT and return its decoded payload, or None on failure.
 
-        Steps:
-          1. Detect JWE (4 dots) and decrypt to a signed inner JWT.
-          2. Inspect the (inner) JWT header to read the signing algorithm.
-          3. Route to asymmetric (JWKS) or symmetric (client secret) path.
-          4. Return the decoded payload on success, None on any error.
+        Routing logic:
+          1. JWE (4 dots) → route to /userinfo (server-side decrypt and validate).
+          2. Header decode fails → route to /userinfo.
+          3. `kid` present in header → JWKS asymmetric verification.
+          4. No `kid` in header (HS256, DCR clients) → /userinfo validation.
 
         Returns:
             Decoded payload dict on success, None on invalid/expired/unknown.
         """
-        # JWE compact has 5 segments (4 dots); JWS compact has 3 segments (2 dots).
+        # JWE compact has 5 segments (4 dots) — route to /userinfo validation
         if token.count(".") == 4:
-            token = self._decrypt_jwe(token)
-            if token is None:
-                return None
+            logger.debug("JWE token detected, routing to /userinfo validation")
+            return self._validate_via_userinfo(token)
 
         try:
             header = jwt.get_unverified_header(token)
-        except jwt.PyJWTError as exc:
-            logger.warning("JWT header decode failed: %s", exc)
+        except jwt.PyJWTError:
+            return self._validate_via_userinfo(token)
+
+        if header.get("kid"):
+            return self._verify_asymmetric(token, header["alg"])
+        else:
+            return self._validate_via_userinfo(token)
+
+    def _validate_via_userinfo(self, token: str) -> dict | None:
+        """Validate a token by calling the Auth0 /userinfo endpoint.
+
+        Sends the token as a Bearer token to Auth0's /userinfo endpoint.
+        A 200 response with a JSON body indicates a valid, non-expired token.
+
+        Returns:
+            The userinfo payload dict on success (200), None on failure.
+        """
+        userinfo_url = f"https://{self._domain}/userinfo"
+        try:
+            with httpx.Client() as client:
+                resp = client.get(
+                    userinfo_url,
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+            if resp.status_code == 200:
+                return resp.json()
+            logger.warning(
+                "Auth0 /userinfo rejected token: HTTP %d", resp.status_code
+            )
+            return None
+        except Exception as exc:
+            logger.warning("Auth0 /userinfo request failed: %s", exc)
             return None
 
-        alg = header.get("alg", "")
-
-        if alg in self.ASYMMETRIC_ALGORITHMS:
-            return self._verify_asymmetric(token, alg)
-        elif alg in self.SYMMETRIC_ALGORITHMS:
-            return self._verify_symmetric(token, alg)
-        else:
-            logger.warning("JWT rejected: unsupported algorithm %r", alg)
+    def _verify_asymmetric(self, token: str, alg: str) -> dict | None:
+        try:
+            signing_key = self._jwks_client.get_signing_key_from_jwt(token)
+            payload = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=[alg],
+                audience=self._audience,
+                issuer=self._issuer,
+            )
+            return payload
+        except jwt.PyJWTError as exc:
+            logger.warning("JWT asymmetric verification failed: %s", exc)
+            return None
+        except Exception as exc:
+            logger.warning("JWKS key lookup failed: %s", exc)
             return None
 
     def _decrypt_jwe(self, token: str) -> str | None:
@@ -166,39 +197,4 @@ class JWKSVerifier:
 
         except Exception as exc:
             logger.warning("JWE decryption failed: %s", exc)
-            return None
-
-    def _verify_asymmetric(self, token: str, alg: str) -> dict | None:
-        try:
-            signing_key = self._jwks_client.get_signing_key_from_jwt(token)
-            payload = jwt.decode(
-                token,
-                signing_key.key,
-                algorithms=[alg],
-                audience=self._audience,
-                issuer=self._issuer,
-            )
-            return payload
-        except jwt.PyJWTError as exc:
-            logger.warning("JWT asymmetric verification failed: %s", exc)
-            return None
-
-    def _verify_symmetric(self, token: str, alg: str) -> dict | None:
-        if self._client_secret is None:
-            logger.warning(
-                "JWT rejected: HMAC algorithm %r but no client_secret configured",
-                alg,
-            )
-            return None
-        try:
-            payload = jwt.decode(
-                token,
-                self._client_secret,
-                algorithms=[alg],
-                audience=self._audience,
-                issuer=self._issuer,
-            )
-            return payload
-        except jwt.PyJWTError as exc:
-            logger.warning("JWT symmetric verification failed: %s", exc)
             return None

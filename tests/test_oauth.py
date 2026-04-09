@@ -1,19 +1,21 @@
 """
-Unit tests for auth.oauth — JWKSVerifier (algorithm-agnostic JWT verification).
+Unit tests for auth.oauth — JWKSVerifier (kid-based JWT routing).
 
 Covers:
-  1.  test_verify_rs256_valid                  -- RS256 signed JWT returns decoded payload
-  2.  test_verify_es256_valid                  -- ES256 signed JWT returns decoded payload
-  3.  test_verify_none_rejected                -- JWT with alg=none returns None
-  4.  test_verify_unknown_alg_rejected         -- JWT with alg="FAKE" returns None
-  5.  test_verify_expired_rejected             -- Expired JWT returns None
-  6.  test_verify_wrong_audience_rejected      -- Wrong aud returns None
-  7.  test_verify_wrong_issuer_rejected        -- Wrong iss returns None
-  8.  test_verify_hs256_with_secret            -- HS256 JWT with correct secret returns payload
-  9.  test_verify_hs256_without_secret_rejected -- HS256 with no client_secret returns None
-  10. test_verify_jwe_dir_a256gcm              -- JWE (alg=dir, enc=A256GCM) decrypts and verifies
-  11. test_verify_jwe_no_secret_rejected       -- JWE without client_secret returns None
-  12. test_verify_jwe_wrong_key_rejected       -- JWE with wrong key returns None
+  1.  test_verify_rs256_valid                          -- RS256 with kid routes to JWKS
+  2.  test_verify_es256_valid                          -- ES256 with kid routes to JWKS
+  3.  test_verify_none_rejected                        -- alg=none, no kid → /userinfo rejects
+  4.  test_verify_unknown_alg_rejected                 -- alg=FAKE, no kid → /userinfo rejects
+  5.  test_verify_expired_rejected                     -- RS256 with kid, expired → JWKS rejects
+  6.  test_verify_wrong_audience_rejected              -- RS256 with kid, wrong aud → JWKS rejects
+  7.  test_verify_wrong_issuer_rejected                -- RS256 with kid, wrong iss → JWKS rejects
+  8.  test_verify_hs256_routes_to_userinfo             -- HS256, no kid → /userinfo validates
+  9.  test_verify_hs256_no_userinfo_rejected           -- HS256, no kid → /userinfo rejects
+  10. test_verify_jwe_routes_to_userinfo               -- JWE (4 dots) → /userinfo validates
+  11. test_verify_jwe_userinfo_rejected                -- JWE (4 dots) → /userinfo rejects
+  12. test_verify_jwe_userinfo_error                   -- JWE (4 dots) → /userinfo network error
+  13. test_verify_rs256_without_kid_routes_to_userinfo -- RS256 without kid → /userinfo
+  14. test_verify_hs256_with_kid_routes_to_jwks        -- HS256 with kid → JWKS path
 
 All tests avoid real HTTP calls to Auth0. RSA/EC key generation uses the
 cryptography library (already installed as a PyJWT[crypto] dependency).
@@ -72,13 +74,21 @@ def _mock_signing_key(public_key):
     return mock_key
 
 
+def _mock_userinfo_response(status_code: int, body: dict):
+    """Return a mock httpx Response with given status code and JSON body."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = status_code
+    mock_resp.json.return_value = body
+    return mock_resp
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
 
 def test_verify_rs256_valid(rsa_private_key):
-    """RS256-signed JWT with correct aud/iss returns the decoded payload."""
+    """RS256-signed JWT with kid routes to JWKS and returns the decoded payload."""
     verifier = _make_verifier()
 
     token = jwt.encode(
@@ -98,7 +108,7 @@ def test_verify_rs256_valid(rsa_private_key):
 
 
 def test_verify_es256_valid(ec_private_key):
-    """ES256-signed JWT with correct aud/iss returns the decoded payload."""
+    """ES256-signed JWT with kid routes to JWKS and returns the decoded payload."""
     verifier = _make_verifier()
 
     token = jwt.encode(
@@ -118,7 +128,7 @@ def test_verify_es256_valid(ec_private_key):
 
 
 def test_verify_none_rejected():
-    """JWT with alg=none must be rejected (returns None)."""
+    """JWT with alg=none and no kid routes to /userinfo; /userinfo rejects it."""
     verifier = _make_verifier()
 
     # PyJWT refuses to encode with alg=none by default; craft a raw token
@@ -131,12 +141,15 @@ def test_verify_none_rejected():
     payload = _b64({"sub": "bad", "aud": FAKE_AUDIENCE, "iss": FAKE_ISSUER})
     token = f"{header}.{payload}."
 
-    result = verifier.verify_token(token)
+    mock_resp = _mock_userinfo_response(401, {"error": "invalid_token"})
+    with patch("auth.oauth.httpx.Client") as MockClient:
+        MockClient.return_value.__enter__.return_value.get.return_value = mock_resp
+        result = verifier.verify_token(token)
     assert result is None
 
 
 def test_verify_unknown_alg_rejected():
-    """JWT with an unknown algorithm string returns None."""
+    """JWT with an unknown algorithm string and no kid routes to /userinfo; /userinfo rejects it."""
     verifier = _make_verifier()
 
     import base64, json as _json
@@ -148,18 +161,22 @@ def test_verify_unknown_alg_rejected():
     payload = _b64({"sub": "bad"})
     token = f"{header}.{payload}.invalidsig"
 
-    result = verifier.verify_token(token)
+    mock_resp = _mock_userinfo_response(401, {"error": "invalid_token"})
+    with patch("auth.oauth.httpx.Client") as MockClient:
+        MockClient.return_value.__enter__.return_value.get.return_value = mock_resp
+        result = verifier.verify_token(token)
     assert result is None
 
 
 def test_verify_expired_rejected(rsa_private_key):
-    """Expired JWT returns None."""
+    """Expired JWT with kid routes to JWKS; JWKS rejects expired token."""
     verifier = _make_verifier()
 
     token = jwt.encode(
         {"sub": "user3", "aud": FAKE_AUDIENCE, "iss": FAKE_ISSUER, "exp": int(time.time()) - 60},
         rsa_private_key,
         algorithm="RS256",
+        headers={"kid": "test-key-1"},
     )
 
     verifier._jwks_client.get_signing_key_from_jwt.return_value = _mock_signing_key(
@@ -171,13 +188,14 @@ def test_verify_expired_rejected(rsa_private_key):
 
 
 def test_verify_wrong_audience_rejected(rsa_private_key):
-    """JWT with wrong audience returns None."""
+    """JWT with kid but wrong audience routes to JWKS; JWKS rejects wrong aud."""
     verifier = _make_verifier()
 
     token = jwt.encode(
         {"sub": "user4", "aud": "https://wrong-audience.com", "iss": FAKE_ISSUER, "exp": int(time.time()) + 300},
         rsa_private_key,
         algorithm="RS256",
+        headers={"kid": "test-key-1"},
     )
 
     verifier._jwks_client.get_signing_key_from_jwt.return_value = _mock_signing_key(
@@ -189,13 +207,14 @@ def test_verify_wrong_audience_rejected(rsa_private_key):
 
 
 def test_verify_wrong_issuer_rejected(rsa_private_key):
-    """JWT with wrong issuer returns None."""
+    """JWT with kid but wrong issuer routes to JWKS; JWKS rejects wrong iss."""
     verifier = _make_verifier()
 
     token = jwt.encode(
         {"sub": "user5", "aud": FAKE_AUDIENCE, "iss": "https://evil.example.com/", "exp": int(time.time()) + 300},
         rsa_private_key,
         algorithm="RS256",
+        headers={"kid": "test-key-1"},
     )
 
     verifier._jwks_client.get_signing_key_from_jwt.return_value = _mock_signing_key(
@@ -206,39 +225,43 @@ def test_verify_wrong_issuer_rejected(rsa_private_key):
     assert result is None
 
 
-def test_verify_hs256_with_secret():
-    """HS256 JWT with correct client_secret returns decoded payload."""
-    secret = "super-secret-key-for-testing-abc"  # 32 bytes
-    verifier = _make_verifier(client_secret=secret)
+def test_verify_hs256_routes_to_userinfo():
+    """HS256 JWT without kid routes to /userinfo; /userinfo returns payload."""
+    verifier = _make_verifier()
 
     token = jwt.encode(
         {"sub": "user6", "aud": FAKE_AUDIENCE, "iss": FAKE_ISSUER, "exp": int(time.time()) + 300},
-        secret,
+        "any-secret",
         algorithm="HS256",
     )
 
-    result = verifier.verify_token(token)
+    mock_resp = _mock_userinfo_response(200, {"sub": "user6"})
+    with patch("auth.oauth.httpx.Client") as MockClient:
+        MockClient.return_value.__enter__.return_value.get.return_value = mock_resp
+        result = verifier.verify_token(token)
     assert result is not None
     assert result["sub"] == "user6"
 
 
-def test_verify_hs256_without_secret_rejected():
-    """HS256 JWT when no client_secret configured returns None."""
+def test_verify_hs256_no_userinfo_rejected():
+    """HS256 JWT without kid routes to /userinfo; /userinfo rejects returns None."""
     verifier = _make_verifier(client_secret=None)
 
-    secret = "some-secret-key-for-testing-abcd"  # 32 bytes
     token = jwt.encode(
         {"sub": "user7", "aud": FAKE_AUDIENCE, "iss": FAKE_ISSUER, "exp": int(time.time()) + 300},
-        secret,
+        "some-secret-key-for-testing-abcd",
         algorithm="HS256",
     )
 
-    result = verifier.verify_token(token)
+    mock_resp = _mock_userinfo_response(401, {"error": "invalid_token"})
+    with patch("auth.oauth.httpx.Client") as MockClient:
+        MockClient.return_value.__enter__.return_value.get.return_value = mock_resp
+        result = verifier.verify_token(token)
     assert result is None
 
 
 # ---------------------------------------------------------------------------
-# JWE tests (alg=dir, enc=A256GCM — Auth0 DCR encrypted tokens)
+# JWE tests — all route to /userinfo (kid-based routing, JWE detection preserved)
 # ---------------------------------------------------------------------------
 
 
@@ -263,12 +286,10 @@ def _make_jwe_token(inner_jwt: str, key_bytes: bytes) -> str:
     return f"{header}.{encrypted_key}.{iv_b64}.{ct_b64}.{tag_b64}"
 
 
-def test_verify_jwe_dir_a256gcm(rsa_private_key):
-    """JWE (alg=dir, enc=A256GCM) token decrypts and inner JWT verifies."""
-    # 32-byte key, base64url-encoded (simulates AUTH0_CLIENT_SECRET)
+def test_verify_jwe_routes_to_userinfo(rsa_private_key):
+    """JWE token (4 dots) routes to /userinfo for server-side validation."""
     raw_key = b"testjwekey0123456789abcdefghijkl"  # exactly 32 bytes
     client_secret = base64.urlsafe_b64encode(raw_key).rstrip(b"=").decode()
-
     verifier = _make_verifier(client_secret=client_secret)
 
     inner_jwt = jwt.encode(
@@ -278,17 +299,16 @@ def test_verify_jwe_dir_a256gcm(rsa_private_key):
     )
     token = _make_jwe_token(inner_jwt, raw_key)
 
-    verifier._jwks_client.get_signing_key_from_jwt.return_value = _mock_signing_key(
-        rsa_private_key.public_key()
-    )
-
-    result = verifier.verify_token(token)
+    mock_resp = _mock_userinfo_response(200, {"sub": "jwe-user"})
+    with patch("auth.oauth.httpx.Client") as MockClient:
+        MockClient.return_value.__enter__.return_value.get.return_value = mock_resp
+        result = verifier.verify_token(token)
     assert result is not None
     assert result["sub"] == "jwe-user"
 
 
-def test_verify_jwe_no_secret_rejected(rsa_private_key):
-    """JWE token without client_secret configured returns None."""
+def test_verify_jwe_userinfo_rejected(rsa_private_key):
+    """JWE token routes to /userinfo; /userinfo rejects returns None."""
     raw_key = b"testjwekey0123456789abcdefghijkl"
     verifier = _make_verifier(client_secret=None)
 
@@ -299,16 +319,17 @@ def test_verify_jwe_no_secret_rejected(rsa_private_key):
     )
     token = _make_jwe_token(inner_jwt, raw_key)
 
-    result = verifier.verify_token(token)
+    mock_resp = _mock_userinfo_response(401, {"error": "invalid_token"})
+    with patch("auth.oauth.httpx.Client") as MockClient:
+        MockClient.return_value.__enter__.return_value.get.return_value = mock_resp
+        result = verifier.verify_token(token)
     assert result is None
 
 
-def test_verify_jwe_wrong_key_rejected(rsa_private_key):
-    """JWE token encrypted with a different key returns None."""
-    raw_key = b"testjwekey0123456789abcdefghijkl"
-    wrong_key = b"wrongkey0123456789abcdefghijklmn"
-    wrong_secret = base64.urlsafe_b64encode(wrong_key).rstrip(b"=").decode()
-
+def test_verify_jwe_userinfo_error(rsa_private_key):
+    """JWE token routes to /userinfo; network error returns None."""
+    raw_key = b"wrongkey0123456789abcdefghijklmn"
+    wrong_secret = base64.urlsafe_b64encode(raw_key).rstrip(b"=").decode()
     verifier = _make_verifier(client_secret=wrong_secret)
 
     inner_jwt = jwt.encode(
@@ -318,5 +339,47 @@ def test_verify_jwe_wrong_key_rejected(rsa_private_key):
     )
     token = _make_jwe_token(inner_jwt, raw_key)
 
+    with patch("auth.oauth.httpx.Client") as MockClient:
+        MockClient.return_value.__enter__.return_value.get.side_effect = Exception("network error")
+        result = verifier.verify_token(token)
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# New tests: explicit kid-routing coverage
+# ---------------------------------------------------------------------------
+
+
+def test_verify_rs256_without_kid_routes_to_userinfo(rsa_private_key):
+    """RS256 token WITHOUT kid header routes to /userinfo (kid-based routing)."""
+    verifier = _make_verifier()
+    # Encode RS256 token without kid header
+    token = jwt.encode(
+        {"sub": "user-no-kid", "aud": FAKE_AUDIENCE, "iss": FAKE_ISSUER, "exp": int(time.time()) + 300},
+        rsa_private_key,
+        algorithm="RS256",
+        # Deliberately NO kid header
+    )
+    mock_resp = _mock_userinfo_response(200, {"sub": "user-no-kid"})
+    with patch("auth.oauth.httpx.Client") as MockClient:
+        MockClient.return_value.__enter__.return_value.get.return_value = mock_resp
+        result = verifier.verify_token(token)
+    assert result is not None
+    assert result["sub"] == "user-no-kid"
+
+
+def test_verify_hs256_with_kid_routes_to_jwks():
+    """HS256 token WITH kid header routes to JWKS (kid-based routing)."""
+    verifier = _make_verifier()
+    # HS256 with kid — kid presence means JWKS path, which will fail
+    # (no real JWKS endpoint) and return None
+    token = jwt.encode(
+        {"sub": "user-hs-kid", "aud": FAKE_AUDIENCE, "iss": FAKE_ISSUER, "exp": int(time.time()) + 300},
+        "any-secret",
+        algorithm="HS256",
+        headers={"kid": "unexpected-kid"},
+    )
+    # JWKS lookup will fail (mock raises), so verify_token returns None
+    verifier._jwks_client.get_signing_key_from_jwt.side_effect = Exception("key not found")
     result = verifier.verify_token(token)
     assert result is None
