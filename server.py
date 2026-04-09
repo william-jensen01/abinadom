@@ -1,29 +1,32 @@
 """
 MCP Server — LDS Scripture Citation Index
 
-Exposes the ChromaDB vector collections via Streamable HTTP transport.
+Exposes the ChromaDB vector collections via FastAPI with a manual MCP JSON-RPC dispatcher.
 Phase 9 builds startup validation; Phase 10 adds search and get_talk tools.
 Phase 13 swaps to HTTP transport with configurable host/port.
-Phase 14 adds bearer token authentication via BearerAuthMiddleware.
+Phase 14 adds bearer token authentication via SqliteKeyStore.
 Phase 16.1 adds OAuth 2.1 via algorithm-agnostic JWT verification (Auth0 JWKS + PyJWT).
+Phase 16.2 replaces FastMCP + BaseHTTPMiddleware with a FastAPI app and per-method
+auth routing directly in the dispatcher (eliminates anyio task group errors).
 
 Startup sequence:
   1. Resolve ChromaDB path to absolute (CORE-01)
   2. Validate path exists and all 4 collections are present and non-empty (CORE-01/CORE-03)
   3. Ollama health check via live embedding call (CORE-02)
   4. Load all 4 collections into AppContext (CORE-03)
-  5. Yield AppContext to tool calls via FastMCP lifespan
+  5. Yield AppContext via FastAPI lifespan, stored in app.state.ctx
 
 MCP tools (Phase 10):
   - search: semantic search across 4 collections with optional speaker/year/season filters
   - get_talk: retrieve full ordered text of a conference talk by ID
 
-Auth (Phase 14/16.1):
-  - OAuth 2.1: When AUTH0_DOMAIN is set, JWKSVerifier handles JWT validation via
-    JWTAuthMiddleware at the Starlette ASGI layer. RFC 9728 protected resource metadata
-    and RFC 8414 authorization server metadata are served as discovery endpoints.
-  - Static-only fallback: When AUTH0_DOMAIN is unset, BearerAuthMiddleware is added
-    (Phase 14 backward-compatible mode).
+Auth (Phase 14/16.1/16.2):
+  - OAuth 2.1: When AUTH0_DOMAIN is set, JWKSVerifier handles JWT validation.
+    Per-method auth is applied inline in the dispatcher — no middleware involved.
+    RFC 9728 protected resource metadata and RFC 8414 authorization server metadata
+    are served as discovery endpoints.
+  - Static-only fallback: When AUTH0_DOMAIN is unset, SqliteKeyStore bearer check
+    is used for tools/list and tools/call.
   - AUTH_DB_PATH env var configures auth.db location (default: project_root/auth.db)
 
 All logging goes to stderr only.
@@ -32,15 +35,14 @@ import json
 import logging
 import os
 import sys
+import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
 import chromadb
-from mcp.server.fastmcp import FastMCP, Context
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, Response
 
 from config.pipeline_config import CHROMADB_COLLECTION_NAMES
 from config.ollama import resolve_ollama_url
@@ -242,72 +244,10 @@ def _parse_talk_id(talk_id: str) -> int | None:
 
 
 # ---------------------------------------------------------------------------
-# FastMCP server — lifespan runs startup validation (CORE-03 integration)
+# MCP tool functions — Phase 10 (search and get_talk)
 # ---------------------------------------------------------------------------
 
 
-@asynccontextmanager
-async def lifespan(server: FastMCP):
-    try:
-        ctx = _startup()
-    except SystemExit:
-        raise
-    except Exception as e:
-        print(f"ERROR: Unexpected startup failure: {e}", file=sys.stderr)
-        sys.exit(1)
-    try:
-        yield ctx
-    finally:
-        pass  # ChromaDB PersistentClient needs no explicit close
-
-
-MCP_HOST = os.environ.get("MCP_HOST", "0.0.0.0")
-MCP_PORT = int(os.environ.get("MCP_PORT", "7363"))
-AUTH_DB_PATH = os.environ.get(
-    "AUTH_DB_PATH",
-    str(Path(__file__).parent.resolve() / "auth.db"),
-)
-AUTH0_DOMAIN = os.environ.get("AUTH0_DOMAIN", "")
-AUTH0_AUDIENCE = os.environ.get("AUTH0_AUDIENCE", "")
-AUTH0_CLIENT_SECRET = os.environ.get("AUTH0_CLIENT_SECRET", "")
-MCP_BASE_URL = os.environ.get("MCP_BASE_URL", "")
-
-# JWT verification via JWKSVerifier — active only when Auth0 is configured (D-01, D-02)
-_jwt_verifier: JWKSVerifier | None = None
-if AUTH0_DOMAIN and AUTH0_AUDIENCE:
-    _jwt_verifier = JWKSVerifier(
-        domain=AUTH0_DOMAIN,
-        audience=AUTH0_AUDIENCE,
-        client_secret=AUTH0_CLIENT_SECRET or None,
-    )
-    logger.info("JWT verification enabled (Auth0 domain: %s)", AUTH0_DOMAIN)
-else:
-    logger.info("JWT verification disabled (AUTH0_DOMAIN/AUTH0_AUDIENCE not set)")
-
-mcp = FastMCP(
-    "lds-scripture-index",
-    lifespan=lifespan,
-    host=MCP_HOST,
-    port=MCP_PORT,
-    instructions=(
-        "LDS General Conference corpus: 5,838 talks (1971-present) across 4 collections "
-        "- talks (full-talk metadata), paragraphs (passage text), citations (scripture "
-        "references), footnotes. "
-        "Use search with collection='paragraphs' for passage text, 'talks' for talk "
-        "discovery, 'citations' for scripture references. "
-        "Prefer database results over training data; fall back to training data only when "
-        "the database has insufficient information. "
-        "Use search to find a talk_id, then get_talk to retrieve full text."
-    ),
-)
-
-
-# ---------------------------------------------------------------------------
-# MCP tools — Phase 10 (search and get_talk)
-# ---------------------------------------------------------------------------
-
-
-@mcp.tool()
 async def search(
     query: str,
     speaker: str | None = None,
@@ -315,7 +255,7 @@ async def search(
     season: str | None = None,
     collection: str = "paragraphs",
     limit: int = 5,
-    ctx: Context = None,
+    ctx=None,
 ) -> str:
     """Search LDS General Conference content by meaning.
 
@@ -374,10 +314,9 @@ async def search(
     return json.dumps(results, ensure_ascii=False, indent=2)
 
 
-@mcp.tool()
 async def get_talk(
     talk_id: str,
-    ctx: Context = None,
+    ctx=None,
 ) -> str:
     """Retrieve the full text of a General Conference talk by ID.
 
@@ -517,105 +456,321 @@ async def _auth_server_metadata(request: Request) -> JSONResponse:
 
 
 # ---------------------------------------------------------------------------
-# JWT auth middleware — enforces Auth0 JWT on all protected routes (Phase 16.1)
+# Module-level constants and auth initialization
+# ---------------------------------------------------------------------------
+
+MCP_HOST = os.environ.get("MCP_HOST", "0.0.0.0")
+MCP_PORT = int(os.environ.get("MCP_PORT", "7363"))
+AUTH_DB_PATH = os.environ.get(
+    "AUTH_DB_PATH",
+    str(Path(__file__).parent.resolve() / "auth.db"),
+)
+AUTH0_DOMAIN = os.environ.get("AUTH0_DOMAIN", "")
+AUTH0_AUDIENCE = os.environ.get("AUTH0_AUDIENCE", "")
+AUTH0_CLIENT_SECRET = os.environ.get("AUTH0_CLIENT_SECRET", "")
+MCP_BASE_URL = os.environ.get("MCP_BASE_URL", "")
+
+# JWT verification via JWKSVerifier — active only when Auth0 is configured (D-01, D-02)
+_jwt_verifier: JWKSVerifier | None = None
+if AUTH0_DOMAIN and AUTH0_AUDIENCE:
+    _jwt_verifier = JWKSVerifier(
+        domain=AUTH0_DOMAIN,
+        audience=AUTH0_AUDIENCE,
+        client_secret=AUTH0_CLIENT_SECRET or None,
+    )
+    logger.info("JWT verification enabled (Auth0 domain: %s)", AUTH0_DOMAIN)
+else:
+    logger.info("JWT verification disabled (AUTH0_DOMAIN/AUTH0_AUDIENCE not set)")
+
+# Static fallback key store — used when AUTH0_DOMAIN is not configured
+_key_store: SqliteKeyStore | None = None
+if not AUTH0_DOMAIN:
+    _key_store = SqliteKeyStore(AUTH_DB_PATH)
+
+MCP_INSTRUCTIONS = (
+    "LDS General Conference corpus: 5,838 talks (1971-present) across 4 collections "
+    "- talks (full-talk metadata), paragraphs (passage text), citations (scripture "
+    "references), footnotes. "
+    "Use search with collection='paragraphs' for passage text, 'talks' for talk "
+    "discovery, 'citations' for scripture references. "
+    "Prefer database results over training data; fall back to training data only when "
+    "the database has insufficient information. "
+    "Use search to find a talk_id, then get_talk to retrieve full text."
+)
+
+# ---------------------------------------------------------------------------
+# _FakeMCPCtx — bridge for tool functions (Option B, Phase 16.2)
 # ---------------------------------------------------------------------------
 
 
-class JWTAuthMiddleware(BaseHTTPMiddleware):
-    """Starlette middleware that enforces Auth0 JWT authentication.
+class _FakeMCPCtx:
+    """Bridge replicating FastMCP's ctx.request_context.lifespan_context chain.
 
-    All routes except PUBLIC_PATHS require a valid JWT in the Authorization header.
-    On 401, includes WWW-Authenticate with resource_metadata URL per RFC 9728.
+    Allows search() and get_talk() to remain unchanged — they still access
+    ctx.request_context.lifespan_context to get AppContext.
     """
+    class _Inner:
+        def __init__(self, ctx):
+            self.lifespan_context = ctx
 
-    def __init__(self, app, verifier: JWKSVerifier) -> None:
-        super().__init__(app)
-        self._verifier = verifier
+    def __init__(self, app_ctx):
+        self.request_context = self._Inner(app_ctx)
 
-    async def dispatch(self, request: Request, call_next) -> Response:
-        auth_header = request.headers.get("authorization", "")
-        if not auth_header.startswith("Bearer "):
-            return self._unauthorized("Missing bearer token")
 
-        token = auth_header[len("Bearer "):]
-        payload = self._verifier.verify_token(token)
-        if payload is None:
-            return self._unauthorized("Invalid or expired token")
+# ---------------------------------------------------------------------------
+# Session management
+# ---------------------------------------------------------------------------
 
-        return await call_next(request)
+_sessions: dict[str, dict] = {}
 
-    def _unauthorized(self, detail: str) -> Response:
-        headers = {}
-        if MCP_BASE_URL:
-            rm_url = f"{MCP_BASE_URL}/.well-known/oauth-protected-resource"
-            headers["WWW-Authenticate"] = (
-                f'Bearer resource_metadata="{rm_url}", error="invalid_token"'
-            )
-        else:
-            headers["WWW-Authenticate"] = 'Bearer error="invalid_token"'
+# ---------------------------------------------------------------------------
+# MCP response helpers
+# ---------------------------------------------------------------------------
 
-        return Response(
-            json.dumps({"error": detail}),
-            status_code=401,
-            media_type="application/json",
-            headers=headers,
+
+def _mcp_response(body: dict, session_id: str | None = None) -> JSONResponse:
+    """Build a JSONResponse with MCP protocol headers."""
+    response = JSONResponse(body)
+    response.headers["MCP-Protocol-Version"] = "2025-06-18"
+    if session_id:
+        response.headers["MCP-Session-Id"] = session_id
+    return response
+
+
+def _error_response(req_id, code: int, message: str, http_status: int = 400) -> JSONResponse:
+    """Build a JSON-RPC error response."""
+    body = {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
+    return JSONResponse(body, status_code=http_status)
+
+
+def _unauthorized_response() -> Response:
+    """Build a 401 response with WWW-Authenticate header per RFC 9728."""
+    headers = {}
+    if MCP_BASE_URL:
+        rm_url = f"{MCP_BASE_URL}/.well-known/oauth-protected-resource"
+        headers["WWW-Authenticate"] = (
+            f'Bearer realm="lds-mcp", resource_metadata="{rm_url}"'
         )
+    else:
+        headers["WWW-Authenticate"] = 'Bearer error="invalid_token"'
+    return Response(
+        json.dumps({"error": "Authentication required"}),
+        status_code=401,
+        media_type="application/json",
+        headers=headers,
+    )
 
 
 # ---------------------------------------------------------------------------
-# App factory — builds full Starlette app with /health and auth wiring
+# Auth verification
 # ---------------------------------------------------------------------------
 
 
-def build_app():
-    """Build and return the full Starlette application.
+def _verify_auth(request: Request) -> dict | None:
+    """Check Authorization header and return token payload or None.
 
-    When AUTH0_DOMAIN is set: JWT auth via JWKSVerifier on the MCP mount,
-    plus RFC 9728 and RFC 8414 discovery endpoints.
-
-    When AUTH0_DOMAIN is unset: static bearer token fallback (Phase 14).
+    When AUTH0_DOMAIN is set: uses JWKSVerifier (kid-based routing).
+    When AUTH0_DOMAIN is unset: uses SqliteKeyStore (static fallback).
     """
-    from starlette.applications import Starlette
-    from starlette.middleware import Middleware
-    from starlette.routing import Route, Mount
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
 
-    mcp_app = mcp.streamable_http_app()
+    token = auth_header[len("Bearer "):]
 
     if _jwt_verifier is not None:
-        jwt_auth = Middleware(JWTAuthMiddleware, verifier=_jwt_verifier)
-        routes = [
-            Route("/health", endpoint=health_check),
-            Route(
-                "/.well-known/oauth-protected-resource",
-                endpoint=_protected_resource_metadata,
-            ),
-            Route(
-                "/.well-known/oauth-protected-resource/mcp",
-                endpoint=_protected_resource_metadata,
-            ),
-            Route(
-                "/.well-known/oauth-authorization-server",
-                endpoint=_auth_server_metadata,
-            ),
-            Mount("/", app=mcp_app, middleware=[jwt_auth]),
-        ]
-        return Starlette(routes=routes)
+        return _jwt_verifier.verify_token(token)
     else:
-        # Static-only fallback: Phase 14 BearerAuthMiddleware (no Auth0 configured)
-        from auth.middleware import BearerAuthMiddleware
-        store = SqliteKeyStore(AUTH_DB_PATH)
-        mcp_app.add_middleware(BearerAuthMiddleware, store=store)
-        return Starlette(routes=[
-            Route("/health", endpoint=health_check),
-            Mount("/", app=mcp_app),
-        ])
+        key_name = _key_store.verify_token(token)
+        return {"sub": key_name} if key_name else None
 
 
 # ---------------------------------------------------------------------------
-# Entry point — Streamable HTTP transport (TRANS-01)
+# MCP handlers
+# ---------------------------------------------------------------------------
+
+
+async def _handle_initialize(body: dict) -> JSONResponse:
+    """Handle MCP initialize request — no auth required."""
+    session_id = str(uuid.uuid4())
+    _sessions[session_id] = {"initialized": True}
+    result = {
+        "jsonrpc": "2.0",
+        "id": body.get("id"),
+        "result": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {"tools": {}},
+            "serverInfo": {"name": "lds-scripture-index", "version": "1.0.0"},
+            "instructions": MCP_INSTRUCTIONS,
+        },
+    }
+    return _mcp_response(result, session_id=session_id)
+
+
+async def _handle_tools_list(body: dict, session_id: str) -> JSONResponse:
+    """Handle MCP tools/list request — returns tool schemas."""
+    tools = [
+        {
+            "name": "search",
+            "description": search.__doc__,
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Natural language search query."},
+                    "speaker": {"type": "string", "description": "Optional speaker name filter (substring match)."},
+                    "year": {"type": "integer", "description": "Optional conference year filter."},
+                    "season": {"type": "string", "description": "Optional conference season filter (April or October)."},
+                    "collection": {"type": "string", "default": "paragraphs", "description": "Collection to search."},
+                    "limit": {"type": "integer", "default": 5, "description": "Number of results (max 20)."},
+                },
+                "required": ["query"],
+            },
+        },
+        {
+            "name": "get_talk",
+            "description": get_talk.__doc__,
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "talk_id": {"type": "string", "description": "Talk identifier (e.g. 'talk_8820' or '8820')."},
+                },
+                "required": ["talk_id"],
+            },
+        },
+    ]
+    result = {"jsonrpc": "2.0", "id": body.get("id"), "result": {"tools": tools}}
+    return _mcp_response(result, session_id=session_id)
+
+
+async def _handle_tools_call(body: dict, request: Request, session_id: str) -> JSONResponse:
+    """Handle MCP tools/call request — dispatches to search or get_talk."""
+    params = body.get("params", {})
+    tool_name = params.get("name")
+    arguments = params.get("arguments", {})
+    app_ctx = request.app.state.ctx
+    fake_ctx = _FakeMCPCtx(app_ctx)
+
+    if tool_name == "search":
+        result_text = await search(**arguments, ctx=fake_ctx)
+    elif tool_name == "get_talk":
+        result_text = await get_talk(**arguments, ctx=fake_ctx)
+    else:
+        return _error_response(body.get("id"), -32602, f"Unknown tool: {tool_name}", 404)
+
+    # Log usage (AUTH-03)
+    auth_payload = _verify_auth(request)
+    if auth_payload and _key_store:
+        from datetime import datetime, timezone
+        _key_store.log_request(
+            auth_payload.get("sub", "unknown"),
+            tool_name,
+            datetime.now(timezone.utc).isoformat(),
+        )
+
+    result = {
+        "jsonrpc": "2.0",
+        "id": body.get("id"),
+        "result": {
+            "content": [{"type": "text", "text": result_text}],
+            "isError": False,
+        },
+    }
+    return _mcp_response(result, session_id=session_id)
+
+
+# ---------------------------------------------------------------------------
+# FastAPI lifespan
+# ---------------------------------------------------------------------------
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        ctx = _startup()
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(f"ERROR: Unexpected startup failure: {e}", file=sys.stderr)
+        sys.exit(1)
+    app.state.ctx = ctx
+    yield
+
+
+# ---------------------------------------------------------------------------
+# App factory — builds full FastAPI app with MCP dispatcher and all routes
+# ---------------------------------------------------------------------------
+
+
+def build_app() -> FastAPI:
+    """Build and return the FastAPI application with MCP dispatcher."""
+    app = FastAPI(lifespan=lifespan)
+
+    @app.get("/health")
+    async def health(request: Request) -> JSONResponse:
+        return await health_check(request)
+
+    @app.get("/.well-known/oauth-protected-resource")
+    @app.get("/.well-known/oauth-protected-resource/mcp")
+    async def protected_resource(request: Request) -> JSONResponse:
+        return await _protected_resource_metadata(request)
+
+    @app.get("/.well-known/oauth-authorization-server")
+    async def auth_server(request: Request) -> JSONResponse:
+        return await _auth_server_metadata(request)
+
+    @app.head("/")
+    async def mcp_head() -> Response:
+        return Response(status_code=200, headers={"MCP-Protocol-Version": "2025-06-18"})
+
+    @app.get("/")
+    async def mcp_get() -> Response:
+        return Response(status_code=405, headers={"Allow": "POST, HEAD, DELETE"})
+
+    @app.post("/")
+    async def mcp_dispatcher(request: Request) -> Response:
+        body = await request.json()
+        method = body.get("method")
+        req_id = body.get("id")
+
+        # initialize — no auth required
+        if method == "initialize":
+            return await _handle_initialize(body)
+
+        # All other methods require a valid session
+        session_id = request.headers.get("mcp-session-id", "")
+        if not session_id or session_id not in _sessions:
+            return _error_response(req_id, -32600, "Invalid or missing session", 400)
+
+        # notifications/initialized — session only, no auth
+        if method == "notifications/initialized":
+            return Response(status_code=202)
+
+        # tools/list and tools/call — require OAuth or static token
+        token_payload = _verify_auth(request)
+        if token_payload is None:
+            return _unauthorized_response()
+
+        if method == "tools/list":
+            return await _handle_tools_list(body, session_id)
+        elif method == "tools/call":
+            return await _handle_tools_call(body, request, session_id)
+        else:
+            return _error_response(req_id, -32601, f"Method not found: {method}", 404)
+
+    @app.delete("/")
+    async def mcp_delete(request: Request) -> Response:
+        session_id = request.headers.get("mcp-session-id", "")
+        _sessions.pop(session_id, None)
+        return Response(status_code=200)
+
+    return app
+
+
+# ---------------------------------------------------------------------------
+# Entry point — FastAPI with uvicorn (TRANS-01)
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     import uvicorn
     app = build_app()
-    uvicorn.run(app, host=MCP_HOST, port=int(MCP_PORT))
+    uvicorn.run(app, host=MCP_HOST, port=MCP_PORT)
