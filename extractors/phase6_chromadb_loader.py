@@ -24,8 +24,6 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 import chromadb
 from chromadb.utils.batch_utils import create_batches
-from chromadb.utils.embedding_functions import OllamaEmbeddingFunction
-
 from models.talk_metadata import TalkMetadata
 from models.paragraph_data import ParagraphData, TalkParagraphs
 from models.citation_data import CitationData, TalkCitations
@@ -308,20 +306,6 @@ def prepare_talk_bundle(
 # =============================================================================
 # Public API — Client helpers and insertion
 # =============================================================================
-
-
-def get_embedding_function(url: str | None = None) -> OllamaEmbeddingFunction:
-    """
-    Return the OllamaEmbeddingFunction configured for nomic-embed-text.
-
-    url: Optional base URL override. Defaults to resolve_ollama_url().
-    """
-    from config.ollama import resolve_ollama_url
-    base_url = url or resolve_ollama_url()
-    return OllamaEmbeddingFunction(
-        model_name="nomic-embed-text",
-        url=base_url + "/api/embeddings",
-    )
 
 
 def get_chromadb_client(path: str | None = None) -> chromadb.ClientAPI:

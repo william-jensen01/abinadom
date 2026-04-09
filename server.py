@@ -45,8 +45,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 
 from config.pipeline_config import CHROMADB_COLLECTION_NAMES
-from config.ollama import resolve_ollama_url
-from extractors.phase6_chromadb_loader import get_embedding_function
+from config.ollama import resolve_ollama_url, get_embedding_function
 from auth.oauth import JWKSVerifier
 from auth.store import SqliteKeyStore
 
@@ -94,30 +93,21 @@ def _resolve_chromadb_path() -> str:
 
 def _check_ollama() -> None:
     """
-    Verify Ollama is running and nomic-embed-text is available.
+    Log Ollama reachability at startup — non-fatal.
 
-    Uses a live embedding call (D-04) — an HTTP ping would only confirm the
-    daemon is up, not that the model is loaded. Fails fast with an actionable
-    error message on any exception.
+    Ollama is a separate service accessed by URL; the server starts regardless
+    of its availability. Search calls will fail gracefully if Ollama is down.
+    The /health endpoint reports live Ollama status on demand.
     """
     try:
         ollama_url = resolve_ollama_url()
         ef = get_embedding_function(url=ollama_url)
         ef(["health check"])
-        logger.info("Ollama health check passed (nomic-embed-text ready)")
-    except Exception as e:
-        err = str(e)
-        if "nomic-embed-text" in err or "model" in err.lower():
-            print(
-                "ERROR: Ollama model not available. Run: ollama pull nomic-embed-text",
-                file=sys.stderr,
-            )
-        else:
-            print(
-                f"ERROR: Ollama unreachable at {ollama_url}. Start Ollama and retry.",
-                file=sys.stderr,
-            )
-        sys.exit(1)
+        logger.info("Ollama reachable at startup (nomic-embed-text ready)")
+    except Exception:
+        logger.warning(
+            "Ollama unreachable at startup — search will be unavailable until Ollama is running"
+        )
 
 
 def _load_collections(client: chromadb.ClientAPI) -> dict:
@@ -286,9 +276,16 @@ async def search(
     # CORE-04: fetch extra results when speaker filter active to compensate for post-filter reduction
     fetch_n = min(limit * 4, 80) if speaker else limit
 
+    # TOOL-01: embed query via Ollama (separate service — fails gracefully if unreachable)
+    try:
+        ef = get_embedding_function()
+        query_vector = ef([query])
+    except Exception as e:
+        return f"Search unavailable: Ollama is unreachable ({e})."
+
     # TOOL-01: semantic search via ChromaDB
     result = col.query(
-        query_texts=[query],
+        query_embeddings=query_vector,
         n_results=fetch_n,
         where=where,
         include=["documents", "metadatas"],

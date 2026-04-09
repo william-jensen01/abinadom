@@ -30,12 +30,12 @@ from extractors.phase6_chromadb_loader import (
     prepare_footnote_records,
     prepare_talk_bundle,
     get_chromadb_client,
-    get_embedding_function,
     insert_collection,
     load_talk_bundles,
     generate_verification_report,
 )
 from config.pipeline_config import CHROMADB_COLLECTION_NAMES
+from config.ollama import get_embedding_function
 
 
 # =============================================================================

@@ -69,18 +69,16 @@ def test_chromadb_missing_collection_exits(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_ollama_failure_exits():
-    """_check_ollama() raises SystemExit(1) when the embedding function throws."""
+def test_ollama_failure_is_non_fatal():
+    """_check_ollama() logs a warning but does not raise when Ollama is unreachable."""
     from server import _check_ollama
 
     mock_ef = MagicMock(side_effect=Exception("connection refused"))
     mock_get_ef = MagicMock(return_value=mock_ef)
 
     with patch("server.get_embedding_function", mock_get_ef):
-        with pytest.raises(SystemExit) as exc_info:
-            _check_ollama()
-
-    assert exc_info.value.code == 1, f"Expected exit code 1, got: {exc_info.value.code}"
+        # Should not raise — Ollama failure is non-fatal at startup
+        _check_ollama()
 
 
 # ---------------------------------------------------------------------------
@@ -533,10 +531,10 @@ def test_ollama_url_env_override(monkeypatch):
     monkeypatch.setenv("OLLAMA_URL", "http://custom:11434")
 
     with patch(
-        "extractors.phase6_chromadb_loader.OllamaEmbeddingFunction"
+        "config.ollama.OllamaEmbeddingFunction"
     ) as mock_ef_cls:
         mock_ef_cls.return_value = MagicMock()
-        from extractors.phase6_chromadb_loader import get_embedding_function
+        from config.ollama import get_embedding_function
 
         get_embedding_function()
 
@@ -551,10 +549,10 @@ def test_get_embedding_function_url_param():
     from unittest.mock import MagicMock, patch
 
     with patch(
-        "extractors.phase6_chromadb_loader.OllamaEmbeddingFunction"
+        "config.ollama.OllamaEmbeddingFunction"
     ) as mock_ef_cls:
         mock_ef_cls.return_value = MagicMock()
-        from extractors.phase6_chromadb_loader import get_embedding_function
+        from config.ollama import get_embedding_function
 
         get_embedding_function(url="http://explicit:11434")
 
@@ -571,10 +569,10 @@ def test_get_embedding_function_default_url(monkeypatch):
     monkeypatch.delenv("OLLAMA_URL", raising=False)
 
     with patch(
-        "extractors.phase6_chromadb_loader.OllamaEmbeddingFunction"
+        "config.ollama.OllamaEmbeddingFunction"
     ) as mock_ef_cls:
         mock_ef_cls.return_value = MagicMock()
-        from extractors.phase6_chromadb_loader import get_embedding_function
+        from config.ollama import get_embedding_function
 
         get_embedding_function()
 
@@ -617,7 +615,7 @@ def test_check_ollama_passes_resolved_url(monkeypatch):
     monkeypatch.setenv("OLLAMA_URL", "http://custom-host:9999")
     captured_url = {}
 
-    from extractors.phase6_chromadb_loader import get_embedding_function as original_get_ef
+    from config.ollama import get_embedding_function as original_get_ef
 
     def mock_get_ef(url=None):
         captured_url["url"] = url
