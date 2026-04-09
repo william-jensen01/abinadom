@@ -46,7 +46,7 @@ Full details: `.planning/milestones/v2.0-ROADMAP.md`
 - [x] **Phase 15: Docker Compose & Config** — Containerize the full stack with env-var driven configuration (completed 2026-04-04)
 - [x] **Phase 16: Caddy & Cloudflare Tunnel** — TLS termination and stable public URL via Caddy + cloudflared in Compose (completed 2026-04-04)
 - [ ] **Phase 16.1: OAuth 2.0 for Claude Desktop** — OAuth 2.0 auth flow so Claude Desktop can connect via its remote MCP OAuth handshake
-- [ ] **Phase 16.2: FastAPI MCP Protocol Rewrite** — Replace FastMCP with FastAPI + manual JSON-RPC MCP protocol to enable per-method auth and spec-compliant initialize flow
+- [x] **Phase 16.2: FastAPI MCP Protocol Rewrite** — Replace FastMCP with FastAPI + manual JSON-RPC MCP protocol to enable per-method auth and spec-compliant initialize flow (completed 2026-04-09)
 - [ ] **Phase 17: Operator Docs** — Connection guide, self-deploy guide, and key management guide
 
 ## Phase Details
@@ -133,10 +133,10 @@ Plans:
   2. HS256 tokens from DCR-registered clients (Claude Desktop, Cursor) validate via `/userinfo`; RS256 tokens validate via JWKS
   3. All existing tool behavior (`search`, `get_talk`) is unchanged for authenticated requests
   4. `BaseHTTPMiddleware` and FastMCP are fully removed; server starts cleanly under FastAPI
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 Plans:
-- [ ] 16.2-01-PLAN.md — Install FastAPI, kid-based token routing in oauth.py, Wave 0 test stubs
-- [ ] 16.2-02-PLAN.md — Full server.py rewrite to FastAPI + MCP JSON-RPC dispatcher, all tests passing
+- [x] 16.2-01-PLAN.md — Install FastAPI, kid-based token routing in oauth.py, Wave 0 test stubs
+- [x] 16.2-02-PLAN.md — Full server.py rewrite to FastAPI + MCP JSON-RPC dispatcher, all tests passing
 
 ### Phase 17: Operator Docs
 **Goal**: Any user or operator can onboard, deploy, or manage keys without asking the author
@@ -170,5 +170,5 @@ Plans:
 | 15. Docker Compose & Config | v3.0 | 2/2 | Complete    | 2026-04-04 |
 | 16. Caddy & Cloudflare Tunnel | v3.0 | 2/2 | Complete    | 2026-04-05 |
 | 16.1 OAuth 2.0 for Claude Desktop | v3.0 | 3/5 | In Progress|  |
-| 16.2 FastAPI MCP Protocol Rewrite | v3.0 | 0/2 | Not started | - |
+| 16.2 FastAPI MCP Protocol Rewrite | v3.0 | 2/2 | Complete   | 2026-04-09 |
 | 17. Operator Docs | v3.0 | 0/? | Not started | - |
