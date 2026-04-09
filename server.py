@@ -734,7 +734,7 @@ def build_app() -> FastAPI:
             return await _handle_initialize(body)
 
         # All other methods require a valid session
-        session_id = request.headers.get("mcp-session-id", "")
+        session_id = request.headers.get("MCP-Session-Id", "")
         if not session_id or session_id not in _sessions:
             return _error_response(req_id, -32600, "Invalid or missing session", 400)
 
@@ -756,7 +756,7 @@ def build_app() -> FastAPI:
 
     @app.delete("/")
     async def mcp_delete(request: Request) -> Response:
-        session_id = request.headers.get("mcp-session-id", "")
+        session_id = request.headers.get("MCP-Session-Id", "")
         _sessions.pop(session_id, None)
         return Response(status_code=200)
 

@@ -737,7 +737,7 @@ def test_initialize_no_auth():
                 "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
             })
     assert resp.status_code == 200
-    assert "mcp-session-id" in resp.headers
+    assert "MCP-Session-Id" in resp.headers
     data = resp.json()
     assert data["result"]["protocolVersion"] == "2025-06-18"
     assert data["result"]["serverInfo"]["name"] == "lds-scripture-index"
@@ -754,11 +754,11 @@ def test_tools_list_requires_auth():
                 "jsonrpc": "2.0", "id": 1, "method": "initialize",
                 "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
             })
-            session_id = init_resp.headers["mcp-session-id"]
+            session_id = init_resp.headers["MCP-Session-Id"]
             # Then try tools/list without auth
             resp = client.post("/", json={
                 "jsonrpc": "2.0", "id": 2, "method": "tools/list",
-            }, headers={"mcp-session-id": session_id})
+            }, headers={"MCP-Session-Id": session_id})
     assert resp.status_code == 401
 
 
@@ -773,10 +773,10 @@ def test_tools_list_401_has_www_authenticate():
                 "jsonrpc": "2.0", "id": 1, "method": "initialize",
                 "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
             })
-            session_id = init_resp.headers["mcp-session-id"]
+            session_id = init_resp.headers["MCP-Session-Id"]
             resp = client.post("/", json={
                 "jsonrpc": "2.0", "id": 2, "method": "tools/list",
-            }, headers={"mcp-session-id": session_id})
+            }, headers={"MCP-Session-Id": session_id})
     assert "www-authenticate" in resp.headers
     assert "resource_metadata" in resp.headers["www-authenticate"]
 
@@ -795,10 +795,10 @@ def test_tools_list_valid_rs256():
                 "jsonrpc": "2.0", "id": 1, "method": "initialize",
                 "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
             })
-            session_id = init_resp.headers["mcp-session-id"]
+            session_id = init_resp.headers["MCP-Session-Id"]
             resp = client.post("/", json={
                 "jsonrpc": "2.0", "id": 2, "method": "tools/list",
-            }, headers={"mcp-session-id": session_id, "Authorization": "Bearer valid-rs256-token"})
+            }, headers={"MCP-Session-Id": session_id, "Authorization": "Bearer valid-rs256-token"})
     assert resp.status_code == 200
     data = resp.json()
     assert "result" in data
@@ -821,10 +821,10 @@ def test_tools_list_valid_hs256():
                 "jsonrpc": "2.0", "id": 1, "method": "initialize",
                 "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
             })
-            session_id = init_resp.headers["mcp-session-id"]
+            session_id = init_resp.headers["MCP-Session-Id"]
             resp = client.post("/", json={
                 "jsonrpc": "2.0", "id": 2, "method": "tools/list",
-            }, headers={"mcp-session-id": session_id, "Authorization": "Bearer valid-hs256-token"})
+            }, headers={"MCP-Session-Id": session_id, "Authorization": "Bearer valid-hs256-token"})
     assert resp.status_code == 200
     data = resp.json()
     assert "tools" in data["result"]
@@ -844,10 +844,10 @@ def test_tools_list_static_fallback():
                 "jsonrpc": "2.0", "id": 1, "method": "initialize",
                 "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
             })
-            session_id = init_resp.headers["mcp-session-id"]
+            session_id = init_resp.headers["MCP-Session-Id"]
             resp = client.post("/", json={
                 "jsonrpc": "2.0", "id": 2, "method": "tools/list",
-            }, headers={"mcp-session-id": session_id, "Authorization": "Bearer static-token"})
+            }, headers={"MCP-Session-Id": session_id, "Authorization": "Bearer static-token"})
     assert resp.status_code == 200
     data = resp.json()
     assert "tools" in data["result"]
@@ -914,8 +914,8 @@ def test_delete_session_cleanup():
                 "jsonrpc": "2.0", "id": 1, "method": "initialize",
                 "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
             })
-            session_id = init_resp.headers["mcp-session-id"]
-            resp = client.delete("/", headers={"mcp-session-id": session_id})
+            session_id = init_resp.headers["MCP-Session-Id"]
+            resp = client.delete("/", headers={"MCP-Session-Id": session_id})
     assert resp.status_code == 200
 
 
