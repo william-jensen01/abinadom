@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import chromadb
 import pytest
+from starlette.testclient import TestClient
 
 
 # ---------------------------------------------------------------------------
@@ -583,17 +584,8 @@ def test_get_embedding_function_default_url(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# INTG-03: FastMCP instructions and tool docstrings
+# INTG-03: Tool docstrings
 # ---------------------------------------------------------------------------
-
-
-def test_mcp_has_instructions():
-    """FastMCP mcp instance has a non-empty instructions string mentioning corpus size."""
-    from server import mcp
-
-    assert mcp.instructions is not None
-    assert len(mcp.instructions) > 0
-    assert "5,838" in mcp.instructions
 
 
 def test_search_docstring_has_collection_hint():
@@ -639,50 +631,8 @@ def test_check_ollama_passes_resolved_url(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# TRANS-01: HTTP transport configuration
+# TRANS-01: No stdio references
 # ---------------------------------------------------------------------------
-
-
-def test_mcp_host_port_defaults(monkeypatch):
-    monkeypatch.delenv("MCP_HOST", raising=False)
-    monkeypatch.delenv("MCP_PORT", raising=False)
-    from server import mcp
-    assert mcp.settings.host == "0.0.0.0"
-    assert mcp.settings.port == 7363
-
-
-def test_mcp_host_port_env_override(monkeypatch):
-    monkeypatch.setenv("MCP_HOST", "127.0.0.1")
-    monkeypatch.setenv("MCP_PORT", "9000")
-    import server
-    import importlib
-    importlib.reload(server)
-    assert server.mcp.settings.host == "127.0.0.1"
-    assert server.mcp.settings.port == 9000
-
-
-def test_entry_point_transport():
-    """Phase 14: entry point uses streamable_http_app() + uvicorn (not mcp.run).
-
-    mcp.run() does not expose the Starlette app for middleware injection.
-    The new entry point calls mcp.streamable_http_app(), injects
-    BearerAuthMiddleware, and runs via uvicorn.run().
-    """
-    import server
-    import inspect
-    source = inspect.getsource(server)
-    assert "streamable_http_app()" in source, (
-        "server.py entry point must use mcp.streamable_http_app() (not mcp.run())"
-    )
-    assert "uvicorn.run(" in source, (
-        "server.py entry point must use uvicorn.run() to support middleware injection"
-    )
-    assert "add_middleware(BearerAuthMiddleware" in source, (
-        "server.py must mount BearerAuthMiddleware via add_middleware()"
-    )
-    assert 'mcp.run(transport="streamable-http")' not in source, (
-        "Old mcp.run() entry point must be removed — it cannot accept middleware"
-    )
 
 
 def test_no_stdio_references():
@@ -694,8 +644,6 @@ def test_no_stdio_references():
 # ---------------------------------------------------------------------------
 # TRANS-02: Health endpoint
 # ---------------------------------------------------------------------------
-
-from starlette.testclient import TestClient
 
 
 def test_health_returns_200():
@@ -755,3 +703,145 @@ def test_health_chromadb_down():
     data = response.json()
     assert data["chromadb"] == "unreachable"
     assert data["status"] == "degraded"
+
+
+# ---------------------------------------------------------------------------
+# Wave 0: Dispatcher behavior tests (Plan 02 will make these pass)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skip(reason="Wave 0: requires Plan 02 dispatcher implementation")
+def test_initialize_no_auth():
+    """OAUTH-01: initialize succeeds without Authorization header."""
+    from server import build_app
+    with TestClient(build_app(), raise_server_exceptions=False) as client:
+        resp = client.post("/", json={
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
+        })
+    assert resp.status_code == 200
+    assert "mcp-session-id" in resp.headers
+    data = resp.json()
+    assert data["result"]["protocolVersion"] == "2025-06-18"
+    assert data["result"]["serverInfo"]["name"] == "lds-scripture-index"
+
+
+@pytest.mark.skip(reason="Wave 0: requires Plan 02 dispatcher implementation")
+def test_tools_list_requires_auth():
+    """OAUTH-01: tools/list without token returns 401."""
+    from server import build_app
+    with TestClient(build_app(), raise_server_exceptions=False) as client:
+        # First initialize to get session
+        init_resp = client.post("/", json={
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
+        })
+        session_id = init_resp.headers["mcp-session-id"]
+        # Then try tools/list without auth
+        resp = client.post("/", json={
+            "jsonrpc": "2.0", "id": 2, "method": "tools/list",
+        }, headers={"mcp-session-id": session_id})
+    assert resp.status_code == 401
+
+
+@pytest.mark.skip(reason="Wave 0: requires Plan 02 dispatcher implementation")
+def test_tools_list_401_has_www_authenticate():
+    """OAUTH-01: 401 response includes WWW-Authenticate header with resource_metadata."""
+    from server import build_app
+    with TestClient(build_app(), raise_server_exceptions=False) as client:
+        init_resp = client.post("/", json={
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
+        })
+        session_id = init_resp.headers["mcp-session-id"]
+        resp = client.post("/", json={
+            "jsonrpc": "2.0", "id": 2, "method": "tools/list",
+        }, headers={"mcp-session-id": session_id})
+    assert "www-authenticate" in resp.headers
+    assert "resource_metadata" in resp.headers["www-authenticate"]
+
+
+@pytest.mark.skip(reason="Wave 0: requires Plan 02 dispatcher implementation")
+def test_tools_list_valid_rs256():
+    """OAUTH-02: tools/list succeeds with valid RS256 token (kid present)."""
+    pass  # Plan 02: mock JWKSVerifier.verify_token to return payload
+
+
+@pytest.mark.skip(reason="Wave 0: requires Plan 02 dispatcher implementation")
+def test_tools_list_valid_hs256():
+    """OAUTH-02: tools/list succeeds with valid HS256 token (no kid, /userinfo)."""
+    pass  # Plan 02: mock JWKSVerifier.verify_token to return payload
+
+
+@pytest.mark.skip(reason="Wave 0: requires Plan 02 dispatcher implementation")
+def test_tools_list_static_fallback():
+    """OAUTH-02: Static fallback validates SqliteKeyStore token when AUTH0_DOMAIN unset."""
+    pass  # Plan 02: mock SqliteKeyStore.verify_token
+
+
+@pytest.mark.skip(reason="Wave 0: requires Plan 02 dispatcher implementation")
+def test_protected_resource_metadata():
+    """OAUTH-03: /.well-known/oauth-protected-resource returns RFC 9728 JSON."""
+    from server import build_app
+    with TestClient(build_app(), raise_server_exceptions=False) as client:
+        resp = client.get("/.well-known/oauth-protected-resource")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "resource" in data
+    assert "authorization_servers" in data
+    assert "bearer_methods_supported" in data
+
+
+@pytest.mark.skip(reason="Wave 0: requires Plan 02 dispatcher implementation")
+def test_fastmcp_removed():
+    """SC-4: FastMCP and BaseHTTPMiddleware are absent from server.py."""
+    import inspect
+    import server
+    source = inspect.getsource(server)
+    assert "FastMCP" not in source
+    assert "BaseHTTPMiddleware" not in source
+    assert "streamable_http_app" not in source
+
+
+@pytest.mark.skip(reason="Wave 0: requires Plan 02 dispatcher implementation")
+def test_head_returns_protocol_version():
+    """HEAD / returns MCP-Protocol-Version header."""
+    from server import build_app
+    with TestClient(build_app(), raise_server_exceptions=False) as client:
+        resp = client.head("/")
+    assert resp.status_code == 200
+    assert "mcp-protocol-version" in resp.headers
+
+
+@pytest.mark.skip(reason="Wave 0: requires Plan 02 dispatcher implementation")
+def test_get_root_returns_405():
+    """GET / returns 405 Method Not Allowed."""
+    from server import build_app
+    with TestClient(build_app(), raise_server_exceptions=False) as client:
+        resp = client.get("/")
+    assert resp.status_code == 405
+
+
+@pytest.mark.skip(reason="Wave 0: requires Plan 02 dispatcher implementation")
+def test_delete_session_cleanup():
+    """DELETE / with valid session ID removes the session."""
+    from server import build_app
+    with TestClient(build_app(), raise_server_exceptions=False) as client:
+        init_resp = client.post("/", json={
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
+        })
+        session_id = init_resp.headers["mcp-session-id"]
+        resp = client.delete("/", headers={"mcp-session-id": session_id})
+    assert resp.status_code == 200
+
+
+@pytest.mark.skip(reason="Wave 0: requires Plan 02 dispatcher implementation")
+def test_missing_session_returns_400():
+    """POST tools/list without MCP-Session-Id returns 400."""
+    from server import build_app
+    with TestClient(build_app(), raise_server_exceptions=False) as client:
+        resp = client.post("/", json={
+            "jsonrpc": "2.0", "id": 2, "method": "tools/list",
+        })
+    assert resp.status_code == 400
