@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Remote MCP
 status: executing
-stopped_at: Phase 16.2 complete — FastAPI MCP Protocol Rewrite approved and verified
-last_updated: "2026-04-13T00:00:00Z"
-last_activity: 2026-04-13 -- Phase 16.2 approved and marked complete
+stopped_at: Phase 16.1 complete — OAuth 2.0 verified end-to-end with Auth0 and Claude
+last_updated: "2026-04-13T07:35:00.000Z"
+last_activity: 2026-04-13 -- Phase 16.1 approved and marked complete
 progress:
-  total_phases: 6
-  completed_phases: 5
-  total_plans: 15
-  completed_plans: 13
-  percent: 92
+  total_phases: 7
+  completed_phases: 6
+  total_plans: 16
+  completed_plans: 16
+  percent: 97
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** All LDS content searchable by meaning — find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** Phase 16.2 complete — FastAPI MCP Protocol Rewrite
+**Current focus:** Phase 16.1 complete — OAuth 2.0 for Claude Desktop verified
 
 ## Current Position
 
-Phase: 16.2 (fastapi-mcp-protocol-rewrite) — COMPLETE
-Plan: 2 of 2
-Status: Phase 16.2 approved and verified by user
-Last activity: 2026-04-13 -- Phase 16.2 approved and marked complete
+Phase: 16.1 (oauth-2-0-support-for-claude-desktop-remote-mcp) — COMPLETE
+Plan: 5 of 5
+Status: Phase 16.1 approved and verified by user
+Last activity: 2026-04-13 -- Phase 16.1 execution started
 
 Progress: [████████░░░░░░░░░░░░] v1.0 + v2.0 complete; v3.0 not started
 

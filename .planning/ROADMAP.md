@@ -45,7 +45,7 @@ Full details: `.planning/milestones/v2.0-ROADMAP.md`
 - [x] **Phase 14: Auth Module** — Bearer token API key issuance, request validation, and per-request usage logging (completed 2026-04-04)
 - [x] **Phase 15: Docker Compose & Config** — Containerize the full stack with env-var driven configuration (completed 2026-04-04)
 - [x] **Phase 16: Caddy & Cloudflare Tunnel** — TLS termination and stable public URL via Caddy + cloudflared in Compose (completed 2026-04-04)
-- [ ] **Phase 16.1: OAuth 2.0 for Claude Desktop** — OAuth 2.0 auth flow so Claude Desktop can connect via its remote MCP OAuth handshake
+- [x] **Phase 16.1: OAuth 2.0 for Claude Desktop** — OAuth 2.0 auth flow so Claude Desktop can connect via its remote MCP OAuth handshake (completed 2026-04-13)
 - [x] **Phase 16.2: FastAPI MCP Protocol Rewrite** — Replace FastMCP with FastAPI + manual JSON-RPC MCP protocol to enable per-method auth and spec-compliant initialize flow (completed 2026-04-09)
 - [ ] **Phase 17: Operator Docs** — Connection guide, self-deploy guide, and key management guide
 
@@ -116,13 +116,13 @@ Plans:
   1. Claude Desktop's "Add MCP Server" dialog completes the OAuth handshake against this server
   2. Server implements `/.well-known/oauth-protected-resource/mcp` (RFC 9728) and proxies `/.well-known/oauth-authorization-server` to Auth0
   3. Static bearer token auth is removed; Auth0 JWT is the sole auth path
-**Plans:** 5 plans
+**Plans:** 5/5 plans complete
 Plans:
 - [x] 16.1-01-PLAN.md — Auth0JWTVerifier and DualTokenVerifier with full test coverage (superseded)
 - [x] 16.1-02-PLAN.md — Wire OAuth into FastMCP constructor, Auth0 discovery proxy, env config (superseded)
-- [ ] 16.1-03-PLAN.md — Auth0 tenant setup (operator) and end-to-end verification
+- [x] 16.1-03-PLAN.md — Auth0 tenant setup (operator) and end-to-end verification (completed 2026-04-13)
 - [x] 16.1-04-PLAN.md — Corrective: replace custom auth with mcpauth resource-server mode (superseded)
-- [ ] 16.1-05-PLAN.md — Corrective: replace mcpauth with algorithm-agnostic JWT verifier, add RFC 9728 endpoint
+- [x] 16.1-05-PLAN.md — Corrective: replace mcpauth with algorithm-agnostic JWT verifier, add RFC 9728 endpoint
 
 ### Phase 16.2: FastAPI MCP Protocol Rewrite
 **Goal**: The MCP server runs on FastAPI with a manual JSON-RPC dispatcher, enabling per-method auth routing and spec-compliant `initialize` (no auth required)
@@ -169,6 +169,6 @@ Plans:
 | 14. Auth Module | v3.0 | 2/3 | Complete    | 2026-04-04 |
 | 15. Docker Compose & Config | v3.0 | 2/2 | Complete    | 2026-04-04 |
 | 16. Caddy & Cloudflare Tunnel | v3.0 | 2/2 | Complete    | 2026-04-05 |
-| 16.1 OAuth 2.0 for Claude Desktop | v3.0 | 3/5 | In Progress|  |
+| 16.1 OAuth 2.0 for Claude Desktop | v3.0 | 5/5 | Complete   | 2026-04-13 |
 | 16.2 FastAPI MCP Protocol Rewrite | v3.0 | 2/2 | Complete   | 2026-04-09 |
 | 17. Operator Docs | v3.0 | 0/? | Not started | - |
