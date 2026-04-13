@@ -58,7 +58,7 @@ This phase does NOT include changes to auth, server, or infra code.
 
 ### MCP Server & Auth
 
-- `auth/manage_keys.py` — Key management CLI (in auth/ dir, not scripts/) — source of truth for all key management commands
+- `scripts/manage_keys.py` — Key management CLI (verified at scripts/, not auth/) — source of truth for all key management commands
 - `auth/store.py` — SqliteKeyStore: token hashing, usage log schema
 - `.env.example` (project root) — MCP server operator vars (OLLAMA_URL, MCP_HOST, MCP_PORT, CHROMADB_DATA_PATH, AUTH_DATA_PATH)
 - `docker-compose.yml` (project root) — MCP Compose stack
