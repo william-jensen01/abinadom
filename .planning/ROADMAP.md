@@ -46,7 +46,7 @@ Full details: `.planning/milestones/v2.0-ROADMAP.md`
 - [x] **Phase 15: Docker Compose & Config** — Containerize the full stack with env-var driven configuration (completed 2026-04-04)
 - [x] **Phase 16: Caddy & Cloudflare Tunnel** — TLS termination and stable public URL via Caddy + cloudflared in Compose (completed 2026-04-04)
 - [x] **Phase 16.1: OAuth 2.0 for Claude Desktop** — OAuth 2.0 auth flow so Claude Desktop can connect via its remote MCP OAuth handshake (completed 2026-04-13)
-- [x] **Phase 16.2: FastAPI MCP Protocol Rewrite** — Replace FastMCP with FastAPI + manual JSON-RPC MCP protocol to enable per-method auth and spec-compliant initialize flow (completed 2026-04-09)
+- [x] **Phase 16.2: FastAPI MCP Protocol Rewrite** — Replace FastMCP with FastAPI + manual JSON-RPC MCP protocol to enable per-method auth and spec-compliant initialize flow (completed 2026-04-09)
 - [ ] **Phase 17: Operator Docs** — Connection guide, self-deploy guide, and key management guide
 
 ## Phase Details
@@ -146,7 +146,12 @@ Plans:
   1. A user follows the connection guide and successfully connects Claude.ai or another MCP client to the live server
   2. An operator follows the self-deploy guide and has a running stack on a new machine without prior knowledge of the project
   3. An operator follows the key management guide to issue a new key, verify it works, revoke it, and confirm it no longer authenticates
-**Plans**: TBD
+**Plans:** 4 plans
+Plans:
+- [ ] 17-01-PLAN.md — Connection guide (Claude.ai, Claude Desktop, generic HTTP clients)
+- [ ] 17-02-PLAN.md — Self-deploy guide (clone to running stack on Linux)
+- [ ] 17-03-PLAN.md — Key management reference page with usage log inspection
+- [ ] 17-04-PLAN.md — Root README.md entry point with links to all guides
 
 ## Progress
 
@@ -171,4 +176,4 @@ Plans:
 | 16. Caddy & Cloudflare Tunnel | v3.0 | 2/2 | Complete    | 2026-04-05 |
 | 16.1 OAuth 2.0 for Claude Desktop | v3.0 | 5/5 | Complete   | 2026-04-13 |
 | 16.2 FastAPI MCP Protocol Rewrite | v3.0 | 2/2 | Complete   | 2026-04-09 |
-| 17. Operator Docs | v3.0 | 0/? | Not started | - |
+| 17. Operator Docs | v3.0 | 0/4 | Not started | - |
