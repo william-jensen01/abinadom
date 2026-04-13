@@ -1,4 +1,3 @@
-Loading .env environment variables...
 -i https://pypi.org/simple
 annotated-doc==0.0.4; python_version >= '3.8'
 annotated-types==0.7.0; python_version >= '3.8'
