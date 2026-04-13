@@ -43,6 +43,7 @@ from pathlib import Path
 import chromadb
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
+from fastapi.middleware.cors import CORSMiddleware
 
 from config.pipeline_config import CHROMADB_COLLECTION_NAMES
 from config.ollama import resolve_ollama_url, get_embedding_function
@@ -701,6 +702,18 @@ async def lifespan(app: FastAPI):
 def build_app() -> FastAPI:
     """Build and return the FastAPI application with MCP dispatcher."""
     app = FastAPI(lifespan=lifespan)
+    
+    # Add CORS middleware
+    # Note: allow_credentials=False because we use Bearer tokens in Authorization header, not cookies
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # Public API - any origin can call
+        allow_credentials=False,  # Bearer tokens don't need credentials flag
+        allow_methods=["GET", "POST", "DELETE", "HEAD", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "MCP-Protocol-Version", "MCP-Session-Id"],
+        expose_headers=["MCP-Protocol-Version", "MCP-Session-Id", "WWW-Authenticate"],  # Expose MCP headers to client
+    )
+    
 
     @app.get("/health")
     async def health(request: Request) -> JSONResponse:
