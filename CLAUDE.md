@@ -102,6 +102,8 @@
 - `extractors/phase6_chromadb_loader.py` — Phase 6: ChromaDB loader
 
 ### config/
+- `config/chromadb_client.py` — Shared ChromaDB HttpClient factory (CHROMADB_HOST/CHROMADB_PORT env vars)
+- `config/pipeline_config.py` — Processing constants for all pipeline phases
 - `config/schemas.py` — Config/validation schemas
 - `config/audit_sample.json` — Talk IDs for bug audit sample (user-curated; populate before running run_audit.py)
 

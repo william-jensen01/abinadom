@@ -29,7 +29,8 @@ from models.paragraph_data import ParagraphData, TalkParagraphs
 from models.citation_data import CitationData, TalkCitations
 from models.footnote_data import FootnoteData, TalkFootnotes
 from models.validation_report import ValidationReport
-from config.pipeline_config import CHROMADB_PATH, CHROMADB_BATCH_SIZE, CHROMADB_COLLECTION_NAMES
+from config.chromadb_client import get_chromadb_client
+from config.pipeline_config import CHROMADB_COLLECTION_NAMES
 
 logger = logging.getLogger(__name__)
 
@@ -307,15 +308,6 @@ def prepare_talk_bundle(
 # Public API — Client helpers and insertion
 # =============================================================================
 
-
-def get_chromadb_client(path: str | None = None) -> chromadb.ClientAPI:
-    """
-    Return a PersistentClient using the given path or config default.
-
-    Per D-12: uses CHROMADB_PATH from pipeline_config when no path given.
-    Tests can pass a tmp_path for isolation.
-    """
-    return chromadb.PersistentClient(path=path or CHROMADB_PATH)
 
 
 def insert_collection(

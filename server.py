@@ -10,8 +10,8 @@ Phase 16.2 replaces FastMCP + BaseHTTPMiddleware with a FastAPI app and per-meth
 auth routing directly in the dispatcher (eliminates anyio task group errors).
 
 Startup sequence:
-  1. Resolve ChromaDB path to absolute (CORE-01)
-  2. Validate path exists and all 4 collections are present and non-empty (CORE-01/CORE-03)
+  1. Connect to ChromaDB via HttpClient (CHROMADB_HOST/CHROMADB_PORT env vars) (CORE-01)
+  2. Validate all 4 collections are present and non-empty (CORE-01/CORE-03)
   3. Ollama health check via live embedding call (CORE-02)
   4. Load all 4 collections into AppContext (CORE-03)
   5. Yield AppContext via FastAPI lifespan, stored in app.state.ctx
@@ -45,6 +45,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+from config.chromadb_client import get_chromadb_client
 from config.pipeline_config import CHROMADB_COLLECTION_NAMES
 from config.ollama import resolve_ollama_url, get_embedding_function
 from auth.oauth import JWKSVerifier
@@ -77,20 +78,19 @@ class AppContext:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_chromadb_path() -> str:
+def _resolve_chromadb_client() -> chromadb.HttpClient:
     """
-    Return the absolute path to the ChromaDB directory.
-
-    Default: <project_root>/data/chromadb (resolved from __file__, so it works
-    regardless of the working directory Claude Desktop uses when spawning the
-    server process).
-
-    Override: Set CHROMADB_PATH env var to any path.
+    Resolve the ChromaDB client via the get_chromadb_client function.
+    Will raise a SystemExit(1) if the ChromaDB client cannot be resolved.
+    Will return the ChromaDB client if it is resolved.
     """
-    default = Path(__file__).parent.resolve() / "data" / "chromadb"
-    raw = os.environ.get("CHROMADB_PATH", str(default))
-    return str(Path(raw).resolve())
-
+    try:
+        client = get_chromadb_client()
+        client.heartbeat()
+    except Exception as exc:
+        logger.warning(f"ChromaDB unreachable - ensure the ChromaDB server is running. {exc}")
+        sys.exit(1)
+    return client
 
 def _check_ollama() -> None:
     """
@@ -149,18 +149,7 @@ def _startup() -> AppContext:
     Called from lifespan before the first tool call is accepted.
     Any failure raises SystemExit(1) with a message to stderr.
     """
-    path = _resolve_chromadb_path()
-    logger.info("ChromaDB path: %s", path)
-
-    if not Path(path).exists():
-        print(
-            f"ERROR: ChromaDB directory not found at {path}. "
-            "Run the pipeline (scripts/run_pipeline.py) first.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    client = chromadb.PersistentClient(path=path)
+    client = _resolve_chromadb_client()
     _check_ollama()
     collections = _load_collections(client)
     return AppContext(client=client, collections=collections)
@@ -389,8 +378,7 @@ async def health_check(request: Request) -> JSONResponse:
     # ChromaDB check: connect and verify collections exist (per D-09 — reuses
     # startup guard logic pattern without full count validation)
     try:
-        path = _resolve_chromadb_path()
-        client = chromadb.PersistentClient(path=path)
+        client = get_chromadb_client()
         for name in CHROMADB_COLLECTION_NAMES.values():
             client.get_collection(name=name)
     except Exception:

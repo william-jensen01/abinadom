@@ -29,7 +29,6 @@ from extractors.phase6_chromadb_loader import (
     prepare_citation_records,
     prepare_footnote_records,
     prepare_talk_bundle,
-    get_chromadb_client,
     insert_collection,
     load_talk_bundles,
     generate_verification_report,

@@ -1,7 +1,7 @@
 """
 Unit tests for server.py startup validation and MCP tool integration.
 
-CORE-01: ChromaDB path resolution (absolute path, env override, missing collection guard)
+CORE-01: ChromaDB HTTP client factory (env-var config, missing collection guard)
 CORE-02: Ollama health check (fails fast on connection error)
 CORE-03: Collection warmup (all 4 collections loaded and counted)
 TOOL-01/TOOL-02/TOOL-03: search tool integration
@@ -19,31 +19,30 @@ from starlette.testclient import TestClient
 
 
 # ---------------------------------------------------------------------------
-# CORE-01: _resolve_chromadb_path
+# CORE-01: get_chromadb_client — env-var configuration
 # ---------------------------------------------------------------------------
 
 
-def test_chromadb_path_absolute():
-    """_resolve_chromadb_path() returns an absolute path ending in data/chromadb."""
-    from server import _resolve_chromadb_path
+def test_chromadb_client_default_host(monkeypatch):
+    """get_chromadb_client() uses localhost:8000 when env vars are unset."""
+    monkeypatch.delenv("CHROMADB_HOST", raising=False)
+    monkeypatch.delenv("CHROMADB_PORT", raising=False)
 
-    result = _resolve_chromadb_path()
-    assert os.path.isabs(result), f"Expected absolute path, got: {result}"
-    assert result.endswith(os.path.join("data", "chromadb")), (
-        f"Expected path ending in data/chromadb, got: {result}"
-    )
+    with patch("chromadb.HttpClient") as mock_http:
+        from config.chromadb_client import get_chromadb_client
+        get_chromadb_client()
+        mock_http.assert_called_once_with(host="localhost", port=8000)
 
 
-def test_chromadb_path_env_override(monkeypatch, tmp_path):
-    """_resolve_chromadb_path() respects CHROMADB_PATH env var."""
-    monkeypatch.setenv("CHROMADB_PATH", str(tmp_path))
+def test_chromadb_client_env_override(monkeypatch):
+    """get_chromadb_client() respects CHROMADB_HOST and CHROMADB_PORT env vars."""
+    monkeypatch.setenv("CHROMADB_HOST", "chroma.internal")
+    monkeypatch.setenv("CHROMADB_PORT", "9000")
 
-    from server import _resolve_chromadb_path
-
-    result = _resolve_chromadb_path()
-    assert result == str(tmp_path.resolve()), (
-        f"Expected {str(tmp_path.resolve())}, got: {result}"
-    )
+    with patch("chromadb.HttpClient") as mock_http:
+        from config.chromadb_client import get_chromadb_client
+        get_chromadb_client()
+        mock_http.assert_called_once_with(host="chroma.internal", port=9000)
 
 
 # ---------------------------------------------------------------------------
@@ -51,15 +50,15 @@ def test_chromadb_path_env_override(monkeypatch, tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_chromadb_missing_collection_exits(tmp_path):
+def test_chromadb_missing_collection_exits():
     """_load_collections() raises SystemExit(1) when collections don't exist."""
     from server import _load_collections
 
-    # Create an empty ChromaDB — no collections present
-    client = chromadb.PersistentClient(path=str(tmp_path))
+    mock_client = MagicMock(spec=chromadb.ClientAPI)
+    mock_client.get_collection.side_effect = Exception("collection not found")
 
     with pytest.raises(SystemExit) as exc_info:
-        _load_collections(client)
+        _load_collections(mock_client)
 
     assert exc_info.value.code == 1, f"Expected exit code 1, got: {exc_info.value.code}"
 
