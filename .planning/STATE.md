@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Remote MCP
 status: executing
-stopped_at: Phase 16.1 complete — OAuth 2.0 verified end-to-end with Auth0 and Claude
-last_updated: "2026-04-13T07:35:00.000Z"
-last_activity: 2026-04-13 -- Phase 16.1 approved and marked complete
+stopped_at: Phase 18 Wave 1 complete — dead code removal and two-mode auth implemented
+last_updated: "2026-04-14T00:00:00.000Z"
+last_activity: 2026-04-14 -- Phase 18 Plan 01 complete
 progress:
   total_phases: 7
   completed_phases: 6
-  total_plans: 16
-  completed_plans: 16
-  percent: 97
+  total_plans: 19
+  completed_plans: 17
+  percent: 89
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** All LDS content searchable by meaning — find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** Phase 16.1 complete — OAuth 2.0 for Claude Desktop verified
+**Current focus:** Phase 18 executing — Wave 1 complete (dead code removal + two-mode auth)
 
 ## Current Position
 
-Phase: 16.1 (oauth-2-0-support-for-claude-desktop-remote-mcp) — COMPLETE
-Plan: 5 of 5
-Status: Phase 16.1 approved and verified by user
-Last activity: 2026-04-13 -- Phase 16.1 execution started
+Phase: 18 (cleanup-of-previous-phases-in-this-milestone) — IN PROGRESS
+Plan: 1 of 3
+Status: Wave 1 complete — Plan 01 done; Wave 2 (Plans 02, 03) pending
+Last activity: 2026-04-14 -- Phase 18 Plan 01 complete
 
-Progress: [████████░░░░░░░░░░░░] v1.0 + v2.0 complete; v3.0 not started
+Progress: [█████████░░░░░░░░░░░] v1.0 + v2.0 complete; v3.0 executing (phase 18)
 
 ## Performance Metrics
 
