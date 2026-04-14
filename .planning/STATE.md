@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: Remote MCP
 status: executing
-stopped_at: Phase 18 Wave 1 complete — dead code removal and two-mode auth implemented
+stopped_at: Phase 18 Wave 2 complete — test fixes and doc cleanup done; all 3 plans complete
 last_updated: "2026-04-14T00:00:00.000Z"
-last_activity: 2026-04-14 -- Phase 18 Plan 01 complete
+last_activity: 2026-04-14 -- Phase 18 Plans 02 and 03 complete (wave 2)
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 19
-  completed_plans: 17
-  percent: 89
+  completed_plans: 19
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-03)
 
 **Core value:** All LDS content searchable by meaning — find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** Phase 18 executing — Wave 1 complete (dead code removal + two-mode auth)
+**Current focus:** Phase 18 complete — all 3 plans done; milestone v3.0 ready for verification
 
 ## Current Position
 
-Phase: 18 (cleanup-of-previous-phases-in-this-milestone) — IN PROGRESS
-Plan: 1 of 3
-Status: Wave 1 complete — Plan 01 done; Wave 2 (Plans 02, 03) pending
-Last activity: 2026-04-14 -- Phase 18 Plan 01 complete
+Phase: 18 (cleanup-of-previous-phases-in-this-milestone) — COMPLETE
+Plan: 3 of 3
+Status: All waves complete — Plans 01, 02, 03 done
+Last activity: 2026-04-14 -- Phase 18 Wave 2 complete (test fixes + doc cleanup)
 
-Progress: [█████████░░░░░░░░░░░] v1.0 + v2.0 complete; v3.0 executing (phase 18)
+Progress: [████████████████████] v1.0 + v2.0 + v3.0 all plans complete
 
 ## Performance Metrics
 

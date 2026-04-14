@@ -158,12 +158,12 @@ Plans:
 **Goal:** Remove static bearer token auth path, implement no-auth local mode, fix broken tests, and update Phase 17 docs to reflect the final two-mode auth model
 **Requirements**: AUTH-02, OAUTH-01, OAUTH-02, OAUTH-03, DOCS-01, DOCS-02, DOCS-03
 **Depends on:** Phase 17
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 
 Plans:
-- [ ] 18-01-PLAN.md — Dead code removal (middleware.py, store.py, manage_keys.py, test_auth.py) + server.py two-mode auth
-- [ ] 18-02-PLAN.md — Fix test_health_returns_200 and replace static fallback test with local-mode passthrough test
-- [ ] 18-03-PLAN.md — Delete KEY-MANAGEMENT.md, update DEPLOY.md and README.md, update REQUIREMENTS.md traceability
+- [x] 18-01-PLAN.md — Dead code removal (middleware.py, store.py, manage_keys.py, test_auth.py) + server.py two-mode auth
+- [x] 18-02-PLAN.md — Fix test_health_returns_200 and replace static fallback test with local-mode passthrough test
+- [x] 18-03-PLAN.md — Delete KEY-MANAGEMENT.md, update DEPLOY.md and README.md, update REQUIREMENTS.md traceability
 
 ## Progress
 
@@ -189,4 +189,4 @@ Plans:
 | 16.1 OAuth 2.0 for Claude Desktop | v3.0 | 5/5 | Complete   | 2026-04-13 |
 | 16.2 FastAPI MCP Protocol Rewrite | v3.0 | 2/2 | Complete   | 2026-04-09 |
 | 17. Operator Docs | v3.0 | 4/4 | Complete   | 2026-04-13 |
-| 18. Cleanup of Previous Phases | v3.0 | 0/3 | In Progress | — |
+| 18. Cleanup of Previous Phases | v3.0 | 3/3 | Complete   | 2026-04-14 |
