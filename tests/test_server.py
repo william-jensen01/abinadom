@@ -741,7 +741,8 @@ def test_initialize_no_auth():
 
 def test_tools_list_requires_auth():
     """OAUTH-01: tools/list without token returns 401."""
-    with patch("server._startup", return_value=_mock_startup()):
+    with patch("server._startup", return_value=_mock_startup()), \
+         patch("server.AUTH0_DOMAIN", "test.auth0.com"):
         from server import build_app
         app = build_app()
         with TestClient(app, raise_server_exceptions=False) as client:
@@ -761,6 +762,7 @@ def test_tools_list_requires_auth():
 def test_tools_list_401_has_www_authenticate():
     """OAUTH-01: 401 response includes WWW-Authenticate header with resource_metadata."""
     with patch("server._startup", return_value=_mock_startup()), \
+         patch("server.AUTH0_DOMAIN", "test.auth0.com"), \
          patch("server.MCP_BASE_URL", "https://test.example.com"):
         from server import build_app
         app = build_app()
@@ -826,13 +828,11 @@ def test_tools_list_valid_hs256():
     assert "tools" in data["result"]
 
 
-def test_tools_list_static_fallback():
-    """OAUTH-02: Static fallback validates SqliteKeyStore token when AUTH0_DOMAIN unset."""
-    mock_store = MagicMock()
-    mock_store.verify_token.return_value = "test-key"
+def test_tools_list_local_mode_no_auth_required():
+    """OAUTH-02 / D-01: tools/list succeeds with no token when AUTH0_DOMAIN is unset (local mode)."""
     with patch("server._startup", return_value=_mock_startup()), \
-         patch("server._jwt_verifier", None), \
-         patch("server._key_store", mock_store):
+         patch("server.AUTH0_DOMAIN", ""), \
+         patch("server._jwt_verifier", None):
         from server import build_app
         app = build_app()
         with TestClient(app, raise_server_exceptions=False) as client:
@@ -841,9 +841,10 @@ def test_tools_list_static_fallback():
                 "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
             })
             session_id = init_resp.headers["MCP-Session-Id"]
+            # No Authorization header — should succeed in local mode
             resp = client.post("/", json={
                 "jsonrpc": "2.0", "id": 2, "method": "tools/list",
-            }, headers={"MCP-Session-Id": session_id, "Authorization": "Bearer static-token"})
+            }, headers={"MCP-Session-Id": session_id})
     assert resp.status_code == 200
     data = resp.json()
     assert "tools" in data["result"]

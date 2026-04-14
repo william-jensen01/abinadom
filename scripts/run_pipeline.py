@@ -37,8 +37,8 @@ from config.ollama import get_embedding_function
 from extractors.pipeline import process_talk_pipeline
 from extractors.phase3_citation_extraction import fetch_all_books
 from extractors.phase5_validation import validate_talk
+from config.chromadb_client import get_chromadb_client
 from extractors.phase6_chromadb_loader import (
-    get_chromadb_client,
     load_talk_bundles,
     TalkBundle,
 )
