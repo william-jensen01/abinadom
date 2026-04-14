@@ -38,15 +38,14 @@ All operator-facing variables with their meanings:
 | `MCP_HOST` | Bind address inside container | `0.0.0.0` |
 | `MCP_PORT` | Server port inside container | `7363` |
 | `CHROMADB_DATA_PATH` | Host path to ChromaDB data directory | `/home/user/data/chromadb` |
-| `AUTH_DATA_PATH` | Host path to auth data directory | `/home/user/data/auth` |
 | `AUTH0_DOMAIN` | Auth0 tenant domain (for OAuth) | `your-tenant.auth0.com` |
 | `AUTH0_AUDIENCE` | Auth0 API audience | `https://mcp.yourdomain.com` |
 | `MCP_BASE_URL` | Public URL of the MCP server | `https://mcp.yourdomain.com` |
 
-> **Note:** `CHROMADB_DATA_PATH` and `AUTH_DATA_PATH` are host-side directories that are bind-mounted into the container. They must exist before starting the stack:
+> **Note:** `CHROMADB_DATA_PATH` is a host-side directory bind-mounted into the container. It must exist before starting the stack:
 >
 > ```bash
-> mkdir -p /home/user/data/chromadb /home/user/data/auth
+> mkdir -p /home/user/data/chromadb
 > ```
 
 > **Note on Ollama:** On Linux, `host.docker.internal` resolves to the host gateway via the `extra_hosts` setting in `docker-compose.yml`. This requires Ollama to listen on `0.0.0.0` (not just `127.0.0.1`). To check: `ss -tlnp | grep 11434`.
@@ -96,9 +95,15 @@ Expected: HTTP 200 with a JSON body like `{"status": "healthy", ...}`.
 
 ---
 
-## Step 5: Configure Auth0 (Optional)
+## Step 5: Configure Auth0
 
-Auth0 is needed to enable the OAuth 2.0 flow for Claude.ai and other OAuth-capable clients. Without it, only static bearer tokens (via `scripts/manage_keys.py`) are available.
+Auth0 provides the OAuth 2.0 flow for Claude.ai, Claude Desktop, and other OAuth-capable clients.
+
+**Without Auth0 configured (local mode):** The server runs with no authentication — any request to `tools/list` and `tools/call` is accepted. Use this for local testing only.
+
+**With Auth0 configured (remote/hosted mode):** All tool requests require a valid Auth0 JWT. The OAuth discovery endpoints are served at `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`.
+
+To configure Auth0:
 
 1. Create an Auth0 tenant at <https://manage.auth0.com>
 2. Create an API with the identifier matching your `AUTH0_AUDIENCE` value (e.g. `https://mcp.yourdomain.com`)
@@ -107,8 +112,6 @@ Auth0 is needed to enable the OAuth 2.0 flow for Claude.ai and other OAuth-capab
    ```bash
    docker compose down && docker compose up -d
    ```
-
-> **Without Auth0 configured**, the OAuth discovery endpoints return 404 and only static bearer tokens (via `scripts/manage_keys.py`) are available. See [docs/KEY-MANAGEMENT.md](KEY-MANAGEMENT.md) for token management.
 
 ---
 
@@ -146,14 +149,7 @@ cd ~/infra && docker compose up -d
 ```
 Then retry starting the MCP stack.
 
-**4. Permission denied on auth directory**
-Ensure `AUTH_DATA_PATH` exists and is writable by the process running Docker:
-```bash
-mkdir -p /home/user/data/auth
-chmod 755 /home/user/data/auth
-```
-
-**5. Cannot connect to Ollama**
+**4. Cannot connect to Ollama**
 On Linux, `host.docker.internal` requires the `extra_hosts: host-gateway` entry (already present in `docker-compose.yml`). Verify Ollama is listening on `0.0.0.0`, not just `127.0.0.1`:
 ```bash
 ss -tlnp | grep 11434
