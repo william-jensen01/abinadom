@@ -4,7 +4,6 @@ MCP Server — LDS Scripture Citation Index
 Exposes the ChromaDB vector collections via FastAPI with a manual MCP JSON-RPC dispatcher.
 Phase 9 builds startup validation; Phase 10 adds search and get_talk tools.
 Phase 13 swaps to HTTP transport with configurable host/port.
-Phase 14 adds bearer token authentication via SqliteKeyStore.
 Phase 16.1 adds OAuth 2.1 via algorithm-agnostic JWT verification (Auth0 JWKS + PyJWT).
 Phase 16.2 replaces FastMCP + BaseHTTPMiddleware with a FastAPI app and per-method
 auth routing directly in the dispatcher (eliminates anyio task group errors).
@@ -20,14 +19,14 @@ MCP tools (Phase 10):
   - search: semantic search across 4 collections with optional speaker/year/season filters
   - get_talk: retrieve full ordered text of a conference talk by ID
 
-Auth (Phase 14/16.1/16.2):
-  - OAuth 2.1: When AUTH0_DOMAIN is set, JWKSVerifier handles JWT validation.
-    Per-method auth is applied inline in the dispatcher — no middleware involved.
-    RFC 9728 protected resource metadata and RFC 8414 authorization server metadata
-    are served as discovery endpoints.
-  - Static-only fallback: When AUTH0_DOMAIN is unset, SqliteKeyStore bearer check
-    is used for tools/list and tools/call.
-  - AUTH_DB_PATH env var configures auth.db location (default: project_root/auth.db)
+Auth (Phase 18):
+  - Local mode (AUTH0_DOMAIN unset): No authentication required on any endpoint.
+    All requests to initialize, tools/list, and tools/call pass through without
+    any token check. Intended for localhost use.
+  - Remote/hosted mode (AUTH0_DOMAIN set): OAuth via Auth0 is the sole auth path.
+    JWKSVerifier (auth/oauth.py) handles JWT validation per RFC 9728.
+    initialize is unauthenticated; tools/list and tools/call require a valid JWT.
+    Static bearer token path and key store are removed.
 
 All logging goes to stderr only.
 """
@@ -38,7 +37,6 @@ import sys
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from pathlib import Path
 
 import chromadb
 from fastapi import FastAPI, Request
@@ -49,7 +47,6 @@ from config.chromadb_client import get_chromadb_client
 from config.pipeline_config import CHROMADB_COLLECTION_NAMES
 from config.ollama import resolve_ollama_url, get_embedding_function
 from auth.oauth import JWKSVerifier
-from auth.store import SqliteKeyStore
 
 # ---------------------------------------------------------------------------
 # Logging — must be configured before anything else writes to stderr (INTG-01)
@@ -447,10 +444,6 @@ async def _auth_server_metadata(request: Request) -> JSONResponse:
 
 MCP_HOST = os.environ.get("MCP_HOST", "0.0.0.0")
 MCP_PORT = int(os.environ.get("MCP_PORT", "7363"))
-AUTH_DB_PATH = os.environ.get(
-    "AUTH_DB_PATH",
-    str(Path(__file__).parent.resolve() / "auth.db"),
-)
 AUTH0_DOMAIN = os.environ.get("AUTH0_DOMAIN", "")
 AUTH0_AUDIENCE = os.environ.get("AUTH0_AUDIENCE", "")
 AUTH0_CLIENT_SECRET = os.environ.get("AUTH0_CLIENT_SECRET", "")
@@ -467,11 +460,6 @@ if AUTH0_DOMAIN and AUTH0_AUDIENCE:
     logger.info("JWT verification enabled (Auth0 domain: %s)", AUTH0_DOMAIN)
 else:
     logger.info("JWT verification disabled (AUTH0_DOMAIN/AUTH0_AUDIENCE not set)")
-
-# Static fallback key store — used when AUTH0_DOMAIN is not configured
-_key_store: SqliteKeyStore | None = None
-if not AUTH0_DOMAIN:
-    _key_store = SqliteKeyStore(AUTH_DB_PATH)
 
 MCP_INSTRUCTIONS = (
     "LDS General Conference corpus: 5,838 talks (1971-present) across 4 collections "
@@ -555,9 +543,14 @@ def _unauthorized_response() -> Response:
 def _verify_auth(request: Request) -> dict | None:
     """Check Authorization header and return token payload or None.
 
-    When AUTH0_DOMAIN is set: uses JWKSVerifier (kid-based routing).
-    When AUTH0_DOMAIN is unset: uses SqliteKeyStore (static fallback).
+    When AUTH0_DOMAIN is set (remote mode): validates via JWKSVerifier.
+    When AUTH0_DOMAIN is unset (local mode): returns a passthrough payload
+    without any token check. All requests pass in local mode (D-01, D-02).
     """
+    # Local mode — no auth required (D-01, D-02)
+    if not AUTH0_DOMAIN:
+        return {"sub": "local"}
+
     auth_header = request.headers.get("authorization", "")
     if not auth_header.startswith("Bearer "):
         return None
@@ -566,9 +559,7 @@ def _verify_auth(request: Request) -> dict | None:
 
     if _jwt_verifier is not None:
         return _jwt_verifier.verify_token(token)
-    else:
-        key_name = _key_store.verify_token(token)
-        return {"sub": key_name} if key_name else None
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -642,16 +633,6 @@ async def _handle_tools_call(body: dict, request: Request, session_id: str) -> J
         result_text = await get_talk(**arguments, ctx=fake_ctx)
     else:
         return _error_response(body.get("id"), -32602, f"Unknown tool: {tool_name}", 404)
-
-    # Log usage (AUTH-03)
-    auth_payload = _verify_auth(request)
-    if auth_payload and _key_store:
-        from datetime import datetime, timezone
-        _key_store.log_request(
-            auth_payload.get("sub", "unknown"),
-            tool_name,
-            datetime.now(timezone.utc).isoformat(),
-        )
 
     result = {
         "jsonrpc": "2.0",
