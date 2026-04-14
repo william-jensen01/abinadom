@@ -647,12 +647,11 @@ def test_no_stdio_references():
 def test_health_returns_200():
     """GET /health returns 200 with ok status when both deps are reachable."""
     mock_ef = MagicMock(return_value=[[0.1] * 10])
-    mock_ef_cls = MagicMock(return_value=mock_ef)
     mock_client = MagicMock()
     mock_client.get_collection.return_value = MagicMock()
 
-    with patch("server.get_embedding_function", mock_ef_cls), \
-         patch("server.chromadb.PersistentClient", return_value=mock_client):
+    with patch("server.get_embedding_function", return_value=mock_ef), \
+         patch("server.get_chromadb_client", return_value=mock_client):
         from server import build_app
         app = build_app()
         client = TestClient(app)
@@ -668,12 +667,11 @@ def test_health_returns_200():
 def test_health_ollama_down():
     """GET /health returns 503 when Ollama is unreachable."""
     mock_ef = MagicMock(side_effect=Exception("connection refused"))
-    mock_ef_cls = MagicMock(return_value=mock_ef)
     mock_client = MagicMock()
     mock_client.get_collection.return_value = MagicMock()
 
-    with patch("server.get_embedding_function", mock_ef_cls), \
-         patch("server.chromadb.PersistentClient", return_value=mock_client):
+    with patch("server.get_embedding_function", return_value=mock_ef), \
+         patch("server.get_chromadb_client", return_value=mock_client):
         from server import build_app
         app = build_app()
         client = TestClient(app)
@@ -688,10 +686,9 @@ def test_health_ollama_down():
 def test_health_chromadb_down():
     """GET /health returns 503 when ChromaDB is unreachable."""
     mock_ef = MagicMock(return_value=[[0.1] * 10])
-    mock_ef_cls = MagicMock(return_value=mock_ef)
 
-    with patch("server.get_embedding_function", mock_ef_cls), \
-         patch("server.chromadb.PersistentClient", side_effect=Exception("path not found")):
+    with patch("server.get_embedding_function", return_value=mock_ef), \
+         patch("server.get_chromadb_client", side_effect=Exception("unreachable")):
         from server import build_app
         app = build_app()
         client = TestClient(app)
