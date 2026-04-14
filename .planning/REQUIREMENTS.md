@@ -14,15 +14,15 @@ Requirements for the Remote MCP milestone. Each maps to roadmap phases.
 
 ### Auth
 
-- [x] **AUTH-01**: Operator can issue a named API key for a user
-- [ ] **AUTH-02**: Server rejects requests without a valid bearer token with 401
-- [x] **AUTH-03**: Server logs tool name, timestamp, and user for every authenticated request
+- **AUTH-01**: *(Removed — Phase 18)* Static key issuance removed; Auth0 handles authentication for remote deployments. `manage_keys.py` and `SqliteKeyStore` deleted.
+- [x] **AUTH-02**: Server rejects requests without a valid bearer token with 401 — Remote mode (AUTH0_DOMAIN set): per-method auth in dispatcher returns 401 for missing/invalid JWT. Local mode: unauthenticated (by design, localhost only).
+- **AUTH-03**: *(Removed — Phase 18)* Usage logging via SqliteKeyStore deleted. Auth0 tenant logs provide equivalent audit trail for remote deployments.
 
 ### OAuth
 
-- [ ] **OAUTH-01**: Claude Desktop (or Claude Code CLI) completes OAuth 2.1 handshake against the MCP server via Auth0
-- [ ] **OAUTH-02**: Server validates Auth0-issued JWTs and static bearer tokens (dual-path authentication)
-- [ ] **OAUTH-03**: Server serves `/.well-known/oauth-protected-resource/mcp` (RFC 9728) and proxies `/.well-known/oauth-authorization-server` to Auth0
+- [x] **OAUTH-01**: Claude Desktop (or Claude Code CLI) completes OAuth 2.1 handshake against the MCP server via Auth0 — delivered Phase 16.2
+- [x] **OAUTH-02**: Server validates Auth0-issued JWTs (single auth path; static bearer token fallback removed in Phase 18)
+- [x] **OAUTH-03**: Server serves `/.well-known/oauth-protected-resource/mcp` (RFC 9728) and proxies `/.well-known/oauth-authorization-server` to Auth0 — delivered Phase 16.2
 
 ### Deployment
 
@@ -33,9 +33,9 @@ Requirements for the Remote MCP milestone. Each maps to roadmap phases.
 
 ### Docs
 
-- [ ] **DOCS-01**: User can connect Claude.ai, ChatGPT, or any MCP client using the connection guide
-- [ ] **DOCS-02**: Operator can deploy stack on a new machine following the self-deploy guide
-- [ ] **DOCS-03**: Operator can issue, revoke, and rotate API keys following the key management guide
+- [x] **DOCS-01**: User can connect Claude.ai, ChatGPT, or any MCP client using the connection guide — delivered Phase 17
+- [x] **DOCS-02**: Operator can deploy stack on a new machine following the self-deploy guide — delivered Phase 17, updated Phase 18
+- [x] **DOCS-03**: *(Scope changed — Phase 18)* Key management guide removed (static keys deleted). OAuth 2.0 via Auth0 is the auth model for remote deployments.
 
 ## Future Requirements
 
@@ -72,19 +72,19 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | TRANS-01 | Phase 13 | Complete |
 | TRANS-02 | Phase 13 | Complete |
-| AUTH-01 | Phase 14 | Complete |
-| AUTH-02 | Phase 14 | Pending |
-| AUTH-03 | Phase 14 | Complete |
-| OAUTH-01 | Phase 16.1 | Pending |
-| OAUTH-02 | Phase 16.1 | Pending |
-| OAUTH-03 | Phase 16.1 | Pending |
+| AUTH-01 | Phase 14 | Removed (Phase 18) |
+| AUTH-02 | Phase 14 → Phase 18 | Complete |
+| AUTH-03 | Phase 14 | Removed (Phase 18) |
+| OAUTH-01 | Phase 16.2 | Complete |
+| OAUTH-02 | Phase 16.2 | Complete |
+| OAUTH-03 | Phase 16.2 | Complete |
 | DEPLOY-01 | Phase 15 | Complete |
 | DEPLOY-02 | Phase 15 | Complete |
 | DEPLOY-03 | Phase 16 | Complete |
 | DEPLOY-04 | Phase 16 | Complete |
-| DOCS-01 | Phase 17 | Pending |
-| DOCS-02 | Phase 17 | Pending |
-| DOCS-03 | Phase 17 | Pending |
+| DOCS-01 | Phase 17 | Complete |
+| DOCS-02 | Phase 17 | Complete |
+| DOCS-03 | Phase 17 → Phase 18 | Complete (scope changed) |
 
 **Coverage:**
 - v3.0 requirements: 15 total
@@ -93,4 +93,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-04-03*
-*Last updated: 2026-04-06 — added OAUTH-01/02/03 for Phase 16.1*
+*Last updated: 2026-04-14 — Phase 18 cleanup: AUTH-01/AUTH-03 removed, all OAUTH/DOCS marked complete*

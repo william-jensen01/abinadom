@@ -13,7 +13,6 @@ An MCP (Model Context Protocol) server that exposes the BYU Scripture Citation I
 |-------|-------------|
 | [Connection Guide](docs/CONNECTION.md) | Connect Claude.ai, Claude Desktop, or any MCP client |
 | [Self-Deploy Guide](docs/DEPLOY.md) | Deploy the full stack on a new Linux server |
-| [Key Management](docs/KEY-MANAGEMENT.md) | Issue, revoke, and audit API keys |
 | [Infrastructure Setup](infra/SETUP.md) | Caddy reverse proxy + Cloudflare Tunnel |
 
 ## Quick Start
