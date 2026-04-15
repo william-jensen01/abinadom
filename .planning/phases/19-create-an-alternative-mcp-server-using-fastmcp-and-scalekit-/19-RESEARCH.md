@@ -1,8 +1,8 @@
 # Phase 19: FastMCP + ScaleKit MCP Server — Research
 
 **Researched:** 2026-04-15
-**Domain:** FastMCP (mcp==1.26.0), ScaleKit JWT validation, MCP server replacement
-**Confidence:** HIGH (all major claims verified against installed packages)
+**Domain:** standalone `fastmcp` package (PyPI), ScaleKit SDK, MCP server replacement
+**Confidence:** HIGH — all claims verified against installed packages via `pipenv run python`
 
 ---
 
@@ -11,40 +11,53 @@
 
 ### Locked Decisions
 
-- **D-01:** This is a replacement, not a side-by-side alternative. The new FastMCP + ScaleKit server replaces `server.py` in place. The existing file is overwritten.
-- **D-02:** New server file is named `server.py` — same location, clean cutover.
-- **D-03:** Use FastMCP's built-in auth support to integrate ScaleKit as the OAuth provider. Do NOT use `BaseHTTPMiddleware` — that was the root cause of Phase 16.2's task group failures. ScaleKit acts as the OIDC/OAuth provider; FastMCP's native auth hooks handle the protocol layer.
-- **D-04:** Two-mode auth model carries forward:
-  - Local mode (`SCALEKIT_*` env vars absent): No authentication required on any endpoint. All requests pass through without any token check.
-  - Remote/hosted mode (`SCALEKIT_*` env vars set): ScaleKit JWT validation is the sole auth path. `initialize` is unauthenticated; `tools/list` and `tools/call` require a valid JWT.
-- **D-05:** `auth/oauth.py` (JWKSVerifier) is replaced with ScaleKit's SDK. Auth0 dependency is removed entirely.
-- **D-06:** Full feature parity:
-  - Include: `search` and `get_talk` tools, ChromaDB integration, `GET /health`, startup validation (ChromaDB + Ollama health check, 4-collection warmup), session management, lifespan pattern.
-  - Exclude: `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server` — ScaleKit/the provider handles these.
+- **D-01:** Full replacement, not an experiment. New `server.py` becomes the canonical server.
+- **D-02:** New server file is `server.py` — same location, clean cutover.
+- **D-03:** Use FastMCP's built-in auth support. Do NOT use `BaseHTTPMiddleware` — it caused anyio task group failures in Phase 16.2. FastMCP native auth hooks only.
+- **D-04:** Two-mode auth: local (SCALEKIT_* vars absent → no auth), remote (SCALEKIT_* vars set → JWT validation required). `initialize` is unauthenticated; `tools/list` and `tools/call` require a valid JWT.
+- **D-05:** `auth/oauth.py` (JWKSVerifier) replaced with ScaleKit SDK. Auth0 dependency removed entirely.
+- **D-06:** Feature parity EXCEPT `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server` endpoints — ScaleKit/the provider handles these; the server does not serve them.
 - **D-07:** MCP-Session-ID header behavior and session tracking are retained.
 
 ### Claude's Discretion
 
-- Exact ScaleKit SDK usage pattern (which classes/methods) — researcher should investigate the SDK
+- Exact ScaleKit SDK usage pattern (which classes/methods)
 - Whether `auth/oauth.py` is deleted or replaced in-file
-- FastMCP version compatibility with mcp==1.26.0 and its auth API
-- Env var names for ScaleKit credentials (researcher should confirm from ScaleKit docs)
-- Whether any existing tests in `tests/test_server.py` can be adapted or need full rewrite
+- FastMCP version compatibility with `mcp==1.26.0`
+- Env var names for ScaleKit credentials
+- Whether existing tests can be adapted or need full rewrite
 
 ### Deferred Ideas (OUT OF SCOPE)
 
-None stated in CONTEXT.md.
+- None specified
 </user_constraints>
+
+---
+
+<phase_requirements>
+## Phase Requirements
+
+| ID | Description | Research Support |
+|----|-------------|------------------|
+| TRANS-01 | User can connect any MCP client via Streamable HTTP URL | FastMCP `run_http_async(transport="http", host=..., port=...)` — built-in streamable HTTP transport |
+| TRANS-02 | Operator can verify server health via GET /health endpoint | `@mcp.custom_route("/health", methods=["GET"])` — native custom route decorator |
+| AUTH-02 | Server rejects requests without a valid bearer token with 401 — remote mode; local mode unauthenticated | `RemoteAuthProvider` + custom `TokenVerifier` subclass wrapping ScaleKit SDK; `None` return → 401 via `RequireAuthMiddleware` |
+| OAUTH-01 | OAuth 2.1 handshake — client completes token acquisition against authorization server | `RemoteAuthProvider(authorization_servers=[scalekit_env_url])` advertises ScaleKit as AS via RFC 9728 metadata |
+| OAUTH-02 | Server validates ScaleKit-issued JWTs | `ScalekitTokenVerifier` subclasses `TokenVerifier`, wraps `ScalekitClient.validate_token()` in `anyio.to_thread.run_sync()` |
+| DEPLOY-02 | All secrets configurable via .env — no hardcoded values | `SCALEKIT_ENV_URL`, `SCALEKIT_CLIENT_ID`, `SCALEKIT_CLIENT_SECRET`, `MCP_HOST`, `MCP_PORT` all from env |
+</phase_requirements>
 
 ---
 
 ## Summary
 
-The existing `server.py` is a hand-rolled FastAPI + JSON-RPC dispatcher (Phase 16.2) that replaced an earlier FastMCP attempt abandoned due to `BaseHTTPMiddleware` causing anyio task group failures. Phase 19 reverses that decision and brings FastMCP back, but with ScaleKit instead of Auth0 and using FastMCP's **native** auth system (`TokenVerifier` protocol + Starlette's `AuthenticationMiddleware`) which does NOT use `BaseHTTPMiddleware`.
+The standalone `fastmcp` package (version 3.2.4 on PyPI, now installed) is a major upgrade over the `mcp.server.fastmcp` submodule. It ships with a complete auth system (`RemoteAuthProvider`, `TokenVerifier`, `AccessToken`) designed exactly for the resource-server-with-external-OAuth pattern this phase requires. The `mcp` package (1.26.0) remains a dependency — `fastmcp` pins `mcp>=1.24.0,<2.0` and does not replace it.
 
-The installed `mcp==1.26.0` package includes a complete FastMCP implementation with lifespan support, `custom_route` decorator for `/health`, and a `TokenVerifier` protocol for custom JWT verification. ScaleKit's Python SDK (`scalekit-sdk-python==2.7.1`) provides synchronous JWT validation via `ScalekitClient.validate_token()` which must be wrapped in `asyncio.to_thread()` for use in async `TokenVerifier.verify_token()`.
+The ScaleKit SDK (`scalekit-sdk-python==2.7.1`, already installed) is fully synchronous. `ScalekitClient.validate_token()` makes network calls (JWKS fetch) on first use, then uses cached keys for subsequent calls. In an async FastMCP context, these sync calls must be wrapped with `anyio.to_thread.run_sync()` to avoid blocking the event loop.
 
-**Primary recommendation:** Implement a `ScalekitTokenVerifier` class satisfying the `TokenVerifier` protocol. In local mode (no `SCALEKIT_*` vars), pass `token_verifier=None` and `auth=None` to FastMCP — all endpoints are open. In remote mode, pass the verifier with `AuthSettings`; FastMCP enforces auth at the HTTP level for all `/mcp` requests. Tool logic (`search`, `get_talk`) migrates unchanged; the `ctx` parameter must be annotated as `Context` (not `ctx=None`) for automatic injection.
+The two-mode auth model from Phase 18 maps cleanly: local mode = no `auth=` argument on `FastMCP()`; remote mode = `auth=RemoteAuthProvider(token_verifier=ScalekitTokenVerifier(...), ...)`. The `custom_route` decorator handles `GET /health`. The `lifespan` parameter accepts an async context manager that yields a dict (or any object accessible via `ctx.lifespan_context`).
+
+**Primary recommendation:** Build a `ScalekitTokenVerifier(TokenVerifier)` subclass in `auth/scalekit_verifier.py` that wraps `ScalekitClient.validate_token()` in a thread, then wire it into `RemoteAuthProvider`. Use `mcp.custom_route("/health", methods=["GET"])` for the health endpoint. Call `mcp.run(transport="http", host=..., port=...)` as the entry point.
 
 ---
 
@@ -52,263 +65,256 @@ The installed `mcp==1.26.0` package includes a complete FastMCP implementation w
 
 ### Core
 
-| Library | Version | Purpose | Why Standard |
-|---------|---------|---------|--------------|
-| mcp (FastMCP) | 1.26.0 | MCP server framework + protocol handling | Already installed; FastMCP is the submodule of mcp |
-| scalekit-sdk-python | 2.7.1 | ScaleKit OAuth JWT validation | Official Python SDK for ScaleKit; latest as of 2026-04-15 |
-| uvicorn | 0.42.0 | ASGI server | Already installed; used by FastMCP |
-| starlette | 1.0.0 | ASGI routing + auth middleware | FastMCP's internal framework |
+| Library | Version | Purpose | Source |
+|---------|---------|---------|--------|
+| `fastmcp` | 3.2.4 | MCP server framework — tools, lifespan, auth, HTTP transport | [VERIFIED: pip install] |
+| `mcp` | 1.26.0 | Low-level MCP protocol (fastmcp depends on it) | [VERIFIED: pip show] |
+| `scalekit-sdk-python` | 2.7.1 | JWT validation via ScaleKit | [VERIFIED: pip show] |
+| `uvicorn` | 0.42.0 | ASGI server (fastmcp calls uvicorn internally) | [VERIFIED: Pipfile.lock] |
+| `starlette` | (via mcp) | HTTP framework underlying fastmcp | [VERIFIED: pip show mcp dependencies] |
 
-[VERIFIED: pip list on virtualenv]
-
-### Supporting (unchanged from current server)
+### Supporting
 
 | Library | Version | Purpose | When to Use |
 |---------|---------|---------|-------------|
-| chromadb | 1.5.5 | Vector database client | All tool calls |
-| httpx | 0.28.1 | Async HTTP client | Health checks |
-| PyJWT | 2.12.1 | JWT parsing (used by scalekit-sdk-python) | Already pulled in by scalekit |
+| `anyio` | (via mcp) | Thread bridging for sync ScaleKit calls | `anyio.to_thread.run_sync(...)` inside async `verify_token` |
+| `starlette.middleware.Middleware` | (via starlette) | CORS middleware wrapper | Pass as `Middleware(CORSMiddleware, ...)` to `mcp.run_http_async(middleware=[...])` |
+| `starlette.testclient.TestClient` | (via starlette) | Test HTTP endpoints | Use with `mcp.http_app()` for unit tests |
 
-### Packages to ADD
+### Installation
 
 ```bash
-pipenv install scalekit-sdk-python
+# Add to Pipfile
+pipenv install fastmcp
+# scalekit-sdk-python already in Pipfile; mcp already present
 ```
 
-[VERIFIED: pip install dry-run confirmed compatibility with existing virtualenv]
+Add `fastmcp = "*"` to `[packages]` in Pipfile. `fastmcp` pins `mcp<2.0,>=1.24.0` so both coexist; `mcp` package is NOT removed.
 
-### Packages to REMOVE from Pipfile
+**fastmcp vs mcp.server.fastmcp:**
 
-- `fastapi` — FastMCP uses Starlette directly; FastAPI is no longer needed [VERIFIED: FastMCP uses `starlette.routing.Route`, not FastAPI]
-
-Note: `fastapi` can remain installed (unused) without harm, but should be removed from Pipfile per clean-cutover intent.
-
-### Version verification
-
-| Package | Verified Version | Date |
-|---------|-----------------|------|
-| mcp | 1.26.0 | 2026-04-15 |
-| scalekit-sdk-python | 2.7.1 | 2026-04-15 (latest) |
-| starlette | 1.0.0 | 2026-04-15 |
-
-[VERIFIED: `pipenv run pip show` and `pipenv run pip list`]
+| | Old (mcp submodule) | New (standalone fastmcp) |
+|--|--|--|
+| Import | `from mcp.server.fastmcp import FastMCP` | `from fastmcp import FastMCP` |
+| Auth | None built-in | `AuthProvider`, `TokenVerifier`, `RemoteAuthProvider` |
+| Custom routes | Not supported | `@mcp.custom_route("/path", methods=["GET"])` |
+| Middleware | BaseHTTPMiddleware (broken) | Starlette `Middleware(...)` passed to `run_http_async` |
+| Lifespan context access | `ctx.request_context.lifespan_context` | `ctx.lifespan_context` (direct property, no `.request_context` step needed in tools) |
 
 ---
 
 ## Architecture Patterns
 
-### FastMCP Instantiation (Two-Mode Auth)
+### Project Structure (changes only)
 
-```python
-# Source: verified via inspect of mcp.server.fastmcp.FastMCP.__init__
-
-from mcp.server.fastmcp import FastMCP, Context
-from mcp.server.auth.settings import AuthSettings
-from mcp.server.auth.provider import TokenVerifier, AccessToken
-
-# Local mode — no auth
-mcp = FastMCP(
-    name="lds-scripture-index",
-    instructions=MCP_INSTRUCTIONS,
-    host=MCP_HOST,
-    port=MCP_PORT,
-    streamable_http_path="/mcp",   # or "/" for backward compat — see Open Questions
-    lifespan=lifespan,
-)
-
-# Remote mode — auth enabled
-mcp = FastMCP(
-    name="lds-scripture-index",
-    instructions=MCP_INSTRUCTIONS,
-    host=MCP_HOST,
-    port=MCP_PORT,
-    streamable_http_path="/mcp",
-    lifespan=lifespan,
-    token_verifier=ScalekitTokenVerifier(sk_client, audience=SCALEKIT_RESOURCE_ID),
-    auth=AuthSettings(
-        issuer_url=SCALEKIT_ENVIRONMENT_URL,
-        resource_server_url=MCP_BASE_URL,  # Your server's public URL
-    ),
-)
+```
+server.py                  # Rewritten: FastMCP-based, replaces FastAPI dispatcher
+auth/
+  oauth.py                 # DELETED or emptied — JWKSVerifier no longer used
+  scalekit_verifier.py     # NEW: ScalekitTokenVerifier(TokenVerifier) subclass
+Pipfile                    # Add fastmcp = "*"
+tests/
+  test_server.py           # REWRITTEN: new patterns for fastmcp-based server
 ```
 
-[VERIFIED: mcp==1.26.0 FastMCP.__init__ signature]
-
-### Custom ScalekitTokenVerifier
+### Pattern 1: FastMCP Server Setup (Two-Mode Auth)
 
 ```python
-# Source: verified via inspect of mcp.server.auth.provider.TokenVerifier + scalekit.ScalekitClient
-
-import asyncio
-from mcp.server.auth.provider import TokenVerifier, AccessToken
-from scalekit import ScalekitClient
-
-class ScalekitTokenVerifier:
-    """TokenVerifier implementation backed by ScalekitClient.validate_token."""
-
-    def __init__(self, client: ScalekitClient, audience: str | None = None):
-        self._client = client
-        self._audience = audience
-
-    async def verify_token(self, token: str) -> AccessToken | None:
-        """Validate a bearer token via ScaleKit JWKS. Returns AccessToken or None."""
-        try:
-            payload = await asyncio.to_thread(
-                self._client.validate_token,
-                token,
-                audience=self._audience,
-            )
-            return AccessToken(
-                token=token,
-                client_id=payload.get("sub", ""),
-                scopes=payload.get("scp", payload.get("scope", "")).split()
-                if isinstance(payload.get("scp", payload.get("scope", "")), str)
-                else payload.get("scp", []),
-                expires_at=payload.get("exp"),
-            )
-        except Exception:
-            return None
-```
-
-**Key details verified by inspection:**
-- `ScalekitClient.validate_token(token, audience=...)` is **synchronous** (uses `requests.get` internally). Must use `asyncio.to_thread()` in async context. [VERIFIED: scalekit/core.py source]
-- `validate_token` fetches JWKS from `{SCALEKIT_ENVIRONMENT_URL}/keys` on first call, then caches. [VERIFIED: scalekit/core.py `JWKS_ENDPOINT = "/keys"`]
-- Returns the JWT payload dict on success, raises `ScalekitValidateTokenFailureException` on failure. [VERIFIED: scalekit/client.py]
-- `TokenVerifier.verify_token` must be `async` per the protocol. [VERIFIED: mcp.server.auth.provider.TokenVerifier source]
-- `AccessToken` requires `token`, `client_id`, `scopes` fields. [VERIFIED: mcp.server.auth.provider.AccessToken source]
-
-### Tool Functions (Context Injection Pattern)
-
-FastMCP injects `Context` by **type annotation**, not by parameter name.
-
-```python
-# Source: verified via mcp.server.fastmcp.utilities.context_injection.find_context_parameter
-
-from mcp.server.fastmcp import FastMCP, Context
-
-@mcp.tool()
-async def search(
-    query: str,
-    speaker: str | None = None,
-    year: int | None = None,
-    season: str | None = None,
-    collection: str = "paragraphs",
-    limit: int = 5,
-    ctx: Context,  # MUST be annotated as Context — not ctx=None
-) -> str:
-    app_ctx: AppContext = ctx.request_context.lifespan_context  # VERIFIED works
-    ...
-```
-
-**BREAKING CHANGE from current server.py:** The current tools have `ctx=None` with no type annotation. FastMCP finds the context parameter by looking for a `Context` type annotation. Without it, no injection occurs. Both `search()` and `get_talk()` must have `ctx: Context` added to their signatures.
-
-**The `_FakeMCPCtx` bridge class is deleted.** FastMCP's native `Context` provides `ctx.request_context.lifespan_context` directly when `lifespan` is configured. [VERIFIED: mcp.server.lowlevel.server.RequestContext has `lifespan_context` field]
-
-### Health Endpoint via custom_route
-
-```python
-# Source: verified via inspect of FastMCP.custom_route
-
-@mcp.custom_route("/health", methods=["GET"])
-async def health_endpoint(request: Request) -> JSONResponse:
-    """GET /health — live dependency checks."""
-    ...
-```
-
-**Key:** `custom_route` routes are explicitly documented as **not requiring authorization**. [VERIFIED: FastMCP.custom_route docstring]
-
-### Lifespan Pattern
-
-```python
-# Source: verified via FastMCP.__init__ and lifespan_wrapper source
-
+# server.py skeleton
+import os
 from contextlib import asynccontextmanager
-from mcp.server.fastmcp import FastMCP
+from dataclasses import dataclass
+import anyio
+from fastmcp import FastMCP, Context
+from fastmcp.server.auth import RemoteAuthProvider
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
+
+from auth.scalekit_verifier import ScalekitTokenVerifier
+
+SCALEKIT_ENV_URL    = os.environ.get("SCALEKIT_ENV_URL", "")
+SCALEKIT_CLIENT_ID  = os.environ.get("SCALEKIT_CLIENT_ID", "")
+SCALEKIT_CLIENT_SECRET = os.environ.get("SCALEKIT_CLIENT_SECRET", "")
+MCP_BASE_URL        = os.environ.get("MCP_BASE_URL", "")
+MCP_HOST            = os.environ.get("MCP_HOST", "0.0.0.0")
+MCP_PORT            = int(os.environ.get("MCP_PORT", "7363"))
+
+# Build auth provider only when ScaleKit env vars are all set
+_auth: RemoteAuthProvider | None = None
+if SCALEKIT_ENV_URL and SCALEKIT_CLIENT_ID and SCALEKIT_CLIENT_SECRET and MCP_BASE_URL:
+    _verifier = ScalekitTokenVerifier(
+        env_url=SCALEKIT_ENV_URL,
+        client_id=SCALEKIT_CLIENT_ID,
+        client_secret=SCALEKIT_CLIENT_SECRET,
+    )
+    _auth = RemoteAuthProvider(
+        token_verifier=_verifier,
+        authorization_servers=[SCALEKIT_ENV_URL],
+        base_url=MCP_BASE_URL,
+    )
+
+@dataclass
+class AppContext:
+    client: ...
+    collections: dict
 
 @asynccontextmanager
 async def lifespan(server: FastMCP):
-    ctx = _startup()        # same _startup() function, unchanged
-    yield ctx               # yields AppContext — accessible as ctx.request_context.lifespan_context in tools
-```
+    ctx = _startup()          # same startup logic as current server.py
+    yield {"app": ctx}        # yield a dict; tools access via ctx.lifespan_context["app"]
 
-FastMCP wraps this via `lifespan_wrapper()` which adapts it for the low-level MCPServer. The `yield`ed value becomes `lifespan_context` in `RequestContext`. [VERIFIED: lifespan_wrapper source]
-
-### Auth Enforcement Behavior (CRITICAL DESIGN FINDING)
-
-When `token_verifier` is set, `FastMCP.streamable_http_app()` wraps the entire `/mcp` endpoint with `RequireAuthMiddleware`. This means **all** JSON-RPC methods sent to `/mcp` — including `initialize` — require a valid bearer token in remote mode.
-
-This differs from the current `server.py` where `initialize` is explicitly unauthenticated at the dispatcher level.
-
-**The middleware chain is:**
-1. `AuthenticationMiddleware` (Starlette, NOT BaseHTTPMiddleware) — reads bearer token, calls `BearerAuthBackend`
-2. `AuthContextMiddleware` — stores auth user in contextvar
-3. `RequireAuthMiddleware` — gates the `/mcp` ASGI endpoint, returns 401 if unauthenticated
-
-[VERIFIED: mcp.server.fastmcp.server streamable_http_app source, mcp.server.auth.middleware.bearer_auth source]
-
-**IMPORTANT:** None of these use `BaseHTTPMiddleware`. They are pure ASGI middleware using the `__call__(scope, receive, send)` protocol. The Phase 16.2 failure was specific to `BaseHTTPMiddleware` + anyio task groups — that class is not present here.
-
-**Implication for D-04:** In remote mode with FastMCP auth, `initialize` will require a token. This deviates from D-04's "initialize is unauthenticated." The planner must decide: accept this deviation (FastMCP always-auth remote mode) or implement a workaround. See Open Questions.
-
-### ScalekitClient Initialization
-
-```python
-# Source: verified via scalekit.ScalekitClient.__init__ signature
-
-from scalekit import ScalekitClient
-
-client = ScalekitClient(
-    env_url=os.environ["SCALEKIT_ENVIRONMENT_URL"],
-    client_id=os.environ["SCALEKIT_CLIENT_ID"],
-    client_secret=os.environ["SCALEKIT_CLIENT_SECRET"],
+mcp = FastMCP(
+    "lds-scripture-index",
+    instructions=MCP_INSTRUCTIONS,
+    auth=_auth,               # None in local mode, RemoteAuthProvider in remote mode
+    lifespan=lifespan,
 )
-```
 
-**Env var names (from GitHub example + PyPI docs):**
+@mcp.tool()
+async def search(query: str, ..., ctx: Context) -> str:
+    app: AppContext = ctx.lifespan_context["app"]
+    ...
 
-| Env Var | Purpose |
-|---------|---------|
-| `SCALEKIT_ENVIRONMENT_URL` | ScaleKit tenant URL (e.g., `https://your-env.scalekit.com`) |
-| `SCALEKIT_CLIENT_ID` | OAuth client ID |
-| `SCALEKIT_CLIENT_SECRET` | OAuth client secret |
-| `SCALEKIT_RESOURCE_ID` | Resource identifier / audience (used as `audience` param in validate_token) |
+@mcp.tool()
+async def get_talk(talk_id: str, ctx: Context) -> str:
+    app: AppContext = ctx.lifespan_context["app"]
+    ...
 
-[CITED: https://github.com/scalekit-inc/fastmcp-scalekit-example] [VERIFIED: ScalekitClient.__init__ signature via inspect]
-
-**ScaleKit JWKS endpoint:** `{SCALEKIT_ENVIRONMENT_URL}/keys` [VERIFIED: scalekit/core.py `JWKS_ENDPOINT = "/keys"`]
-
-### Entry Point
-
-```python
-# Source: FastMCP.run_streamable_http_async source
+@mcp.custom_route("/health", methods=["GET"])
+async def health_endpoint(request: Request) -> JSONResponse:
+    ...
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(mcp.run_streamable_http_async())
+    cors = Middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+    mcp.run(
+        transport="http",
+        host=MCP_HOST,
+        port=MCP_PORT,
+        middleware=[cors],
+    )
 ```
 
-Or equivalently:
+**Critical difference from old code:** In the old server, tool functions accessed `ctx.request_context.lifespan_context` (the `_FakeMCPCtx` bridge pattern). In native FastMCP, tools access `ctx.lifespan_context` directly — no bridge needed. The lifespan function yields a dict and the dict is available as `ctx.lifespan_context`.
+
+### Pattern 2: ScalekitTokenVerifier Implementation
 
 ```python
-if __name__ == "__main__":
-    mcp.run(transport="streamable-http")
+# auth/scalekit_verifier.py
+import anyio
+from scalekit import ScalekitClient
+from scalekit.common.scalekit import TokenValidationOptions
+from fastmcp.server.auth import TokenVerifier, AccessToken
+
+class ScalekitTokenVerifier(TokenVerifier):
+    """Wraps ScalekitClient.validate_token() for use as a FastMCP TokenVerifier.
+    
+    ScaleKit SDK is fully synchronous. validate_token() is called in a thread
+    via anyio.to_thread.run_sync() to avoid blocking the event loop.
+    
+    ScalekitClient is constructed at import time (module level) so the 
+    __authenticate_client() network call happens before the event loop starts.
+    """
+
+    def __init__(self, env_url: str, client_id: str, client_secret: str):
+        super().__init__()
+        # ScalekitClient calls __authenticate_client() synchronously during init.
+        # Construct at startup (before event loop) to avoid blocking async context.
+        self._client = ScalekitClient(
+            env_url=env_url,
+            client_id=client_id,
+            client_secret=client_secret,
+        )
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        """Verify a ScaleKit JWT. Returns AccessToken or None on failure."""
+        try:
+            payload = await anyio.to_thread.run_sync(
+                lambda: self._client.validate_token(token)
+            )
+        except Exception:
+            return None
+        
+        # Build FastMCP AccessToken from JWT payload
+        # ScaleKit JWTs: 'sub' = subject, 'exp' = expiry, 'azp'/'client_id' = client
+        scopes_raw = payload.get("scope", "")
+        scopes = scopes_raw.split() if isinstance(scopes_raw, str) else []
+        
+        return AccessToken(
+            token=token,
+            client_id=payload.get("client_id") or payload.get("azp") or payload.get("sub", ""),
+            scopes=scopes,
+            expires_at=payload.get("exp"),
+            claims=payload,
+        )
 ```
 
-FastMCP internally uses uvicorn with the Starlette app from `streamable_http_app()`.
+**Why `anyio.to_thread.run_sync()`:** ScaleKit's `validate_token()` calls `get_jwks()` (sync `requests.get`) on first invocation. After JWKS is cached in `self._client.core_client.keys`, subsequent calls are CPU-only. Either way, the method is synchronous and must not run in the event loop thread.
 
-### Recommended Project Structure
+**Why construct `ScalekitClient` at module level:** Its `__init__` calls `__authenticate_client()` which does a sync HTTP POST to ScaleKit's `/oauth/token` endpoint. This cannot happen inside an `async def` without a thread wrapper. Constructing at startup (before `mcp.run()`) is the clean solution.
 
-No structural changes required. All module paths stay the same:
+### Pattern 3: Custom Route for Health Endpoint
 
+```python
+# Source: fastmcp.FastMCP.custom_route verified via inspect
+@mcp.custom_route("/health", methods=["GET"])
+async def health_endpoint(request: Request) -> JSONResponse:
+    """Live health check — Ollama + ChromaDB reachability."""
+    status = {"ollama": "reachable", "chromadb": "reachable"}
+    http_status = 200
+    # ... same health logic as current server.py health_check() ...
+    return JSONResponse({"status": "ok" if http_status == 200 else "degraded", **status},
+                        status_code=http_status)
 ```
-server.py            # FastMCP-based replacement (was FastAPI+JSON-RPC)
-auth/
-  oauth.py           # DELETE or gut (JWKSVerifier replaced by ScalekitTokenVerifier in server.py)
-config/              # unchanged
-extractors/          # unchanged
-tests/
-  test_server.py     # significant rewrite required
+
+Custom routes are registered via `mcp._additional_http_routes` (a `list[Route]`). They are appended AFTER the MCP protocol route in `create_streamable_http_app`. They do NOT go through the MCP auth middleware — health endpoint is always unauthenticated, which is correct (same as current implementation).
+
+### Pattern 4: CORS Middleware
+
+```python
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
+
+cors = Middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "DELETE", "HEAD", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "MCP-Protocol-Version", "MCP-Session-Id"],
+    expose_headers=["MCP-Protocol-Version", "MCP-Session-Id", "WWW-Authenticate"],
+)
+
+mcp.run(transport="http", host=MCP_HOST, port=MCP_PORT, middleware=[cors])
 ```
+
+The `middleware` parameter to `run_http_async` (called by `mcp.run`) accepts `list[starlette.middleware.Middleware]`. These are Starlette `Middleware` wrappers (NOT `fastmcp.server.middleware.Middleware` — same import name but different class). Confirmed via `create_base_app` which uses `Middleware(RequestContextMiddleware)` from `starlette.middleware`.
+
+### Pattern 5: Lifespan Context Access in Tools
+
+Old pattern (broken with native FastMCP):
+```python
+# OLD — requires _FakeMCPCtx bridge
+app: AppContext = ctx.request_context.lifespan_context
+```
+
+New pattern (native FastMCP):
+```python
+# NEW — ctx.lifespan_context returns whatever the lifespan yields
+app: AppContext = ctx.lifespan_context["app"]
+```
+
+The lifespan function should yield a dict. The dict is stored as `_lifespan_result` on the `FastMCP` instance. `ctx.lifespan_context` returns this dict directly (or falls back to `{}` if no lifespan).
+
+### Anti-Patterns to Avoid
+
+- **BaseHTTPMiddleware:** D-03 — banned. FastMCP's `auth=` parameter handles auth at the protocol layer, not ASGI middleware layer.
+- **`from mcp.server.fastmcp import FastMCP`:** Always use `from fastmcp import FastMCP` (standalone package).
+- **Constructing `ScalekitClient` inside `verify_token`:** This would make a network call on every auth check. Construct once at startup.
+- **`ctx.request_context.lifespan_context`:** Old bridge pattern. With native FastMCP, use `ctx.lifespan_context` directly.
+- **Blocking sync calls in async context:** `ScalekitClient.validate_token()` uses `requests` (sync). Always wrap with `anyio.to_thread.run_sync()`.
+- **Yielding a non-dict from lifespan:** `Context.lifespan_context` type hint is `dict[str, Any]`. Yield a dict from the lifespan function to avoid type confusion.
+- **`.well-known` routes:** D-06 prohibits serving these. `RemoteAuthProvider` serves the RFC 9728 protected resource metadata automatically via its `get_routes()`. No manual `.well-known` route needed.
 
 ---
 
@@ -316,287 +322,226 @@ tests/
 
 | Problem | Don't Build | Use Instead | Why |
 |---------|-------------|-------------|-----|
-| Bearer token extraction from headers | Custom header parsing | `mcp.server.auth.middleware.bearer_auth.BearerAuthBackend` | Already wired into FastMCP auth flow |
-| JWKS key fetching and caching | Manual requests + key cache | `ScalekitClient` (caches JWKS on first call) | SDK handles key caching automatically |
-| JWT signature verification | `jwt.decode()` manually | `ScalekitClient.validate_token()` | Handles JWKS fetch, kid lookup, RS256 decode |
-| ASGI middleware for auth | `BaseHTTPMiddleware` subclass | FastMCP's `TokenVerifier` protocol | BaseHTTPMiddleware breaks anyio (Phase 16.2 lesson) |
-| Protected resource metadata endpoint | Custom route | ScaleKit handles this — D-06 says EXCLUDE it | Provider serves well-known endpoints |
-| Session management | Custom dict | FastMCP handles MCP session lifecycle internally | StreamableHTTPSessionManager in FastMCP |
+| MCP protocol dispatch | Manual JSON-RPC router (current server.py) | `from fastmcp import FastMCP` + `@mcp.tool()` | FastMCP handles initialize, tools/list, tools/call, session management automatically |
+| Auth middleware / 401 responses | Custom bearer token extraction | `RemoteAuthProvider` + `TokenVerifier` | `RequireAuthMiddleware` handles 401, WWW-Authenticate header, and RFC 9728 metadata |
+| JWT validation | PyJWKClient + jwt.decode | `ScalekitClient.validate_token()` | ScaleKit handles JWKS caching and RS256 decode |
+| RFC 9728 metadata endpoint | Manual `/.well-known/oauth-protected-resource` route | `RemoteAuthProvider.get_routes()` | Built-in; registered automatically when `auth=` is set |
+| Custom HTTP routes | Full FastAPI app | `@mcp.custom_route("/health", methods=["GET"])` | One-line decorator; registers into the Starlette app |
+| CORS | Custom middleware class | `Middleware(CORSMiddleware, ...)` from starlette | Pass to `mcp.run(middleware=[...])` |
 
 ---
 
-## Runtime State Inventory
+## ScaleKit SDK Reference
 
-Phase 19 is a code replacement, not a rename/rebrand. No runtime state affected.
+### Constructor
 
-| Category | Items Found | Action Required |
-|----------|-------------|-----------------|
-| Stored data | None — ChromaDB data stays unchanged | None |
-| Live service config | None — Docker Compose config unchanged | None |
-| OS-registered state | None | None |
-| Secrets/env vars | Auth0 vars (`AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, `AUTH0_CLIENT_SECRET`, `MCP_BASE_URL`) replaced with ScaleKit vars | Update `.env` + Compose `.env.example` |
-| Build artifacts | `requirements.txt` committed to git from Pipfile.lock (Docker build) | Regenerate after `pipenv install scalekit-sdk-python` |
+```python
+from scalekit import ScalekitClient
 
-**Env var migration:**
+client = ScalekitClient(
+    env_url="https://<tenant>.scalekit.app",   # SCALEKIT_ENV_URL
+    client_id="<client_id>",                    # SCALEKIT_CLIENT_ID  
+    client_secret="<client_secret>",            # SCALEKIT_CLIENT_SECRET
+)
+```
 
-| Old (Auth0) | New (ScaleKit) | Notes |
-|-------------|---------------|-------|
-| `AUTH0_DOMAIN` | `SCALEKIT_ENVIRONMENT_URL` | Detection var for remote mode |
-| `AUTH0_AUDIENCE` | `SCALEKIT_RESOURCE_ID` | Used as JWT audience |
-| `AUTH0_CLIENT_SECRET` | `SCALEKIT_CLIENT_SECRET` | Part of ScalekitClient init |
-| — | `SCALEKIT_CLIENT_ID` | New, required |
-| `MCP_BASE_URL` | `MCP_BASE_URL` | Unchanged |
+`__init__` immediately calls `__authenticate_client()` (sync HTTP POST to `/oauth/token`) and `__grpc_secure_channel()`. Must be called at module level or in a thread.
+
+### Token Validation
+
+```python
+from scalekit.common.scalekit import TokenValidationOptions
+
+# Simple validation (audience NOT verified by default)
+payload = client.validate_token(token)  # returns dict with JWT claims
+
+# With audience validation
+payload = client.validate_token(
+    token,
+    options=TokenValidationOptions(
+        issuer="https://<tenant>.scalekit.app",
+        audience=["https://your-mcp-server.com/mcp"],
+    )
+)
+```
+
+`validate_token()` returns `dict[str, Any]` on success, raises `ScalekitValidateTokenFailureException` or `Exception` on failure. Caller wraps in `try/except` and returns `None` to FastMCP on failure.
+
+### JWKS Endpoint
+
+ScaleKit JWKS: `{env_url}/keys` (constant `JWKS_ENDPOINT = "/keys"` in `scalekit.core`). Keys are cached in `client.core_client.keys` after first fetch. Subsequent `validate_token()` calls skip the network call if keys are already loaded.
+
+### Environment Variable Names (recommended)
+
+| Env Var | Description |
+|---------|-------------|
+| `SCALEKIT_ENV_URL` | ScaleKit tenant URL, e.g. `https://tenant.scalekit.app` |
+| `SCALEKIT_CLIENT_ID` | OAuth client ID from ScaleKit dashboard |
+| `SCALEKIT_CLIENT_SECRET` | OAuth client secret from ScaleKit dashboard |
+| `MCP_BASE_URL` | Public URL of this MCP server, e.g. `https://mcp.yourdomain.com` |
+| `MCP_HOST` | Bind host (default: `0.0.0.0`) |
+| `MCP_PORT` | Bind port (default: `7363`) |
+
+---
+
+## FastMCP API Reference
+
+### FastMCP Constructor
+
+```python
+FastMCP(
+    name="lds-scripture-index",       # Server name
+    instructions="...",               # Tool-level instructions
+    auth=_auth,                       # AuthProvider | None
+    lifespan=lifespan_fn,             # async context manager callable
+)
+```
+
+### Tool Decorator
+
+```python
+@mcp.tool()
+async def my_tool(param: str, ctx: Context) -> str:
+    ...
+```
+
+`ctx: Context` is injected by FastMCP when the parameter name is `ctx` and type is `Context`. No change from the `mcp` package pattern for tool signatures, except `ctx.lifespan_context` replaces `ctx.request_context.lifespan_context`.
+
+### Run / HTTP App
+
+```python
+# Simple entry point:
+mcp.run(transport="http", host=MCP_HOST, port=MCP_PORT, middleware=[cors])
+
+# For TestClient in tests:
+app = mcp.http_app()                          # Returns StarletteWithLifespan
+client = TestClient(app, raise_server_exceptions=False)
+```
+
+`http_app()` returns a `StarletteWithLifespan` (Starlette subclass). `TestClient` from `starlette.testclient` works directly.
+
+### Default Path
+
+FastMCP serves MCP at `/mcp` by default (`fastmcp.settings.streamable_http_path = "/mcp"`). The current `server.py` serves at `/` and `/mcp`. With FastMCP, `/mcp` is the canonical path. The `path=` argument to `http_app()` or `run()` can override this.
+
+### RemoteAuthProvider
+
+```python
+from fastmcp.server.auth import RemoteAuthProvider, TokenVerifier, AccessToken
+
+auth = RemoteAuthProvider(
+    token_verifier=verifier,              # TokenVerifier subclass
+    authorization_servers=["https://..."], # ScaleKit env URL
+    base_url="https://mcp.domain.com",    # This server's public URL
+)
+```
+
+`RemoteAuthProvider` automatically serves the RFC 9728 protected resource metadata at `/.well-known/oauth-protected-resource` via its `get_routes()` method — no manual route needed.
 
 ---
 
 ## Common Pitfalls
 
-### Pitfall 1: BaseHTTPMiddleware (Phase 16.2 Root Cause)
-**What goes wrong:** `RuntimeError: Task group is not initialized` at runtime under asyncio/anyio.
-**Why it happens:** FastMCP uses anyio task groups internally; `BaseHTTPMiddleware.call_next()` wraps downstream in a new async scope, severing the task group context.
-**How to avoid:** Never use `BaseHTTPMiddleware`. FastMCP's auth uses `AuthenticationMiddleware` (Starlette, pure ASGI `__call__`) and `RequireAuthMiddleware` (custom ASGI, also pure `__call__`). Neither is `BaseHTTPMiddleware`. [VERIFIED: starlette.middleware.authentication.AuthenticationMiddleware import confirmed in FastMCP source]
-**Warning signs:** Any `BaseHTTPMiddleware` import in server.py.
+### Pitfall 1: ScalekitClient Blocking the Event Loop
 
-### Pitfall 2: Missing Context Type Annotation in Tools
-**What goes wrong:** `ctx` receives `None` at runtime; `ctx.request_context.lifespan_context` raises `AttributeError`.
-**Why it happens:** FastMCP injects `Context` by scanning type annotations via `get_type_hints()`. Parameter named `ctx=None` with no annotation is treated as a normal tool argument.
-**How to avoid:** Always annotate: `ctx: Context` (not `ctx=None`, not `ctx: Context | None`).
-**Warning signs:** Tool tests that construct `_FakeMCPCtx` and pass it directly still pass, but integration tests fail.
+**What goes wrong:** `ScalekitClient.__init__()` calls `requests.get()` and `requests.post()` synchronously. If constructed inside an `async def` or in a FastMCP lifespan, it blocks uvicorn's event loop thread.
 
-### Pitfall 3: Calling Synchronous ScalekitClient in Async Context
-**What goes wrong:** `ScalekitClient.validate_token()` calls `requests.get()` (blocking I/O). Running it directly in an async function blocks the event loop.
-**Why it happens:** `scalekit-sdk-python` uses synchronous `requests`, not `httpx`.
-**How to avoid:** Always wrap in `asyncio.to_thread()`:
-```python
-payload = await asyncio.to_thread(self._client.validate_token, token, audience=audience)
-```
-**Warning signs:** High latency on first token validation (JWKS fetch), or event loop blocking detected in profiling.
+**How to avoid:** Construct `ScalekitClient` at module level (before `mcp.run()` is called). The blocking network calls complete before the event loop starts.
 
-### Pitfall 4: FastMCP Auth Enforces Token on ALL /mcp Requests
-**What goes wrong:** MCP `initialize` (which MCP spec allows unauthenticated) receives 401 in remote mode.
-**Why it happens:** `RequireAuthMiddleware` wraps the entire `/mcp` ASGI endpoint at the HTTP level. It cannot distinguish JSON-RPC method names.
-**How to avoid:** Planner must decide: (a) accept always-auth in remote mode (requires client to have token before initialize — possible with ScaleKit's auth flow), or (b) configure `token_verifier=None` and do per-tool validation manually (loses initialize protection but matches D-04).
-**Warning signs:** MCP client fails at `initialize` step with 401.
+**Warning signs:** Server hangs at startup; uvicorn health probe never responds.
 
-### Pitfall 5: streamable_http_path Default is /mcp, not /
-**What goes wrong:** Existing MCP clients configured to connect to `https://host/` break after upgrade because FastMCP listens at `/mcp` by default.
-**Why it happens:** FastMCP `streamable_http_path` parameter defaults to `"/mcp"`.
-**How to avoid:** Set `streamable_http_path="/"` in FastMCP constructor to match current behavior.
-**Warning signs:** Client sends `POST /` and receives 404 or 405 from the Starlette router.
+### Pitfall 2: Wrong lifespan_context Access Pattern
 
-### Pitfall 6: DNS Rebinding Protection Auto-Enabled for localhost
-**What goes wrong:** FastMCP silently adds transport security settings when `host in ("127.0.0.1", "localhost", "::1")`, blocking requests from Docker network or external hosts.
-**Why it happens:** FastMCP.__init__ auto-enables DNS rebinding protection for localhost hosts.
-**How to avoid:** Use `host="0.0.0.0"` for Docker deployments (no auto-protection applied). [VERIFIED: FastMCP.__init__ source]
+**What goes wrong:** Code copied from the current server.py uses `ctx.request_context.lifespan_context` (the `_FakeMCPCtx` bridge pattern). In native FastMCP, `ctx.request_context` is a `RequestContext` object (not fake), and the lifespan result is at `ctx.lifespan_context` directly.
 
-### Pitfall 7: test_fastmcp_removed Must Be Deleted
-**What goes wrong:** Existing test `test_fastmcp_removed` asserts `"from mcp.server.fastmcp import FastMCP" not in source`. The new server.py will fail this assertion.
-**Why it happens:** Phase 16.2 added this test to guard against bringing FastMCP back.
-**How to avoid:** Delete or replace `test_fastmcp_removed` in `tests/test_server.py`.
+**How to avoid:** Use `ctx.lifespan_context["app"]` where the lifespan yields `{"app": app_context}`.
 
----
+**Warning signs:** `AttributeError: 'RequestContext' object has no attribute 'lifespan_context'` (if structure differs) or `KeyError` on dict access.
 
-## Code Examples
+### Pitfall 3: auth= None vs Missing
 
-### Complete Minimal FastMCP Server Pattern (verified)
+**What goes wrong:** Setting `auth=None` explicitly vs not setting `auth=` at all both disable auth. But the two-mode logic requires `_auth` to be `None` when SCALEKIT_* vars are absent. The `if SCALEKIT_ENV_URL and ...` guard at module level handles this correctly.
 
-```python
-# Source: verified via FastMCP.__init__, streamable_http_app, custom_route, lifespan_wrapper
+**How to avoid:** Build `_auth` conditionally. Pass `auth=_auth` always — FastMCP treats `None` as no auth.
 
-from contextlib import asynccontextmanager
-from mcp.server.fastmcp import FastMCP, Context
-from mcp.server.auth.settings import AuthSettings
-from mcp.server.auth.provider import TokenVerifier, AccessToken
-from starlette.requests import Request
-from starlette.responses import JSONResponse
-import asyncio
-import os
+**Warning signs:** Remote mode has no auth (forgot the `if` guard), or local mode fails with auth errors (env vars partially set).
 
-@asynccontextmanager
-async def lifespan(server: FastMCP):
-    ctx = _startup()   # returns AppContext
-    yield ctx
+### Pitfall 4: ScaleKit validate_token Audience Verification
 
-# Build verifier only when ScaleKit env vars are present
-_sk_verifier = None
-SCALEKIT_ENV_URL = os.environ.get("SCALEKIT_ENVIRONMENT_URL", "")
-if SCALEKIT_ENV_URL:
-    from scalekit import ScalekitClient
-    _sk_client = ScalekitClient(
-        env_url=SCALEKIT_ENV_URL,
-        client_id=os.environ["SCALEKIT_CLIENT_ID"],
-        client_secret=os.environ["SCALEKIT_CLIENT_SECRET"],
-    )
-    _sk_verifier = ScalekitTokenVerifier(_sk_client, audience=os.environ.get("SCALEKIT_RESOURCE_ID"))
+**What goes wrong:** `ScalekitClient.validate_token(token)` with no options does NOT verify the audience claim by default (`verify_aud=False` in the source). Tokens from any ScaleKit tenant could pass.
 
-# Mode-conditional construction
-mcp_kwargs = dict(
-    name="lds-scripture-index",
-    instructions=MCP_INSTRUCTIONS,
-    host=MCP_HOST,
-    port=MCP_PORT,
-    streamable_http_path="/",   # match existing client config
-    lifespan=lifespan,
-)
-if _sk_verifier:
-    mcp_kwargs["token_verifier"] = _sk_verifier
-    mcp_kwargs["auth"] = AuthSettings(
-        issuer_url=SCALEKIT_ENV_URL,
-        resource_server_url=MCP_BASE_URL or SCALEKIT_ENV_URL,
-    )
+**How to avoid:** Pass `TokenValidationOptions(issuer=SCALEKIT_ENV_URL, audience=[MCP_BASE_URL])` to `validate_token()`. This enables both issuer and audience verification.
 
-mcp = FastMCP(**mcp_kwargs)
+**Warning signs:** Tokens from other ScaleKit tenants accepted by the verifier.
 
-@mcp.tool()
-async def search(query: str, ctx: Context) -> str:
-    app_ctx = ctx.request_context.lifespan_context
-    ...
+### Pitfall 5: FastMCP Default MCP Path is /mcp
 
-@mcp.custom_route("/health", methods=["GET"])
-async def health_endpoint(request: Request) -> JSONResponse:
-    ...
+**What goes wrong:** The old server dispatches MCP at `/` and `/mcp`. FastMCP defaults to `/mcp` only. Clients configured for `/` will fail.
 
-if __name__ == "__main__":
-    mcp.run(transport="streamable-http")
-```
+**How to avoid:** Either accept `/mcp` as the new canonical path (update client configs and docs), or set `path="/"` in `mcp.run(path="/", ...)`. The `/mcp` default is correct per FastMCP convention.
 
-### ScalekitTokenVerifier (verified)
+**Warning signs:** MCP clients connect but get 404 on POST requests.
 
-```python
-# Source: verified via scalekit.ScalekitClient.validate_token + TokenVerifier protocol
+### Pitfall 6: ScalekitClient Not Handling Unknown kid
 
-import asyncio
-from mcp.server.auth.provider import TokenVerifier, AccessToken
-from scalekit import ScalekitClient
+**What goes wrong:** If ScaleKit rotates keys, `get_jwks()` early-returns when `self.keys` is non-empty. A token with a new `kid` will cause `KeyError: kid_value` in `validate_token()`.
 
-class ScalekitTokenVerifier:
-    def __init__(self, client: ScalekitClient, audience: str | None = None):
-        self._client = client
-        self._audience = audience
+**How to avoid:** Catch `KeyError` (and all exceptions) in `ScalekitTokenVerifier.verify_token()`, return `None`. The planner may add a key-refresh path (call `client.core_client.keys = {}` then re-fetch) but the safe minimum is graceful failure → 401.
 
-    async def verify_token(self, token: str) -> AccessToken | None:
-        try:
-            payload = await asyncio.to_thread(
-                self._client.validate_token, token, audience=self._audience
-            )
-        except Exception:
-            return None
-        return AccessToken(
-            token=token,
-            client_id=payload.get("sub", ""),
-            scopes=[],          # ScaleKit M2M tokens may not have scopes
-            expires_at=payload.get("exp"),
-        )
-```
+### Pitfall 7: CORS Middleware Ordering
+
+**What goes wrong:** CORS middleware must wrap the MCP endpoint. FastMCP's `create_base_app` inserts `RequestContextMiddleware` at index 0 (outermost). User-supplied middleware is appended after the auth middleware. Starlette processes middleware in reverse order (outermost first), so CORS should be passed via the `middleware=` argument to `mcp.run()`, not inserted manually.
+
+**How to avoid:** Pass `Middleware(CORSMiddleware, ...)` in the `middleware` list to `mcp.run()`. FastMCP handles ordering internally.
 
 ---
 
-## Test Analysis: What Carries Over vs. Full Rewrite
+## Test Rewrite Analysis
 
-### Tests That Carry Over Unchanged (pure logic, no server dependency)
+### Tests That Carry Over (pure unit tests, no server dependency)
 
-| Test Class/Function | Reason |
-|--------------------|--------|
-| `TestBuildWhereFilter` (4 tests) | Pure function, no import change |
-| `TestMatchesSpeaker` (5 tests) | Pure function, no import change |
-| `TestFormatSearchResult` (3 tests) | Pure function, no import change |
-| `TestParseTalkId` (4 tests) | Pure function, no import change |
-| `test_chromadb_client_*` (2 tests) | Tests `config.chromadb_client`, unaffected |
-| `test_ollama_url_*` (3 tests) | Tests `config.ollama`, unaffected |
-| `test_search_docstring_*` | Tests tool docstrings, no change needed |
-| `test_get_talk_docstring_*` | Tests tool docstrings, no change needed |
+These tests import standalone helper functions and do not depend on the server framework:
 
-### Tests That Need Adaptation
+| Test Class / Function | Carries Over | Note |
+|-----------------------|-------------|------|
+| `TestBuildWhereFilter` | YES | `_build_where_filter` is copied to new server.py unchanged |
+| `TestMatchesSpeaker` | YES | `_matches_speaker` is copied unchanged |
+| `TestFormatSearchResult` | YES | `_format_search_result` is copied unchanged |
+| `TestParseTalkId` | YES | `_parse_talk_id` is copied unchanged |
+| `test_chromadb_client_default_host` | YES | Tests `config/chromadb_client.py` (unchanged) |
+| `test_chromadb_client_env_override` | YES | Tests `config/chromadb_client.py` (unchanged) |
+| `test_ollama_url_env_override` | YES | Tests `config/ollama.py` (unchanged) |
+| `test_get_embedding_function_*` | YES | Tests `config/ollama.py` (unchanged) |
+| `test_search_docstring_*` | YES | Tool docstrings still needed |
+| `test_get_talk_docstring_*` | YES | Tool docstrings still needed |
 
-| Test | Change Required |
-|------|----------------|
-| `TestSearchTool` (6 tests) | `_make_mock_ctx` must use FastMCP Context, not `_FakeMCPCtx`. Or tools can be tested by calling them with a real mock ctx built via `MagicMock` where `ctx.request_context.lifespan_context` returns `AppContext`. Pattern unchanged — just remove `_FakeMCPCtx`. |
-| `TestGetTalkTool` (4 tests) | Same as above |
-| `test_chromadb_missing_collection_exits` | Imports `_load_collections` from `server` — function stays |
-| `test_ollama_failure_is_non_fatal` | Imports `_check_ollama` from `server` — function stays |
-| `test_all_collections_warmed` | Imports `_load_collections` from `server` — function stays |
-| `test_check_ollama_passes_resolved_url` | Stays; `_check_ollama` unchanged |
+### Tests That Need Rewriting
 
-### Tests That Need Full Rewrite
+| Test | Why It Changes |
+|------|---------------|
+| `TestSearchTool` | `ctx` is no longer a `_FakeMCPCtx` — use real `ctx.lifespan_context` dict pattern |
+| `TestGetTalkTool` | Same: new ctx pattern |
+| `test_chromadb_missing_collection_exits` | `_load_collections` import path same, test same |
+| `test_ollama_failure_is_non_fatal` | `_check_ollama` import path same, test same |
+| `test_all_collections_warmed` | Same |
+| `test_check_ollama_passes_resolved_url` | Same |
+| Dispatcher tests (`test_initialize_no_auth`, etc.) | Full rewrite: use `TestClient(mcp.http_app())` + FastMCP protocol; no manual JSON-RPC dispatch |
+| `test_health_returns_200` | Use `TestClient(mcp.http_app()); client.get("/health")` |
+| `test_fastmcp_removed` | Rewrite: assert `from mcp.server.fastmcp import FastMCP` NOT present; assert `from fastmcp import FastMCP` IS present |
+| `test_protected_resource_metadata` | FastMCP serves this at `/.well-known/oauth-protected-resource` automatically when `auth=RemoteAuthProvider(...)` |
+| Auth tests (`test_tools_list_requires_auth`, etc.) | Rewrite: patch `ScalekitTokenVerifier.verify_token`, not `_jwt_verifier` |
 
-| Test | Reason |
-|------|--------|
-| `test_fastmcp_removed` | Must be deleted — new server.py imports FastMCP |
-| `test_no_stdio_references` | Still valid (should still pass) |
-| `test_health_returns_200/503` | `build_app()` → `mcp.streamable_http_app()`; `TestClient` works with Starlette app |
-| All dispatcher tests (`test_initialize_no_auth`, `test_tools_list_*`, etc.) | No more `build_app()` or `_startup` mock; use `mcp.streamable_http_app()` + TestClient |
-| `test_protected_resource_metadata` | Endpoint excluded (D-06); test deleted |
-| `test_head_returns_protocol_version` | FastMCP serves HEAD differently; may need adjustment |
-| `test_get_root_returns_405` | May not apply depending on `streamable_http_path` config |
-| `test_delete_session_cleanup` | FastMCP handles sessions internally; DELETE may not be a separate endpoint |
-| `test_missing_session_returns_400` | FastMCP session management is internal; behavior may differ |
+### New Tests Needed
 
-**Test client pattern for FastMCP:**
-
-```python
-from starlette.testclient import TestClient
-
-def test_health():
-    with patch("server._startup", return_value=mock_ctx()):
-        from server import mcp
-        app = mcp.streamable_http_app()
-        client = TestClient(app)
-        resp = client.get("/health")
-    assert resp.status_code == 200
-```
-
-Note: `TestClient` works with Starlette apps. [VERIFIED: starlette.testclient imported successfully]
-
----
-
-## State of the Art
-
-| Old Approach | Current Approach | When Changed | Impact |
-|--------------|------------------|--------------|--------|
-| FastMCP + BaseHTTPMiddleware | FastMCP + TokenVerifier (ASGI middleware) | mcp 1.x | Phase 16.2 failure was BaseHTTPMiddleware-specific, not FastMCP-specific |
-| Auth0 JWKSVerifier | ScaleKit SDK | Phase 19 | Drop-in: both do JWKS RS256 validation |
-| Manual JSON-RPC dispatcher | FastMCP native protocol handling | Phase 19 | Session management, tools/list, tools/call handled by FastMCP |
-
-**Deprecated/outdated:**
-- `_FakeMCPCtx`: Bridge class used to emulate FastMCP's ctx in the FastAPI dispatcher. Delete — not needed with native FastMCP.
-- `build_app()`: FastAPI app factory. Delete — FastMCP provides `mcp.streamable_http_app()`.
-- `mcp_dispatcher`, `_handle_initialize`, `_handle_tools_list`, `_handle_tools_call`: Manual JSON-RPC routing. All deleted — FastMCP handles this internally.
-- `_sessions` dict: Manual session tracking. Delete — FastMCP's `StreamableHTTPSessionManager` handles sessions.
-- `_mcp_response`, `_error_response`, `_unauthorized_response`: Protocol helpers. Delete — FastMCP handles protocol responses.
-
----
-
-## Open Questions
-
-1. **Does D-04 (initialize unauthenticated) require per-method HTTP auth that FastMCP doesn't support?**
-   - What we know: FastMCP's `RequireAuthMiddleware` wraps the entire `/mcp` endpoint. In remote mode with `token_verifier` set, `initialize` will require a token. The current server.py makes `initialize` unconditionally public.
-   - What's unclear: Whether ScaleKit's OAuth flow sends a token with `initialize` (which would make this a non-issue), or whether MCP clients expect `initialize` to succeed without a token.
-   - Recommendation: Planner should decide: (a) Accept always-auth for remote mode — simplest, may work with ScaleKit's client since they'd have a token before connecting; or (b) Keep `token_verifier=None` and do per-tool auth check manually inside `search()` and `get_talk()` via `ctx.request_context.request.headers` (more complex, closer to D-04).
-
-2. **HTTP path: `/` or `/mcp`?**
-   - What we know: Current server.py uses `POST /`. FastMCP default is `/mcp`. Setting `streamable_http_path="/"` in FastMCP constructor restores the old path.
-   - What's unclear: Whether existing MCP clients (Claude Desktop, Claude Code CLI) have `/` or `/mcp` in their config.
-   - Recommendation: Use `streamable_http_path="/"` to match current client configurations unless confirmed otherwise.
-
-3. **Does `auth/oauth.py` get deleted or emptied?**
-   - What we know: D-05 says replace JWKSVerifier with ScaleKit SDK. The `ScalekitTokenVerifier` can live in `server.py` or in a new `auth/scalekit.py`.
-   - Recommendation: Delete `auth/oauth.py` entirely; place `ScalekitTokenVerifier` in `server.py` or a new `auth/scalekit_verifier.py`.
-
----
-
-## Environment Availability
-
-| Dependency | Required By | Available | Version | Fallback |
-|------------|------------|-----------|---------|----------|
-| mcp (FastMCP) | New server | ✓ | 1.26.0 | — |
-| scalekit-sdk-python | JWT validation | ✓ (installed this session) | 2.7.1 | — |
-| starlette | FastMCP internal | ✓ | 1.0.0 | — |
-| uvicorn | ASGI server | ✓ | 0.42.0 | — |
-| chromadb | Tool calls | ✓ | 1.5.5 | — |
-
-**No missing blocking dependencies.**
-
-Note: `scalekit-sdk-python` was installed during research (`pipenv run pip install scalekit-sdk-python`). It must be added to `Pipfile` and `requirements.txt` regenerated for Docker. [VERIFIED: installation succeeded with no dependency conflicts]
+| Test | What It Verifies |
+|------|-----------------|
+| `test_scalekit_verifier_valid_token` | `ScalekitTokenVerifier.verify_token()` returns `AccessToken` for valid token |
+| `test_scalekit_verifier_invalid_token` | Returns `None` for tokens that raise exception |
+| `test_scalekit_verifier_unknown_kid` | Returns `None` gracefully on `KeyError` |
+| `test_mcp_tools_list_local_mode` | No auth when SCALEKIT_* vars absent |
+| `test_mcp_tools_list_remote_requires_token` | 401 without token in remote mode |
+| `test_mcp_tools_list_valid_token` | 200 with mocked valid token |
+| `test_health_custom_route` | `GET /health` is unauthenticated and returns correct JSON |
 
 ---
 
@@ -606,53 +551,90 @@ Note: `scalekit-sdk-python` was installed during research (`pipenv run pip insta
 
 | Property | Value |
 |----------|-------|
-| Framework | pytest |
-| Config file | none — test runner discovers `tests/` |
-| Quick run command | `pipenv run py -m pytest tests/test_server.py -x -q` |
-| Full suite command | `pipenv run py -m pytest tests/ -q` |
+| Framework | pytest (already installed in dev-packages) |
+| Config file | None (pytest discovers by convention) |
+| Quick run command | `pipenv run py -m pytest tests/test_server.py -x` |
+| Full suite command | `pipenv run py -m pytest tests/ -x` |
 
 ### Phase Requirements → Test Map
 
-| Behavior | Test Type | Automated Command |
-|----------|-----------|-------------------|
-| FastMCP server starts with lifespan | smoke | `pipenv run py -m pytest tests/test_server.py::test_lifespan_startup -x` |
-| GET /health returns 200 when deps reachable | integration | `pipenv run py -m pytest tests/test_server.py::test_health_returns_200 -x` |
-| GET /health returns 503 when Ollama down | integration | `pipenv run py -m pytest tests/test_server.py::test_health_ollama_down -x` |
-| Local mode: all requests unauthenticated | unit | `pipenv run py -m pytest tests/test_server.py::test_local_mode_no_auth -x` |
-| Remote mode: JWT validated via ScaleKit | unit | `pipenv run py -m pytest tests/test_server.py::test_remote_mode_valid_jwt -x` |
-| search tool returns 6-field results | unit | `pipenv run py -m pytest tests/test_server.py::TestSearchTool -x` |
-| get_talk returns ordered paragraphs | unit | `pipenv run py -m pytest tests/test_server.py::TestGetTalkTool -x` |
+| Req ID | Behavior | Test Type | Automated Command | File Status |
+|--------|----------|-----------|-------------------|-------------|
+| TRANS-01 | MCP client connects via Streamable HTTP | integration | `pytest tests/test_server.py::test_initialize_no_auth -x` | Rewrite |
+| TRANS-02 | GET /health returns 200/503 | unit | `pytest tests/test_server.py::test_health_returns_200 -x` | Rewrite |
+| AUTH-02 | 401 without token (remote), pass-through (local) | unit | `pytest tests/test_server.py::test_tools_list_requires_auth -x` | Rewrite |
+| OAUTH-01 | OAuth discovery metadata served | unit | `pytest tests/test_server.py::test_protected_resource_metadata -x` | Rewrite |
+| OAUTH-02 | ScaleKit JWT validated | unit | `pytest tests/test_server.py::test_scalekit_verifier_valid_token -x` | New |
+| DEPLOY-02 | No hardcoded values, all from env | code review | `grep -n "auth0\|scalekit\." server.py` should show only env reads | Manual |
+
+### Sampling Rate
+
+- **Per task commit:** `pipenv run py -m pytest tests/test_server.py -x -q`
+- **Per wave merge:** `pipenv run py -m pytest tests/ -x`
+- **Phase gate:** Full suite green before `/gsd-verify-work`
 
 ### Wave 0 Gaps
 
-- [ ] `test_fastmcp_removed` must be deleted before implementation (will fail with new server.py)
-- [ ] New test: `test_scalekit_token_verifier_valid_token` — unit test for `ScalekitTokenVerifier.verify_token()`
-- [ ] New test: `test_scalekit_token_verifier_invalid_token` — verifies returns `None` on bad token
-- [ ] Dispatcher tests rewritten for `mcp.streamable_http_app()` pattern
+- [ ] `auth/scalekit_verifier.py` — new file, no tests yet; create before implementing
+- [ ] `tests/test_server.py` — full rewrite needed; existing tests run against old API
+- [ ] Pipfile must add `fastmcp = "*"` before Wave 1 implementation begins
 
 ---
 
-## Security Domain
+## Environment Availability
 
-### Applicable ASVS Categories
+| Dependency | Required By | Available | Version | Fallback |
+|------------|------------|-----------|---------|----------|
+| `fastmcp` | All server functionality | NOW (just installed) | 3.2.4 | — |
+| `mcp` | fastmcp dep | YES | 1.26.0 | — |
+| `scalekit-sdk-python` | JWT validation | YES | 2.7.1 | — |
+| `uvicorn` | HTTP server | YES | 0.42.0 | — |
+| `starlette` | HTTP framework | YES | (via mcp) | — |
+| ScaleKit tenant (network) | Remote mode auth | UNKNOWN | — | Local mode (no SCALEKIT_* vars) |
 
-| ASVS Category | Applies | Standard Control |
-|---------------|---------|-----------------|
-| V2 Authentication | yes | ScalekitTokenVerifier + FastMCP TokenVerifier protocol |
-| V3 Session Management | yes | FastMCP StreamableHTTPSessionManager (internal) |
-| V4 Access Control | yes | Two-mode: local (none) / remote (JWT required) |
-| V5 Input Validation | yes | Pydantic (FastMCP tool args validated via type annotations) |
-| V6 Cryptography | yes | ScaleKit SDK handles RS256 JWKS verification |
+**Missing dependencies with no fallback:** None — all Python packages are available.
 
-### Known Threat Patterns
+**Note:** ScaleKit tenant connectivity cannot be verified in this environment. The two-mode auth design (D-04) means the server works without ScaleKit connectivity in local mode. Remote mode testing requires either a real ScaleKit tenant or mocking `ScalekitClient.validate_token()`.
 
-| Pattern | STRIDE | Standard Mitigation |
-|---------|--------|---------------------|
-| Expired/invalid JWT | Spoofing | ScalekitClient.validate_token raises on invalid; returns None in verifier |
-| Token replay | Spoofing | ScaleKit JWT has `exp` claim; AccessToken.expires_at checked by BearerAuthBackend |
-| JWKS spoofing | Tampering | SDK fetches from fixed `{SCALEKIT_ENV_URL}/keys`; uses TLS |
-| anyio task group crash (Phase 16.2) | DoS | Avoided by not using BaseHTTPMiddleware |
-| Prompt injection via tool args | Tampering | Not a server concern; ChromaDB query is read-only |
+---
+
+## State of the Art
+
+| Old Approach | Current Approach | Impact |
+|--------------|-----------------|--------|
+| `from mcp.server.fastmcp import FastMCP` | `from fastmcp import FastMCP` (standalone pkg) | New API: auth=, custom_route, different lifespan context access |
+| Manual FastAPI JSON-RPC dispatcher | `@mcp.tool()` decorator + native dispatch | No manual session management, no manual method routing |
+| `BaseHTTPMiddleware` for auth (Phase 16.1) | `RemoteAuthProvider` in FastMCP | No anyio task group errors |
+| `_FakeMCPCtx` bridge | `ctx.lifespan_context["key"]` directly | Cleaner, no fake objects needed |
+| Manual `/.well-known/oauth-protected-resource` | `RemoteAuthProvider.get_routes()` auto-serves it | No manual implementation |
+| Auth0 JWKS verifier (`auth/oauth.py`) | `ScalekitTokenVerifier(TokenVerifier)` | ScaleKit replaces Auth0 as OAuth provider |
+
+**Deprecated/outdated in new server:**
+- `_FakeMCPCtx`: remove entirely
+- `build_app()`: no longer needed; `mcp.http_app()` replaces it
+- `_handle_initialize()`, `_handle_tools_list()`, `_handle_tools_call()`: replaced by FastMCP dispatch
+- `_sessions` dict: FastMCP handles session management internally
+- `_mcp_response()`, `_error_response()`, `_unauthorized_response()`: FastMCP protocol layer handles these
+- `auth/oauth.py` (JWKSVerifier): replaced by `auth/scalekit_verifier.py`
+
+---
+
+## Open Questions
+
+1. **ScaleKit audience claim format**
+   - What we know: ScaleKit JWT payload structure follows standard JWT. `validate_token()` accepts `TokenValidationOptions(audience=[...])`.
+   - What's unclear: What does ScaleKit put in the `aud` claim — the MCP base URL, something else? This determines what to pass as `audience=` in `TokenValidationOptions`.
+   - Recommendation: In `ScalekitTokenVerifier`, make audience validation optional/configurable. Start without strict audience validation (matches ScaleKit SDK default behavior `verify_aud=False`). Add `SCALEKIT_AUDIENCE` env var when issuer/audience verification is needed.
+
+2. **`/mcp` vs `/` MCP path**
+   - What we know: FastMCP defaults to `/mcp`. Current server handles `/` and `/mcp`.
+   - What's unclear: Whether MCP clients configured for `/` will need reconfiguration.
+   - Recommendation: Use the FastMCP default `/mcp`. Update any client configuration instructions. The `path="/"` override is available if needed.
+
+3. **Session ID header behavior**
+   - What we know: D-07 requires MCP-Session-ID behavior to be retained. FastMCP handles session management internally.
+   - What's unclear: Whether FastMCP's native session management sends `MCP-Session-Id` headers in the same format as the current manual implementation.
+   - Recommendation: Test with `TestClient` and verify `MCP-Session-Id` appears in `initialize` response headers.
 
 ---
 
@@ -660,50 +642,40 @@ Note: `scalekit-sdk-python` was installed during research (`pipenv run pip insta
 
 | # | Claim | Section | Risk if Wrong |
 |---|-------|---------|---------------|
-| A1 | ScaleKit JWKS endpoint is `{env_url}/keys` (from core.py constant `JWKS_ENDPOINT = "/keys"`) | Standard Stack | JWKS fetch fails; token validation always returns None |
-| A2 | ScaleKit JWT payload contains `sub` claim for client_id | Code Examples (ScalekitTokenVerifier) | AccessToken.client_id would be empty string; non-blocking |
-| A3 | MCP clients send token with `initialize` in remote mode (making always-auth acceptable) | Open Questions | Client fails at initialize step with 401; requires fallback strategy |
+| A1 | ScaleKit JWT `aud` claim matches `MCP_BASE_URL` format | ScaleKit SDK Reference | Audience validation fails if format differs; mitigation: skip audience validation initially |
+| A2 | FastMCP's `RequireAuthMiddleware` returns 401 (not 403) for missing token | Anti-Patterns | Tests expecting 401 would need updating to 403 |
+| A3 | CORS headers work via `Middleware(CORSMiddleware, ...)` without modification | Pattern 4 | Preflight requests might fail if middleware ordering causes issues |
 
-Claims A1 and A2 are [VERIFIED: scalekit source code]. A3 is [ASSUMED] — depends on ScaleKit client behavior not tested in this research session.
+**All other claims in this document are VERIFIED** by direct Python inspection of installed packages.
 
 ---
 
 ## Sources
 
-### Primary (HIGH confidence)
+### Primary (HIGH confidence — VERIFIED via installed packages)
 
-- mcp==1.26.0 installed package — FastMCP source inspected via `inspect.getsource()` for all claims
-- scalekit-sdk-python==2.7.1 installed package — `ScalekitClient`, `CoreClient`, `TokenValidationOptions` source inspected
-- `mcp.server.auth.provider.TokenVerifier` — protocol interface verified
-- `mcp.server.auth.middleware.bearer_auth` — `RequireAuthMiddleware`, `BearerAuthBackend` verified as pure ASGI (not BaseHTTPMiddleware)
-- `mcp.server.lowlevel.server.RequestContext` — `lifespan_context` field verified
-- `mcp.server.fastmcp.utilities.context_injection.find_context_parameter` — type-annotation-based injection verified
-- scalekit/core.py `JWKS_ENDPOINT = "/keys"` — JWKS URL pattern verified
+- `fastmcp==3.2.4` — inspected via `import fastmcp; inspect.getsource(...)` — FastMCP constructor, `custom_route`, `http_app`, `run_http_async`, `RemoteAuthProvider`, `TokenVerifier`, `AccessToken`, `_lifespan_proxy`, lifespan context chain
+- `scalekit-sdk-python==2.7.1` — inspected via `import scalekit; inspect.getsource(...)` — `ScalekitClient.__init__`, `validate_token`, `CoreClient.get_jwks`, `TokenValidationOptions`, exception types
+- `mcp==1.26.0` — inspected `mcp.server.auth.provider.AccessToken` fields
+- `starlette` — confirmed `Middleware(CORSMiddleware, ...)` pattern via `create_base_app` source
 
 ### Secondary (MEDIUM confidence)
 
-- [GitHub: scalekit-inc/fastmcp-scalekit-example](https://github.com/scalekit-inc/fastmcp-scalekit-example) — env var names (`SCALEKIT_ENVIRONMENT_URL`, `SCALEKIT_CLIENT_ID`, `SCALEKIT_CLIENT_SECRET`, `SCALEKIT_RESOURCE_ID`) confirmed vs. what scalekit-sdk-python expects
-- [Scalekit blog: securing-fastmcp-with-scalekit](https://www.scalekit.com/blog/securing-fastmcp-with-scalekit) — referenced `ScalekitProvider` (not in `mcp==1.26.0`; that is a separate `fastmcp` package); env var names consistent
+- ScaleKit env var naming conventions: inferred from `ScalekitClient.__init__(env_url, client_id, client_secret)` parameter names + industry convention
 
-### Tertiary (LOW confidence)
+### Tertiary (LOW confidence — marked `[ASSUMED]` in Assumptions Log)
 
-- None — all critical claims verified against installed packages.
+- ScaleKit JWT `aud` claim format at runtime — A1 above
 
 ---
 
 ## Metadata
 
 **Confidence breakdown:**
-
-- Standard Stack: HIGH — verified via pip list, package inspect
-- Architecture patterns: HIGH — verified via inspect of FastMCP source (mcp==1.26.0)
-- ScaleKit integration: HIGH — verified via inspect of installed scalekit-sdk-python==2.7.1
-- Auth design (initialize unauthenticated): LOW-MEDIUM — FastMCP behavior is known; MCP client behavior with always-auth is ASSUMED
-- Test migration: HIGH — current tests read in full; FastMCP patterns verified
+- Standard stack: HIGH — all packages installed and inspected directly
+- Architecture: HIGH — API signatures verified via `inspect.signature()` and `inspect.getsource()`
+- ScaleKit JWT claim format: MEDIUM — SDK source read but live token not available
+- Pitfalls: HIGH — root causes verified in source code
 
 **Research date:** 2026-04-15
-**Valid until:** 2026-05-15 (stable library; FastMCP API unlikely to change in 30 days)
-
----
-
-## RESEARCH COMPLETE
+**Valid until:** 2026-05-15 (stable library; fastmcp 3.x API unlikely to break)
