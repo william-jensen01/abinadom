@@ -190,13 +190,16 @@ Plans:
 | 16.2 FastAPI MCP Protocol Rewrite | v3.0 | 2/2 | Complete   | 2026-04-09 |
 | 17. Operator Docs | v3.0 | 4/4 | Complete   | 2026-04-13 |
 | 18. Cleanup of Previous Phases | v3.0 | 3/3 | Complete   | 2026-04-14 |
+| 19. FastMCP + ScaleKit Server | v3.0 | 0/3 | Planning   | — |
 
-### Phase 19: create an alternative mcp server using fastmcp and scalekit for oauth
+### Phase 19: FastMCP + ScaleKit Server
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** Replace the FastAPI + JSON-RPC server with a native FastMCP server using ScaleKit as the OAuth provider, maintaining two-mode auth (local/remote) and full tool parity
+**Requirements**: TRANS-01, TRANS-02, AUTH-02, OAUTH-01, OAUTH-02, DEPLOY-02
 **Depends on:** Phase 18
-**Plans:** 0 plans
+**Plans:** 3 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 19 to break down)
+- [ ] 19-01-PLAN.md — Rewrite tests for FastMCP, replace server.py with FastMCP implementation (local mode)
+- [ ] 19-02-PLAN.md — Add ScaleKit auth (two-mode), delete auth/oauth.py, add auth tests
+- [ ] 19-03-PLAN.md — Update Pipfile (add scalekit, remove fastapi), regenerate requirements.txt, update .env.example and docker-compose.yml
