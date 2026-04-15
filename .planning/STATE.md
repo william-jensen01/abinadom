@@ -70,6 +70,7 @@ Progress: [████████████████████] v1.0 + 
 
 ### Roadmap Evolution
 
+- Phase 19 added: create an alternative mcp server using fastmcp and scalekit for oauth
 - Phase 09.1 inserted after Phase 9: gap identified in phase 10 plans (URGENT)
 - v3.0: Caddy + cloudflared separated into Phase 16 (depends on working Compose stack in Phase 15)
 - v3.0: Auth module is a new module — does not touch existing MCP tools

@@ -190,3 +190,13 @@ Plans:
 | 16.2 FastAPI MCP Protocol Rewrite | v3.0 | 2/2 | Complete   | 2026-04-09 |
 | 17. Operator Docs | v3.0 | 4/4 | Complete   | 2026-04-13 |
 | 18. Cleanup of Previous Phases | v3.0 | 3/3 | Complete   | 2026-04-14 |
+
+### Phase 19: create an alternative mcp server using fastmcp and scalekit for oauth
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 18
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 19 to break down)
