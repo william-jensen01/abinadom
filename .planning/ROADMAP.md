@@ -200,6 +200,6 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 19-01-PLAN.md — Rewrite tests for FastMCP, replace server.py with FastMCP implementation (local mode)
+- [ ] 19-01-PLAN.md — Rewrite server.py as native FastMCP server and rewrite test suite for FastMCP patterns (local mode)
 - [ ] 19-02-PLAN.md — Add ScaleKit auth (two-mode), delete auth/oauth.py, add auth tests
-- [ ] 19-03-PLAN.md — Update Pipfile (add scalekit, remove fastapi), regenerate requirements.txt, update .env.example and docker-compose.yml
+- [ ] 19-03-PLAN.md — Remove fastapi from Pipfile, regenerate requirements.txt, update .env.example and docker-compose.yml for ScaleKit
