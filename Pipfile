@@ -12,7 +12,7 @@ chromadb = "*"
 ollama = "*"
 tqdm = "*"
 mcp = "*"
-fastapi = "*"
+fastmcp = "*"
 
 [dev-packages]
 pytest = "*"
