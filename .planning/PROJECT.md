@@ -49,6 +49,7 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - ✓ Docker Compose deployment — Dockerfile (python:3.12-slim), docker-compose.yml (bind mounts, healthcheck, env_file), .env.example (5 operator vars), requirements.txt pinned from Pipfile.lock — Phase 15 (v3.0)
 - ✓ Caddy reverse proxy for TLS termination — Phase 16 (v3.0)
 - ✓ Cloudflare Tunnel for stable public URL (home IP hidden) — Phase 16 (v3.0)
+- ✓ FastMCP + ScaleKit OAuth 2.1 rewrite — native FastMCP server, two-mode ScalekitProvider auth (local/remote), dependency cleanup — Phase 19 (v3.0)
 - [ ] Operator docs (connection guide, self-deploy guide, key management)
 
 ### Out of Scope
@@ -79,9 +80,9 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - **Processing model**: Per-talk streaming loop — Phases 1–6 run sequentially per talk; ChromaDB write buffer flushes every 1,000 talks
 - **ID strategy**: Existing SQLite primary keys (`talk_8820`, `para_156789`, etc.) for bidirectional lookups
 - **MCP server**: Streamable HTTP transport (MCP_HOST/MCP_PORT), absolute path resolution, Ollama dependency check at startup, speaker post-filter (ChromaDB 1.5.5 metadata filter workaround); `GET /health` endpoint returns live Ollama + ChromaDB status; Bearer token auth via BearerAuthMiddleware
-- **Deployment**: Dockerfile (python:3.12-slim, /data/ bind mounts), docker-compose.yml (single mcp-server service, Ollama operator-managed on host), .env.example (5 vars: OLLAMA_URL, MCP_HOST, MCP_PORT, CHROMADB_DATA_PATH, AUTH_DATA_PATH)
-- **Current state (v3.0 in progress)**: Caddy + Cloudflare Tunnel deployed — `infra/` stack (caddy:2-alpine + cloudflared) fronts mcp-server on proxy network; operator walkthrough in `infra/SETUP.md`; HTTPS endpoint verified at mcp.{DOMAIN}/health from outside local network, host IP hidden, restart-persistent
-- **Next**: Phase 17 — Operator docs
+- **Deployment**: Dockerfile (python:3.12-slim, /data/ bind mounts), docker-compose.yml (single mcp-server service, Ollama operator-managed on host), .env.example (OLLAMA_URL, FASTMCP_HOST, FASTMCP_PORT, CHROMADB_DATA_PATH, SCALEKIT_ENVIRONMENT_URL, SCALEKIT_RESOURCE_ID, MCP_BASE_URL)
+- **Current state (v3.0 complete)**: Phase 19 shipped — server.py is a native FastMCP server with two-mode ScalekitProvider auth; local mode (no env vars) and remote OAuth mode (all three SCALEKIT_ vars set); fastapi removed from deps; 449 tests green
+- **Next**: Operator docs (connection guide, self-deploy guide, key management)
 
 ## Constraints
 
@@ -124,4 +125,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-05 — Phase 16 complete: Caddy + Cloudflare Tunnel (infra/ stack, HTTPS endpoint verified, host IP hidden)*
+*Last updated: 2026-04-15 — Phase 19 complete: FastMCP + ScaleKit rewrite (native FastMCP server, two-mode OAuth auth, 449 tests green)*
