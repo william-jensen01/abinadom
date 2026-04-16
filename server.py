@@ -245,10 +245,22 @@ def _parse_talk_id(talk_id: str) -> int | None:
 
 FASTMCP_HOST = os.environ.get("FASTMCP_HOST", "0.0.0.0")
 FASTMCP_PORT = int(os.environ.get("FASTMCP_PORT", "7363"))
+SCALEKIT_ENVIRONMENT_URL = os.environ.get("SCALEKIT_ENVIRONMENT_URL", "")
+SCALEKIT_RESOURCE_ID = os.environ.get("SCALEKIT_RESOURCE_ID", "")
 MCP_BASE_URL = os.environ.get("MCP_BASE_URL", "")
 
-# Auth - Plan 02 adds ScalekitProvider; for now local mode only
+# Two-mode auth detection (D-04): ALL THREE must be set for remote mode
 _auth = None
+if SCALEKIT_ENVIRONMENT_URL and SCALEKIT_RESOURCE_ID and MCP_BASE_URL:
+    from fastmcp.server.auth.providers.scalekit import ScalekitProvider
+    _auth = ScalekitProvider(
+        environment_url=SCALEKIT_ENVIRONMENT_URL,
+        resource_id=SCALEKIT_RESOURCE_ID,
+        base_url=MCP_BASE_URL,
+    )
+    logger.info("ScaleKit auth enabled (remote mode)")
+else:
+    logger.info("Auth disabled (local mode — SCALEKIT env vars not fully set)")
 
 MCP_INSTRUCTIONS = (
     "LDS General Conference corpus: 5,838 talks (1971-present) across 4 collections "
