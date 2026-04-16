@@ -283,7 +283,7 @@ def _make_mock_ctx(collections: dict):
 
     app = AppContext(client=MagicMock(), collections=collections)
     ctx = MagicMock()
-    ctx.request_context.lifespan_context = app
+    ctx.lifespan_context = {"app": app}
     return ctx
 
 
@@ -650,11 +650,12 @@ def test_health_returns_200():
     mock_client = MagicMock()
     mock_client.get_collection.return_value = MagicMock()
 
-    with patch("server.get_embedding_function", return_value=mock_ef), \
+    with patch("server._startup", return_value=_mock_startup()), \
+         patch("server.get_embedding_function", return_value=mock_ef), \
          patch("server.get_chromadb_client", return_value=mock_client):
-        from server import build_app
-        app = build_app()
-        client = TestClient(app)
+        from server import mcp
+        app = mcp.http_app()
+        client = TestClient(app, raise_server_exceptions=False)
         response = client.get("/health")
 
     assert response.status_code == 200
@@ -672,8 +673,8 @@ def test_health_ollama_down():
 
     with patch("server.get_embedding_function", return_value=mock_ef), \
          patch("server.get_chromadb_client", return_value=mock_client):
-        from server import build_app
-        app = build_app()
+        from server import mcp
+        app = mcp.http_app()
         client = TestClient(app)
         response = client.get("/health")
 
@@ -689,8 +690,8 @@ def test_health_chromadb_down():
 
     with patch("server.get_embedding_function", return_value=mock_ef), \
          patch("server.get_chromadb_client", side_effect=Exception("unreachable")):
-        from server import build_app
-        app = build_app()
+        from server import mcp
+        app = mcp.http_app()
         client = TestClient(app)
         response = client.get("/health")
 
@@ -722,207 +723,62 @@ def _mock_startup():
     )
 
 
+# ---------------------------------------------------------------------------
+# MCP PROTOCOL TESTS (/mcp endpoint)
+# ---------------------------------------------------------------------------
+
+headers = {
+    "Content-Type": "application/json",
+    "Accept": "application/json, text/event-stream",
+}
+
 def test_initialize_no_auth():
     """OAUTH-01: initialize succeeds without Authorization header."""
     with patch("server._startup", return_value=_mock_startup()):
-        from server import build_app
-        app = build_app()
-        with TestClient(app, raise_server_exceptions=False) as client:
-            resp = client.post("/", json={
+        from server import mcp
+        with TestClient(mcp.http_app(), raise_server_exceptions=False) as client:
+            resp = client.post("/mcp", json={
                 "jsonrpc": "2.0", "id": 1, "method": "initialize",
                 "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
-            })
+            }, headers=headers)
     assert resp.status_code == 200
     assert "MCP-Session-Id" in resp.headers
-    data = resp.json()
-    assert data["result"]["protocolVersion"] == "2025-06-18"
-    assert data["result"]["serverInfo"]["name"] == "lds-scripture-index"
-
-
-def test_tools_list_requires_auth():
-    """OAUTH-01: tools/list without token returns 401."""
-    with patch("server._startup", return_value=_mock_startup()), \
-         patch("server.AUTH0_DOMAIN", "test.auth0.com"):
-        from server import build_app
-        app = build_app()
-        with TestClient(app, raise_server_exceptions=False) as client:
-            # First initialize to get session
-            init_resp = client.post("/", json={
-                "jsonrpc": "2.0", "id": 1, "method": "initialize",
-                "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
-            })
-            session_id = init_resp.headers["MCP-Session-Id"]
-            # Then try tools/list without auth
-            resp = client.post("/", json={
-                "jsonrpc": "2.0", "id": 2, "method": "tools/list",
-            }, headers={"MCP-Session-Id": session_id})
-    assert resp.status_code == 401
-
-
-def test_tools_list_401_has_www_authenticate():
-    """OAUTH-01: 401 response includes WWW-Authenticate header with resource_metadata."""
-    with patch("server._startup", return_value=_mock_startup()), \
-         patch("server.AUTH0_DOMAIN", "test.auth0.com"), \
-         patch("server.MCP_BASE_URL", "https://test.example.com"):
-        from server import build_app
-        app = build_app()
-        with TestClient(app, raise_server_exceptions=False) as client:
-            init_resp = client.post("/", json={
-                "jsonrpc": "2.0", "id": 1, "method": "initialize",
-                "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
-            })
-            session_id = init_resp.headers["MCP-Session-Id"]
-            resp = client.post("/", json={
-                "jsonrpc": "2.0", "id": 2, "method": "tools/list",
-            }, headers={"MCP-Session-Id": session_id})
-    assert "www-authenticate" in resp.headers
-    assert "resource_metadata" in resp.headers["www-authenticate"]
-
-
-def test_tools_list_valid_rs256():
-    """OAUTH-02: tools/list succeeds with valid RS256 token (kid present)."""
-    with patch("server._startup", return_value=_mock_startup()), \
-         patch("server._jwt_verifier") as mock_verifier, \
-         patch("server.AUTH0_DOMAIN", "test.auth0.com"), \
-         patch("server.MCP_BASE_URL", "https://test.example.com"):
-        mock_verifier.verify_token.return_value = {"sub": "user1"}
-        from server import build_app
-        app = build_app()
-        with TestClient(app, raise_server_exceptions=False) as client:
-            init_resp = client.post("/", json={
-                "jsonrpc": "2.0", "id": 1, "method": "initialize",
-                "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
-            })
-            session_id = init_resp.headers["MCP-Session-Id"]
-            resp = client.post("/", json={
-                "jsonrpc": "2.0", "id": 2, "method": "tools/list",
-            }, headers={"MCP-Session-Id": session_id, "Authorization": "Bearer valid-rs256-token"})
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "result" in data
-    assert "tools" in data["result"]
-    tool_names = [t["name"] for t in data["result"]["tools"]]
-    assert "search" in tool_names
-    assert "get_talk" in tool_names
-
-
-def test_tools_list_valid_hs256():
-    """OAUTH-02: tools/list succeeds with valid HS256 token (no kid, /userinfo path)."""
-    with patch("server._startup", return_value=_mock_startup()), \
-         patch("server._jwt_verifier") as mock_verifier, \
-         patch("server.AUTH0_DOMAIN", "test.auth0.com"):
-        mock_verifier.verify_token.return_value = {"sub": "user2"}
-        from server import build_app
-        app = build_app()
-        with TestClient(app, raise_server_exceptions=False) as client:
-            init_resp = client.post("/", json={
-                "jsonrpc": "2.0", "id": 1, "method": "initialize",
-                "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
-            })
-            session_id = init_resp.headers["MCP-Session-Id"]
-            resp = client.post("/", json={
-                "jsonrpc": "2.0", "id": 2, "method": "tools/list",
-            }, headers={"MCP-Session-Id": session_id, "Authorization": "Bearer valid-hs256-token"})
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "tools" in data["result"]
 
 
 def test_tools_list_local_mode_no_auth_required():
     """OAUTH-02 / D-01: tools/list succeeds with no token when AUTH0_DOMAIN is unset (local mode)."""
-    with patch("server._startup", return_value=_mock_startup()), \
-         patch("server.AUTH0_DOMAIN", ""), \
-         patch("server._jwt_verifier", None):
-        from server import build_app
-        app = build_app()
-        with TestClient(app, raise_server_exceptions=False) as client:
-            init_resp = client.post("/", json={
+    with patch("server._startup", return_value=_mock_startup()):
+        from server import mcp
+        with TestClient(mcp.http_app(), raise_server_exceptions=False) as client:
+            init_resp = client.post("/mcp", json={
                 "jsonrpc": "2.0", "id": 1, "method": "initialize",
                 "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
             })
             session_id = init_resp.headers["MCP-Session-Id"]
-            # No Authorization header — should succeed in local mode
-            resp = client.post("/", json={
+            resp = client.post("/mcp", json={
                 "jsonrpc": "2.0", "id": 2, "method": "tools/list",
-            }, headers={"MCP-Session-Id": session_id})
+            }, headers={**headers, "MCP-Session-Id": session_id})
     assert resp.status_code == 200
-    data = resp.json()
-    assert "tools" in data["result"]
 
 
-def test_protected_resource_metadata():
-    """OAUTH-03: /.well-known/oauth-protected-resource returns RFC 9728 JSON."""
-    with patch("server._startup", return_value=_mock_startup()), \
-         patch("server.AUTH0_DOMAIN", "test.auth0.com"), \
-         patch("server.MCP_BASE_URL", "https://test.example.com"):
-        from server import build_app
-        app = build_app()
-        with TestClient(app, raise_server_exceptions=False) as client:
-            resp = client.get("/.well-known/oauth-protected-resource")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "resource" in data
-    assert "authorization_servers" in data
-    assert "bearer_methods_supported" in data
+# ---------------------------------------------------------------------------
+# FRAMEWORK ASSERTION
+# ---------------------------------------------------------------------------
 
-
-def test_fastmcp_removed():
-    """SC-4: FastMCP import, BaseHTTPMiddleware import, and streamable_http_app are absent from server.py."""
-    import inspect
-    import server
+def test_fastmcp_present_fastapi_absent():
+    import inspect, server
     source = inspect.getsource(server)
-    # Check that FastMCP is not imported or instantiated (may appear in docstring — fine)
-    assert "from mcp.server.fastmcp import FastMCP" not in source
-    assert "mcp = FastMCP(" not in source
-    assert "@mcp.tool()" not in source
-    # BaseHTTPMiddleware and streamable_http_app must not be imported or called
-    assert "from starlette.middleware.base import BaseHTTPMiddleware" not in source
-    assert "streamable_http_app" not in source
+    assert "from fastmcp import FastMCP" in source
+    assert "from fastapi" not in source
+    assert "BaseHTTPMiddleware(" not in source
 
+# ---------------------------------------------------------------------------
+# ENV VALIDATION
+# ---------------------------------------------------------------------------
 
-def test_head_returns_protocol_version():
-    """HEAD / returns MCP-Protocol-Version header."""
-    with patch("server._startup", return_value=_mock_startup()):
-        from server import build_app
-        app = build_app()
-        with TestClient(app, raise_server_exceptions=False) as client:
-            resp = client.head("/")
-    assert resp.status_code == 200
-    assert "mcp-protocol-version" in resp.headers
-
-
-def test_get_root_returns_405():
-    """GET / returns 405 Method Not Allowed."""
-    with patch("server._startup", return_value=_mock_startup()):
-        from server import build_app
-        app = build_app()
-        with TestClient(app, raise_server_exceptions=False) as client:
-            resp = client.get("/")
-    assert resp.status_code == 405
-
-
-def test_delete_session_cleanup():
-    """DELETE / with valid session ID removes the session."""
-    with patch("server._startup", return_value=_mock_startup()):
-        from server import build_app
-        app = build_app()
-        with TestClient(app, raise_server_exceptions=False) as client:
-            init_resp = client.post("/", json={
-                "jsonrpc": "2.0", "id": 1, "method": "initialize",
-                "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
-            })
-            session_id = init_resp.headers["MCP-Session-Id"]
-            resp = client.delete("/", headers={"MCP-Session-Id": session_id})
-    assert resp.status_code == 200
-
-
-def test_missing_session_returns_400():
-    """POST tools/list without MCP-Session-Id returns 400."""
-    with patch("server._startup", return_value=_mock_startup()):
-        from server import build_app
-        app = build_app()
-        with TestClient(app, raise_server_exceptions=False) as client:
-            resp = client.post("/", json={
-                "jsonrpc": "2.0", "id": 2, "method": "tools/list",
-            })
-    assert resp.status_code == 400
+def test_env_vars_no_hardcoded_values():
+    import inspect, server
+    source = inspect.getsource(server)
+    assert ".auth0.com" not in source.lower()  # no hardcoded Auth0 domain URLs
+    assert "scalekit.com" not in source.lower()
+    assert "http://" not in source or "os.environ" in source

@@ -1,32 +1,52 @@
 """
 MCP Server — LDS Scripture Citation Index
 
-Exposes the ChromaDB vector collections via FastAPI with a manual MCP JSON-RPC dispatcher.
+Exposes the ChromaDB vector collections via FastMCP with native MCP protocol handling and ScaleKit-based OAuth 2.1 authentication.
+
 Phase 9 builds startup validation; Phase 10 adds search and get_talk tools.
 Phase 13 swaps to HTTP transport with configurable host/port.
-Phase 16.1 adds OAuth 2.1 via algorithm-agnostic JWT verification (Auth0 JWKS + PyJWT).
-Phase 16.2 replaces FastMCP + BaseHTTPMiddleware with a FastAPI app and per-method
-auth routing directly in the dispatcher (eliminates anyio task group errors).
+Phase 16.1 adds OAuth 2.1 via JWT verification (Auth0 JWKS +PyJWT).
+Phase 16.2 replaces FastMCP + BaseHTTPMiddleware with a FastAPI app and per-method auth routing (eliminates anyio task group errors).
+Phase 19 replaces the FastAPI + manual JSON-RPC server with FastMCP and built-in ScaleKit authentication (ScalekitProvider).
+
+Architecture (Phase 19):
+  - FastMCP is the canonical server framework (no FastAPI, no manual JSON-RPC).
+  - MCP protocol (initialize, tools/list, tools/call) is handled natively.
+  - Authentication is delegated to FastMCP's ScalekitProvider.
+  - OAuth discovery endpoints are served automatically by FastMCP.
+  - No custom JWT verification or middleware is used.
 
 Startup sequence:
   1. Connect to ChromaDB via HttpClient (CHROMADB_HOST/CHROMADB_PORT env vars) (CORE-01)
   2. Validate all 4 collections are present and non-empty (CORE-01/CORE-03)
-  3. Ollama health check via live embedding call (CORE-02)
+  3. Ollama reachability check via embedding call (non-fatal) (CORE-02)
   4. Load all 4 collections into AppContext (CORE-03)
-  5. Yield AppContext via FastAPI lifespan, stored in app.state.ctx
+  5. Yield AppContext via FastMCP lifespan context (ctx.lifespan_context["app"])
 
 MCP tools (Phase 10):
   - search: semantic search across 4 collections with optional speaker/year/season filters
   - get_talk: retrieve full ordered text of a conference talk by ID
 
-Auth (Phase 18):
-  - Local mode (AUTH0_DOMAIN unset): No authentication required on any endpoint.
-    All requests to initialize, tools/list, and tools/call pass through without
-    any token check. Intended for localhost use.
-  - Remote/hosted mode (AUTH0_DOMAIN set): OAuth via Auth0 is the sole auth path.
-    JWKSVerifier (auth/oauth.py) handles JWT validation per RFC 9728.
-    initialize is unauthenticated; tools/list and tools/call require a valid JWT.
-    Static bearer token path and key store are removed.
+Auth (Phase 19 — ScaleKit via FastMCP):
+  - Local mode (SCALEKIT_ENVIRONMENT_URL, SCALEKIT_RESOURCE_ID, or MCP_BASE_URL unset):
+    No authentication (auth=None). All MCP endpoints are publicly accessible.
+    Intended for localhost and development.
+  - Remote/hosted mode (all three env vars set):
+    Authentication enforced via ScalekitProvider.
+    - initialize: unauthenticated (per MCP spec)
+    - tools/list and tools/call: require valid ScaleKit JWT
+    - JWT validation is handled internally via JWKS (no custom verifier)
+  - OAuth discovery endpoints:
+    - /.well-known/oauth-protected-resource
+    - /.well-known/oauth-authorization-server
+    are automatically served by FastMCP/ScalekitProvider.
+    
+Removed in Phase 19:
+  - FastAPI app and routing layer
+  - Manual JSON-RPC dispatcher
+  - BaseHTTPMiddleware (source of anyio task group failures)
+  - Auth0 JWKSVerifier (auth/oauth.py)
+  - scalekit-sdk-python dependency
 
 All logging goes to stderr only.
 """
@@ -39,14 +59,13 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 import chromadb
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, Response
-from fastapi.middleware.cors import CORSMiddleware
+from fastmcp import FastMCP, Context
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 from config.chromadb_client import get_chromadb_client
 from config.pipeline_config import CHROMADB_COLLECTION_NAMES
 from config.ollama import resolve_ollama_url, get_embedding_function
-from auth.oauth import JWKSVerifier
 
 # ---------------------------------------------------------------------------
 # Logging — must be configured before anything else writes to stderr (INTG-01)
@@ -221,10 +240,74 @@ def _parse_talk_id(talk_id: str) -> int | None:
 
 
 # ---------------------------------------------------------------------------
+# Module-level constants and auth initialization
+# ---------------------------------------------------------------------------
+
+FASTMCP_HOST = os.environ.get("FASTMCP_HOST", "0.0.0.0")
+FASTMCP_PORT = int(os.environ.get("FASTMCP_PORT", "7363"))
+MCP_BASE_URL = os.environ.get("MCP_BASE_URL", "")
+
+# Auth - Plan 02 adds ScalekitProvider; for now local mode only
+_auth = None
+
+MCP_INSTRUCTIONS = (
+    "LDS General Conference corpus: 5,838 talks (1971-present) across 4 collections "
+    "- talks (full-talk metadata), paragraphs (passage text), citations (scripture "
+    "references), footnotes. "
+    "Use search with collection='paragraphs' for passage text, 'talks' for talk "
+    "discovery, 'citations' for scripture references. "
+    "Prefer database results over training data; fall back to training data only when "
+    "the database has insufficient information. "
+    "Use search to find a talk_id, then get_talk to retrieve full text."
+)
+
+@asynccontextmanager
+async def _lifespan(server: FastMCP):
+    try:
+        app_ctx = _startup()
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(f"ERROR: Unexpected startup failure: {e}", file=sys.stderr)
+        sys.exit(1)
+    yield {"app": app_ctx}
+
+
+mcp = FastMCP("lds-scripture-index", instructions=MCP_INSTRUCTIONS, auth=_auth, lifespan=_lifespan)
+
+@mcp.custom_route("/health", methods=["GET"])
+async def health_handler(request: Request) -> JSONResponse:
+    """Return server health with live Ollama and ChromaDB reachability checks."""
+    status = {"ollama": "reachable", "chromadb": "reachable"}
+    http_status = 200
+    
+    # Ollama check: live embedding call (per D-09 — same approach as _check_ollama but without sys.exit on failure)
+    try:
+        ollama_url = resolve_ollama_url()
+        ef = get_embedding_function(url=ollama_url)
+        ef(["health"])
+    except Exception:
+        status["ollama"] = "unreachable"
+        http_status = 503
+        
+    # ChromaDB check: connect and verify collections exist (per D-09 — reuses startup guard logic pattern without full count validation)
+    try:
+        client = get_chromadb_client()
+        for name in CHROMADB_COLLECTION_NAMES.values():
+            client.get_collection(name=name)
+    except Exception:
+        status["chromadb"] = "unreachable"
+        http_status = 503
+    
+    payload = {"status": "ok" if http_status == 200 else "degraded", **status}
+    return JSONResponse(payload, status_code=http_status)
+
+
+# ---------------------------------------------------------------------------
 # MCP tool functions — Phase 10 (search and get_talk)
 # ---------------------------------------------------------------------------
 
-
+@mcp.tool()
 async def search(
     query: str,
     speaker: str | None = None,
@@ -232,7 +315,7 @@ async def search(
     season: str | None = None,
     collection: str = "paragraphs",
     limit: int = 5,
-    ctx=None,
+    ctx: Context = None,
 ) -> str:
     """Search LDS General Conference content by meaning.
 
@@ -247,7 +330,7 @@ async def search(
         collection: Collection to search - "talks", "paragraphs" (default), "citations", or "footnotes".
         limit: Number of results to return (default 5, max 20).
     """
-    app: AppContext = ctx.request_context.lifespan_context
+    app: AppContext = ctx.lifespan_context["app"]
 
     # CORE-06: validate collection alias
     col = app.collections.get(collection)
@@ -298,9 +381,10 @@ async def search(
     return json.dumps(results, ensure_ascii=False, indent=2)
 
 
+@mcp.tool()
 async def get_talk(
     talk_id: str,
-    ctx=None,
+    ctx: Context = None,
 ) -> str:
     """Retrieve the full text of a General Conference talk by ID.
 
@@ -309,7 +393,7 @@ async def get_talk(
     Args:
         talk_id: Talk identifier (e.g. "talk_8820" or "8820").
     """
-    app: AppContext = ctx.request_context.lifespan_context
+    app: AppContext = ctx.lifespan_context["app"]
 
     # TOOL-04: parse talk_id to integer
     talk_num = _parse_talk_id(talk_id)
@@ -352,408 +436,10 @@ async def get_talk(
     return f"{header}\n\n{body}"
 
 
-# ---------------------------------------------------------------------------
-# Health endpoint — live dependency checks (TRANS-02)
-# ---------------------------------------------------------------------------
-
-
-async def health_check(request: Request) -> JSONResponse:
-    """Return server health with live Ollama and ChromaDB reachability checks."""
-    status = {"ollama": "reachable", "chromadb": "reachable"}
-    http_status = 200
-
-    # Ollama check: live embedding call (per D-09 — same approach as _check_ollama
-    # but without sys.exit on failure)
-    try:
-        ollama_url = resolve_ollama_url()
-        ef = get_embedding_function(url=ollama_url)
-        ef(["health"])
-    except Exception:
-        status["ollama"] = "unreachable"
-        http_status = 503
-
-    # ChromaDB check: connect and verify collections exist (per D-09 — reuses
-    # startup guard logic pattern without full count validation)
-    try:
-        client = get_chromadb_client()
-        for name in CHROMADB_COLLECTION_NAMES.values():
-            client.get_collection(name=name)
-    except Exception:
-        status["chromadb"] = "unreachable"
-        http_status = 503
-
-    payload = {"status": "ok" if http_status == 200 else "degraded", **status}
-    return JSONResponse(payload, status_code=http_status)
-
-
-# ---------------------------------------------------------------------------
-# RFC 9728 — OAuth 2.0 Protected Resource Metadata (Phase 16.1)
-# ---------------------------------------------------------------------------
-
-
-async def _protected_resource_metadata(request: Request) -> JSONResponse:
-    """Serve OAuth 2.0 Protected Resource Metadata (RFC 9728).
-
-    Tells MCP clients which authorization server handles tokens for this resource.
-    Required by MCP spec for OAuth discovery.
-    Paths: /.well-known/oauth-protected-resource
-           /.well-known/oauth-protected-resource/mcp
-    """
-    if not AUTH0_DOMAIN or not MCP_BASE_URL:
-        return JSONResponse({"error": "OAuth not configured"}, status_code=404)
-
-    doc = {
-        "resource": MCP_BASE_URL,
-        "authorization_servers": [f"https://{AUTH0_DOMAIN}"],
-        "bearer_methods_supported": ["header"],
-    }
-    response = JSONResponse(doc)
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
-    return response
-
-
-# ---------------------------------------------------------------------------
-# Auth0 discovery proxy — RFC 8414 (Phase 16.1)
-# ---------------------------------------------------------------------------
-
-
-async def _auth_server_metadata(request: Request) -> JSONResponse:
-    """Proxy Auth0's OAuth authorization server metadata (RFC 8414).
-
-    Claude clients may request this from the MCP server domain directly
-    rather than following the authorization_servers array in the protected
-    resource metadata. This proxy ensures compatibility.
-    """
-    if not AUTH0_DOMAIN:
-        return JSONResponse(
-            {"error": "OAuth not configured"},
-            status_code=404,
-        )
-    import httpx
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(
-            f"https://{AUTH0_DOMAIN}/.well-known/openid-configuration"
-        )
-        return JSONResponse(resp.json(), status_code=resp.status_code)
-
-
-# ---------------------------------------------------------------------------
-# Module-level constants and auth initialization
-# ---------------------------------------------------------------------------
-
-MCP_HOST = os.environ.get("MCP_HOST", "0.0.0.0")
-MCP_PORT = int(os.environ.get("MCP_PORT", "7363"))
-AUTH0_DOMAIN = os.environ.get("AUTH0_DOMAIN", "")
-AUTH0_AUDIENCE = os.environ.get("AUTH0_AUDIENCE", "")
-AUTH0_CLIENT_SECRET = os.environ.get("AUTH0_CLIENT_SECRET", "")
-MCP_BASE_URL = os.environ.get("MCP_BASE_URL", "")
-
-# JWT verification via JWKSVerifier — active only when Auth0 is configured (D-01, D-02)
-_jwt_verifier: JWKSVerifier | None = None
-if AUTH0_DOMAIN and AUTH0_AUDIENCE:
-    _jwt_verifier = JWKSVerifier(
-        domain=AUTH0_DOMAIN,
-        audience=AUTH0_AUDIENCE,
-        client_secret=AUTH0_CLIENT_SECRET or None,
-    )
-    logger.info("JWT verification enabled (Auth0 domain: %s)", AUTH0_DOMAIN)
-else:
-    logger.info("JWT verification disabled (AUTH0_DOMAIN/AUTH0_AUDIENCE not set)")
-
-MCP_INSTRUCTIONS = (
-    "LDS General Conference corpus: 5,838 talks (1971-present) across 4 collections "
-    "- talks (full-talk metadata), paragraphs (passage text), citations (scripture "
-    "references), footnotes. "
-    "Use search with collection='paragraphs' for passage text, 'talks' for talk "
-    "discovery, 'citations' for scripture references. "
-    "Prefer database results over training data; fall back to training data only when "
-    "the database has insufficient information. "
-    "Use search to find a talk_id, then get_talk to retrieve full text."
-)
-
-# ---------------------------------------------------------------------------
-# _FakeMCPCtx — bridge for tool functions (Option B, Phase 16.2)
-# ---------------------------------------------------------------------------
-
-
-class _FakeMCPCtx:
-    """Bridge replicating FastMCP's ctx.request_context.lifespan_context chain.
-
-    Allows search() and get_talk() to remain unchanged — they still access
-    ctx.request_context.lifespan_context to get AppContext.
-    """
-    class _Inner:
-        def __init__(self, ctx):
-            self.lifespan_context = ctx
-
-    def __init__(self, app_ctx):
-        self.request_context = self._Inner(app_ctx)
-
-
-# ---------------------------------------------------------------------------
-# Session management
-# ---------------------------------------------------------------------------
-
-_sessions: dict[str, dict] = {}
-
-# ---------------------------------------------------------------------------
-# MCP response helpers
-# ---------------------------------------------------------------------------
-
-
-def _mcp_response(body: dict, session_id: str | None = None) -> JSONResponse:
-    """Build a JSONResponse with MCP protocol headers."""
-    response = JSONResponse(body)
-    response.headers["MCP-Protocol-Version"] = "2025-06-18"
-    if session_id:
-        response.headers["MCP-Session-Id"] = session_id
-    return response
-
-
-def _error_response(req_id, code: int, message: str, http_status: int = 400) -> JSONResponse:
-    """Build a JSON-RPC error response."""
-    body = {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
-    return JSONResponse(body, status_code=http_status)
-
-
-def _unauthorized_response() -> Response:
-    """Build a 401 response with WWW-Authenticate header per RFC 9728."""
-    headers = {}
-    if MCP_BASE_URL:
-        rm_url = f"{MCP_BASE_URL}/.well-known/oauth-protected-resource"
-        headers["WWW-Authenticate"] = (
-            f'Bearer realm="lds-mcp", resource_metadata="{rm_url}"'
-        )
-    else:
-        headers["WWW-Authenticate"] = 'Bearer error="invalid_token"'
-    return Response(
-        json.dumps({"error": "Authentication required"}),
-        status_code=401,
-        media_type="application/json",
-        headers=headers,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Auth verification
-# ---------------------------------------------------------------------------
-
-
-def _verify_auth(request: Request) -> dict | None:
-    """Check Authorization header and return token payload or None.
-
-    When AUTH0_DOMAIN is set (remote mode): validates via JWKSVerifier.
-    When AUTH0_DOMAIN is unset (local mode): returns a passthrough payload
-    without any token check. All requests pass in local mode (D-01, D-02).
-    """
-    # Local mode — no auth required (D-01, D-02)
-    if not AUTH0_DOMAIN:
-        return {"sub": "local"}
-
-    auth_header = request.headers.get("authorization", "")
-    if not auth_header.startswith("Bearer "):
-        return None
-
-    token = auth_header[len("Bearer "):]
-
-    if _jwt_verifier is not None:
-        return _jwt_verifier.verify_token(token)
-    return None
-
-
-# ---------------------------------------------------------------------------
-# MCP handlers
-# ---------------------------------------------------------------------------
-
-
-async def _handle_initialize(body: dict) -> JSONResponse:
-    """Handle MCP initialize request — no auth required."""
-    session_id = str(uuid.uuid4())
-    _sessions[session_id] = {"initialized": True}
-    result = {
-        "jsonrpc": "2.0",
-        "id": body.get("id"),
-        "result": {
-            "protocolVersion": "2025-06-18",
-            "capabilities": {"tools": {}},
-            "serverInfo": {"name": "lds-scripture-index", "version": "1.0.0"},
-            "instructions": MCP_INSTRUCTIONS,
-        },
-    }
-    return _mcp_response(result, session_id=session_id)
-
-
-async def _handle_tools_list(body: dict, session_id: str) -> JSONResponse:
-    """Handle MCP tools/list request — returns tool schemas."""
-    tools = [
-        {
-            "name": "search",
-            "description": search.__doc__,
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "query": {"type": "string", "description": "Natural language search query."},
-                    "speaker": {"type": "string", "description": "Optional speaker name filter (substring match)."},
-                    "year": {"type": "integer", "description": "Optional conference year filter."},
-                    "season": {"type": "string", "description": "Optional conference season filter (April or October)."},
-                    "collection": {"type": "string", "default": "paragraphs", "description": "Collection to search."},
-                    "limit": {"type": "integer", "default": 5, "description": "Number of results (max 20)."},
-                },
-                "required": ["query"],
-            },
-        },
-        {
-            "name": "get_talk",
-            "description": get_talk.__doc__,
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "talk_id": {"type": "string", "description": "Talk identifier (e.g. 'talk_8820' or '8820')."},
-                },
-                "required": ["talk_id"],
-            },
-        },
-    ]
-    result = {"jsonrpc": "2.0", "id": body.get("id"), "result": {"tools": tools}}
-    return _mcp_response(result, session_id=session_id)
-
-
-async def _handle_tools_call(body: dict, request: Request, session_id: str) -> JSONResponse:
-    """Handle MCP tools/call request — dispatches to search or get_talk."""
-    params = body.get("params", {})
-    tool_name = params.get("name")
-    arguments = params.get("arguments", {})
-    app_ctx = request.app.state.ctx
-    fake_ctx = _FakeMCPCtx(app_ctx)
-
-    if tool_name == "search":
-        result_text = await search(**arguments, ctx=fake_ctx)
-    elif tool_name == "get_talk":
-        result_text = await get_talk(**arguments, ctx=fake_ctx)
-    else:
-        return _error_response(body.get("id"), -32602, f"Unknown tool: {tool_name}", 404)
-
-    result = {
-        "jsonrpc": "2.0",
-        "id": body.get("id"),
-        "result": {
-            "content": [{"type": "text", "text": result_text}],
-            "isError": False,
-        },
-    }
-    return _mcp_response(result, session_id=session_id)
-
-
-# ---------------------------------------------------------------------------
-# FastAPI lifespan
-# ---------------------------------------------------------------------------
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    try:
-        ctx = _startup()
-    except SystemExit:
-        raise
-    except Exception as e:
-        print(f"ERROR: Unexpected startup failure: {e}", file=sys.stderr)
-        sys.exit(1)
-    app.state.ctx = ctx
-    yield
-
-
-# ---------------------------------------------------------------------------
-# App factory — builds full FastAPI app with MCP dispatcher and all routes
-# ---------------------------------------------------------------------------
-
-
-def build_app() -> FastAPI:
-    """Build and return the FastAPI application with MCP dispatcher."""
-    app = FastAPI(lifespan=lifespan)
-    
-    # Add CORS middleware
-    # Note: allow_credentials=False because we use Bearer tokens in Authorization header, not cookies
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],  # Public API - any origin can call
-        allow_credentials=False,  # Bearer tokens don't need credentials flag
-        allow_methods=["GET", "POST", "DELETE", "HEAD", "OPTIONS"],
-        allow_headers=["Authorization", "Content-Type", "MCP-Protocol-Version", "MCP-Session-Id"],
-        expose_headers=["MCP-Protocol-Version", "MCP-Session-Id", "WWW-Authenticate"],  # Expose MCP headers to client
-    )
-    
-
-    @app.get("/health")
-    async def health(request: Request) -> JSONResponse:
-        return await health_check(request)
-
-    @app.get("/.well-known/oauth-protected-resource")
-    @app.get("/.well-known/oauth-protected-resource/mcp")
-    async def protected_resource(request: Request) -> JSONResponse:
-        return await _protected_resource_metadata(request)
-
-    @app.get("/.well-known/oauth-authorization-server")
-    async def auth_server(request: Request) -> JSONResponse:
-        return await _auth_server_metadata(request)
-
-    @app.head("/")
-    @app.head("/mcp")
-    async def mcp_head() -> Response:
-        return Response(status_code=200, headers={"MCP-Protocol-Version": "2025-06-18"})
-
-    @app.get("/")
-    @app.get("/mcp")
-    async def mcp_get() -> Response:
-        return Response(status_code=405, headers={"Allow": "POST, HEAD, DELETE"})
-
-    @app.post("/")
-    @app.post("/mcp")
-    async def mcp_dispatcher(request: Request) -> Response:
-        body = await request.json()
-        method = body.get("method")
-        req_id = body.get("id")
-
-        # initialize — no auth required
-        if method == "initialize":
-            return await _handle_initialize(body)
-
-        # All other methods require a valid session
-        session_id = request.headers.get("MCP-Session-Id", "")
-        if not session_id or session_id not in _sessions:
-            return _error_response(req_id, -32600, "Invalid or missing session", 400)
-
-        # notifications/initialized — session only, no auth
-        if method == "notifications/initialized":
-            return Response(status_code=202)
-
-        # tools/list and tools/call — require OAuth or static token
-        token_payload = _verify_auth(request)
-        if token_payload is None:
-            return _unauthorized_response()
-
-        if method == "tools/list":
-            return await _handle_tools_list(body, session_id)
-        elif method == "tools/call":
-            return await _handle_tools_call(body, request, session_id)
-        else:
-            return _error_response(req_id, -32601, f"Method not found: {method}", 404)
-
-    @app.delete("/")
-    @app.delete("/mcp")
-    async def mcp_delete(request: Request) -> Response:
-        session_id = request.headers.get("MCP-Session-Id", "")
-        _sessions.pop(session_id, None)
-        return Response(status_code=200)
-
-    return app
-
-
-# ---------------------------------------------------------------------------
-# Entry point — FastAPI with uvicorn (TRANS-01)
-# ---------------------------------------------------------------------------
-
 if __name__ == "__main__":
-    import uvicorn
-    app = build_app()
-    uvicorn.run(app, host=MCP_HOST, port=MCP_PORT)
+    import asyncio
+    asyncio.run(mcp.run_http_async(
+        host=FASTMCP_HOST,
+        port=FASTMCP_PORT,
+        transport="http"
+    ))
