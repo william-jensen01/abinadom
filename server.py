@@ -360,7 +360,8 @@ async def search(
 
     # TOOL-01: embed query via Ollama (separate service — fails gracefully if unreachable)
     try:
-        ef = get_embedding_function()
+        ollama_url = resolve_ollama_url()
+        ef = get_embedding_function(url=ollama_url)
         query_vector = ef([query])
     except Exception as e:
         return f"Search unavailable: Ollama is unreachable ({e})."

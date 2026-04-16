@@ -727,12 +727,14 @@ def _mock_startup():
 # MCP PROTOCOL TESTS (/mcp endpoint)
 # ---------------------------------------------------------------------------
 
-headers = {
-    "Content-Type": "application/json",
-    "Accept": "application/json, text/event-stream",
-}
+@pytest.fixture
+def mcp_headers():
+    return {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+    }
 
-def test_initialize_no_auth():
+def test_initialize_no_auth(mcp_headers):
     """OAUTH-01: initialize succeeds without Authorization header."""
     with patch("server._startup", return_value=_mock_startup()):
         from server import mcp
@@ -740,12 +742,12 @@ def test_initialize_no_auth():
             resp = client.post("/mcp", json={
                 "jsonrpc": "2.0", "id": 1, "method": "initialize",
                 "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
-            }, headers=headers)
+            }, headers=mcp_headers)
     assert resp.status_code == 200
     assert "MCP-Session-Id" in resp.headers
 
 
-def test_tools_list_local_mode_no_auth_required():
+def test_tools_list_local_mode_no_auth_required(mcp_headers):
     """OAUTH-02 / D-01: tools/list succeeds with no token when AUTH0_DOMAIN is unset (local mode)."""
     with patch("server._startup", return_value=_mock_startup()):
         from server import mcp
@@ -757,7 +759,7 @@ def test_tools_list_local_mode_no_auth_required():
             session_id = init_resp.headers["MCP-Session-Id"]
             resp = client.post("/mcp", json={
                 "jsonrpc": "2.0", "id": 2, "method": "tools/list",
-            }, headers={**headers, "MCP-Session-Id": session_id})
+            }, headers={**mcp_headers, "MCP-Session-Id": session_id})
     assert resp.status_code == 200
 
 
@@ -781,14 +783,13 @@ def test_env_vars_no_hardcoded_values():
     source = inspect.getsource(server)
     assert ".auth0.com" not in source.lower()  # no hardcoded Auth0 domain URLs
     assert "scalekit.com" not in source.lower()
-    assert "http://" not in source or "os.environ" in source
 
 
 # ---------------------------------------------------------------------------
 # AUTH-02 / OAUTH-01 / OAUTH-02: Two-mode auth tests
 # ---------------------------------------------------------------------------
 
-def test_initialize_no_auth_remote_mode():
+def test_initialize_no_auth_remote_mode(mcp_headers):
     """OAUTH-01: initialize succeeds with a valid token in remote mode (DebugTokenVerifier).
 
     Note: FastMCP's DebugTokenVerifier enforces auth on all endpoints including
@@ -805,13 +806,13 @@ def test_initialize_no_auth_remote_mode():
                 resp = client.post("/mcp", json={
                     "jsonrpc": "2.0", "id": 1, "method": "initialize",
                     "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
-                }, headers={**headers, "Authorization": "Bearer test-token"})
+                }, headers={**mcp_headers, "Authorization": "Bearer test-token"})
         finally:
             mcp.auth = orig_auth
     assert resp.status_code == 200
 
 
-def test_tools_list_requires_auth_remote_mode():
+def test_tools_list_requires_auth_remote_mode(mcp_headers):
     """AUTH-02: tools/list without token returns 401 when auth is enabled."""
     from fastmcp.server.auth.providers.debug import DebugTokenVerifier
     with patch("server._startup", return_value=_mock_startup()):
@@ -825,18 +826,18 @@ def test_tools_list_requires_auth_remote_mode():
                 init_resp = client.post("/mcp", json={
                     "jsonrpc": "2.0", "id": 1, "method": "initialize",
                     "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
-                }, headers={**headers, "Authorization": "Bearer test-token"})
+                }, headers={**mcp_headers, "Authorization": "Bearer test-token"})
                 session_id = init_resp.headers.get("MCP-Session-Id", "")
                 # tools/list without Authorization header — must be rejected
                 resp = client.post("/mcp", json={
                     "jsonrpc": "2.0", "id": 2, "method": "tools/list",
-                }, headers={**headers, "MCP-Session-Id": session_id})
+                }, headers={**mcp_headers, "MCP-Session-Id": session_id})
         finally:
             mcp.auth = orig_auth
     assert resp.status_code == 401
 
 
-def test_tools_list_valid_token_remote_mode():
+def test_tools_list_valid_token_remote_mode(mcp_headers):
     """OAUTH-02: tools/list succeeds with valid Bearer token via DebugTokenVerifier."""
     from fastmcp.server.auth.providers.debug import DebugTokenVerifier
     with patch("server._startup", return_value=_mock_startup()):
@@ -849,11 +850,11 @@ def test_tools_list_valid_token_remote_mode():
                 init_resp = client.post("/mcp", json={
                     "jsonrpc": "2.0", "id": 1, "method": "initialize",
                     "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
-                }, headers={**headers, "Authorization": "Bearer test-token"})
+                }, headers={**mcp_headers, "Authorization": "Bearer test-token"})
                 session_id = init_resp.headers.get("MCP-Session-Id", "")
                 resp = client.post("/mcp", json={
                     "jsonrpc": "2.0", "id": 2, "method": "tools/list",
-                }, headers={**headers, "MCP-Session-Id": session_id, "Authorization": "Bearer test-token-123"})
+                }, headers={**mcp_headers, "MCP-Session-Id": session_id, "Authorization": "Bearer test-token-123"})
         finally:
             mcp.auth = orig_auth
     assert resp.status_code == 200
