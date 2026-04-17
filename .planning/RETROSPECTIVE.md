@@ -104,15 +104,66 @@
 
 ---
 
+## Milestone: v3.0 — Remote MCP
+
+**Shipped:** 2026-04-17
+**Phases:** 9 (13, 14, 15, 16, 16.1, 16.2, 17, 18, 19) | **Plans:** 26 | **Duration:** 14 days (2026-04-03 → 2026-04-17)
+
+### What Was Built
+
+- Streamable HTTP transport replacing stdio; `MCP_HOST`/`MCP_PORT` env vars; `GET /health` with live Ollama + ChromaDB checks
+- Bearer token auth module (KeyStore ABC, SqliteKeyStore, BearerAuthMiddleware, manage_keys.py CLI) — later replaced by OAuth
+- Docker Compose deployment: Dockerfile (python:3.12-slim), docker-compose.yml (bind mounts, healthcheck), .env.example
+- Caddy + cloudflared infra Compose stack: TLS termination and stable public HTTPS URL via Cloudflare Tunnel
+- OAuth 2.1 convergence across 4 phases (Auth0 JWKSVerifier → FastAPI JSON-RPC dispatcher → ScaleKit built-in provider)
+- Operator docs: connection guide, self-deploy guide, root README entry point
+- Dead code cleanup: SqliteKeyStore, BearerAuthMiddleware, manage_keys.py, static bearer token path all removed in Phase 18
+- Native FastMCP 3.2.4 server with two-mode ScalekitProvider auth (local passthrough / remote OAuth); 449 tests green; FastAPI removed
+
+### What Worked
+
+- **Two-mode auth pattern** — checking SCALEKIT_ env vars at startup to select auth mode was a clean mental model; local dev needs zero config, production is fully locked down
+- **infra/ as separate Compose stack** — decoupling proxy (Caddy + cloudflared) from app (mcp-server) meant each could be restarted independently; external Docker network pattern held up perfectly
+- **ScaleKit built-in provider** — once discovered, replaced hundreds of lines of manual JWT wiring with a few constructor params; the right abstraction was worth waiting for
+- **Phase 18 dead code cleanup** — deleting the entire static bearer token path (4 files) before archival improved test clarity dramatically and removed a future maintenance burden
+
+### What Was Inefficient
+
+- **Auth strategy pivots** — four distinct approaches tried before ScaleKit (Auth0 JWKSVerifier, manual JWT, mcpauth resource-server mode, FastAPI JSON-RPC dispatcher) generated significant rework across Phases 16.1 and 16.2
+- **Phase 16.2 FastAPI rewrite was superseded** — the full FastAPI + JSON-RPC dispatcher (Phase 16.2) was rendered obsolete by the FastMCP + ScaleKit native approach (Phase 19); ~2 phases of work were thrown away
+- **Static bearer tokens (Phase 14) fully deleted (Phase 18)** — implementing then removing the entire SqliteKeyStore auth path was a direction change that could have been avoided with earlier OAuth research
+
+### Patterns Established
+
+- Two-mode server: `auth=None` when SCALEKIT_ vars absent, `ScalekitProvider(...)` when present — single binary, two operational modes
+- `DebugTokenVerifier` for local testing without ScaleKit credentials — test infrastructure mirrors production auth surface
+- infra/ Compose stack owns the `proxy` Docker network; app Compose stack joins as `external: true` — clean multi-stack pattern
+- Delete dead auth code before milestone archival — never carry superseded auth paths forward
+
+### Key Lessons
+
+- OAuth integration is more complex than it looks — reserve 3–4 phases for auth strategy convergence when the OAuth provider is unknown at milestone start
+- Native framework integrations (ScalekitProvider) are worth waiting for over manual wiring; research the provider's SDK before committing to a custom approach
+- Static API keys are a useful milestone 1 stepping stone but should be scoped as temporary from the start if OAuth is the end goal
+- Cloudflare Tunnel + Caddy is an excellent pattern for exposing a home-hosted server: zero port forwarding, TLS handled at edge, IP hidden
+
+### Cost Observations
+
+- Model mix: sonnet-heavy for execution, opus for planning and research
+- Sessions: ~15 sessions over 14 days
+- Notable: Auth convergence (Phases 16.1 + 16.2 + 18) was the most expensive stretch — 12 plans across 3 phases, significant rework; Phase 19 was comparatively fast once the right abstraction was identified
+
+---
+
 ## Cross-Milestone Trends
 
-| Metric | v1.0 | v2.0 |
-|--------|------|------|
-| Duration | 9 days | 2 days |
-| Phases | 8 | 5 (incl. 9.1) |
-| Plans | 21 | 7 |
-| Files changed | 52 | 46 |
-| LOC added | +10,357 | +7,042 |
-| LOC removed | -744 | -97 |
-| Bugs fixed | 15 | 0 (new system) |
-| Tests added | ~290 | ~38 (server) |
+| Metric | v1.0 | v2.0 | v3.0 |
+|--------|------|------|------|
+| Duration | 9 days | 2 days | 14 days |
+| Phases | 8 | 5 (incl. 9.1) | 9 (incl. 16.1, 16.2) |
+| Plans | 21 | 7 | 26 |
+| Files changed | 52 | 46 | 165 |
+| LOC added | +10,357 | +7,042 | +21,389 |
+| LOC removed | -744 | -97 | -845 |
+| Bugs fixed | 15 | 0 (new system) | 0 (direction changes) |
+| Tests added | ~290 | ~38 (server) | ~411 (38 → 449) |

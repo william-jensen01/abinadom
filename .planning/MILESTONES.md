@@ -1,5 +1,20 @@
 # Milestones
 
+## v3.0 Remote MCP (Shipped: 2026-04-17)
+
+**Phases completed:** 9 phases, 26 plans, 32 tasks
+
+**Key accomplishments:**
+
+- `scripts/manage_keys.py` operator CLI — create/revoke/list API keys with clean error handling and token-shown-once guarantee
+- docker-compose.yml with bind-mount volumes, 60s-start healthcheck, and host.docker.internal; .env.example documenting the 5-variable operator contract
+- Shared infra Compose stack with Caddy (reverse proxy) and cloudflared (Cloudflare Tunnel), MCP server wired in via Docker external network with ports removed
+- Complete operator walkthrough from zero (no Cloudflare account) to HTTPS endpoint via Caddy + Cloudflare Tunnel, with human verification checkpoint pending
+- Auth0 tenant configured and Claude OAuth flow verified end-to-end against live server at lds-sci.williambjensen.com
+- Root README.md created as the project entry point with tools description, Guides table, Quick Start, and Tech Stack
+
+---
+
 ## v1.0 General Conference Pipeline (Shipped: 2026-03-27)
 
 **Phases completed:** 8 phases, 21 plans, 18 tasks
