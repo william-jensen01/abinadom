@@ -9,7 +9,7 @@ Deploy the LDS MCP server on a Linux machine with Docker Compose.
 - Linux server (Ubuntu 22.04+ recommended)
 - Docker Engine and Docker Compose v2 (`docker compose version` prints v2.x+)
 - Ollama installed and running on the host with the `nomic-embed-text` model pulled (`ollama pull nomic-embed-text`)
-- A populated ChromaDB directory (from running the pipeline, or copied from another machine)
+- A running ChromaDB instance accessible via URL (e.g. `http://chromadb.yourdomain.com:8000`)
 - Git
 
 ---
@@ -20,6 +20,8 @@ Deploy the LDS MCP server on a Linux machine with Docker Compose.
 git clone https://github.com/YOUR_USERNAME/lds-mcp.git
 cd lds-mcp
 ```
+
+The MCP server image is published at `h5wyxaa9vrvo/lds-mcp:latest` and is pulled automatically by Docker Compose — no local build required.
 
 ---
 
@@ -35,18 +37,15 @@ All operator-facing variables with their meanings:
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `OLLAMA_URL` | Ollama base URL (use `host.docker.internal` for host-side Ollama) | `http://host.docker.internal:11434` |
-| `MCP_HOST` | Bind address inside container | `0.0.0.0` |
-| `MCP_PORT` | Server port inside container | `7363` |
-| `CHROMADB_DATA_PATH` | Host path to ChromaDB data directory | `/home/user/data/chromadb` |
-| `AUTH0_DOMAIN` | Auth0 tenant domain (for OAuth) | `your-tenant.auth0.com` |
-| `AUTH0_AUDIENCE` | Auth0 API audience | `https://mcp.yourdomain.com` |
+| `CHROMADB_HOST` | ChromaDB server hostname or IP | `chromadb.yourdomain.com` |
+| `CHROMADB_PORT` | ChromaDB server port | `8000` |
+| `FASTMCP_HOST` | Bind address inside container | `0.0.0.0` |
+| `FASTMCP_PORT` | Server port inside container | `7363` |
+| `SCALEKIT_ENVIRONMENT_URL` | ScaleKit environment URL | `https://yourenv.scalekit.com` |
+| `SCALEKIT_RESOURCE_ID` | ScaleKit MCP resource ID | `rid_...` |
 | `MCP_BASE_URL` | Public URL of the MCP server | `https://mcp.yourdomain.com` |
 
-> **Note:** `CHROMADB_DATA_PATH` is a host-side directory bind-mounted into the container. It must exist before starting the stack:
->
-> ```bash
-> mkdir -p /home/user/data/chromadb
-> ```
+> **ChromaDB:** The server connects to ChromaDB over HTTP using `CHROMADB_HOST` and `CHROMADB_PORT`. No local data directory or volume mount is needed — ChromaDB must be running and reachable before starting the MCP server.
 
 > **Note on Ollama:** On Linux, `host.docker.internal` resolves to the host gateway via the `extra_hosts` setting in `docker-compose.yml`. This requires Ollama to listen on `0.0.0.0` (not just `127.0.0.1`). To check: `ss -tlnp | grep 11434`.
 
@@ -62,7 +61,7 @@ Verify the container is running and healthy:
 
 ```bash
 docker compose ps        # mcp-server should show "Up" / "healthy"
-docker compose logs -f   # watch for "Uvicorn running on http://0.0.0.0:7363"
+docker compose logs -f   # watch for FastMCP startup output
 ```
 
 Test locally:
@@ -95,36 +94,36 @@ Expected: HTTP 200 with a JSON body like `{"status": "healthy", ...}`.
 
 ---
 
-## Step 5: Configure Auth0
+## Step 5: Configure ScaleKit (Optional)
 
-Auth0 provides the OAuth 2.0 flow for Claude.ai, Claude Desktop, and other OAuth-capable clients.
+ScaleKit provides the OAuth 2.1 flow for Claude.ai, Claude Desktop, and other OAuth-capable MCP clients.
 
-**Without Auth0 configured (local mode):** The server runs with no authentication — any request to `tools/list` and `tools/call` is accepted. Use this for local testing only.
+**Without ScaleKit configured (local mode):** The server runs with no authentication — any request to `tools/list` and `tools/call` is accepted. Use this for local testing only.
 
-**With Auth0 configured (remote/hosted mode):** All tool requests require a valid Auth0 JWT. The OAuth discovery endpoints are served at `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`.
+**With ScaleKit configured (remote/hosted mode):** All tool requests require a valid ScaleKit JWT. The OAuth discovery endpoints are served at `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`.
 
-To configure Auth0:
+To configure ScaleKit:
 
-1. Create an Auth0 tenant at <https://manage.auth0.com>
-2. Create an API with the identifier matching your `AUTH0_AUDIENCE` value (e.g. `https://mcp.yourdomain.com`)
-3. Set `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`, and `MCP_BASE_URL` in `.env`
+1. Create an MCP Server resource in the [ScaleKit Dashboard](https://docs.scalekit.com/mcp/overview/)
+2. Note the Resource ID → `SCALEKIT_RESOURCE_ID`
+3. Set `SCALEKIT_ENVIRONMENT_URL`, `SCALEKIT_RESOURCE_ID`, and `MCP_BASE_URL` in `.env`
 4. Restart the MCP stack:
    ```bash
    docker compose down && docker compose up -d
    ```
+
+Leave all three ScaleKit variables blank to run in unauthenticated local mode.
 
 ---
 
 ## Updating
 
 ```bash
-cd /path/to/lds-mcp
-git pull
-docker compose build
+docker compose pull
 docker compose up -d
 ```
 
-If schema or data changes require a pipeline re-run, follow the pipeline instructions in `docs/PIPELINE_SPEC.md`.
+No rebuild is required — the published image at `h5wyxaa9vrvo/lds-mcp:latest` is updated on each release.
 
 ---
 
@@ -135,12 +134,15 @@ Check logs for the specific error:
 ```bash
 docker compose logs mcp-server
 ```
-Common causes: `CHROMADB_DATA_PATH` does not exist on the host, or Ollama is unreachable at the configured `OLLAMA_URL`.
+Common causes: ChromaDB is unreachable at the configured `CHROMADB_HOST`/`CHROMADB_PORT`, or Ollama is unreachable at the configured `OLLAMA_URL`.
 
 **2. Health returns unhealthy**
 Two common causes:
 - Ollama model not loaded: run `ollama pull nomic-embed-text` on the host
-- ChromaDB collections are empty: the pipeline must be run before starting the server
+- ChromaDB is unreachable — verify it's running:
+  ```bash
+  curl http://<CHROMADB_HOST>:<CHROMADB_PORT>/api/v1/heartbeat
+  ```
 
 **3. `network proxy declared as external, but could not be found`**
 The infra stack must be running before the MCP stack starts. Run:
@@ -155,3 +157,6 @@ On Linux, `host.docker.internal` requires the `extra_hosts: host-gateway` entry 
 ss -tlnp | grep 11434
 ```
 If Ollama is only on `127.0.0.1`, edit `/etc/systemd/system/ollama.service` to set `Environment="OLLAMA_HOST=0.0.0.0"` and restart: `sudo systemctl restart ollama`.
+
+**5. OAuth / ScaleKit not working**
+Ensure all three ScaleKit variables are set (`SCALEKIT_ENVIRONMENT_URL`, `SCALEKIT_RESOURCE_ID`, `MCP_BASE_URL`) and the server was restarted after adding them. Check `docker compose logs mcp-server` for JWT validation errors.

@@ -1,10 +1,8 @@
 services:
   mcp-server:
-    build: .
+    image: h5wyxaa9vrvo/lds-mcp:latest
     env_file:
       - .env
-    volumes:
-      - ${CHROMADB_DATA_PATH}:/data/chromadb
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7363/health"]
       interval: 30s
@@ -12,8 +10,6 @@ services:
       retries: 3
       start_period: 60s
     restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     networks:
       - proxy
 
