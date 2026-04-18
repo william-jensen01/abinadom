@@ -16,5 +16,3 @@ data/
 
 .env
 infra/.env
-
-.planning/
