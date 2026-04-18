@@ -1,96 +1,62 @@
-# Requirements: BYU Scripture Citation Index RAG System
+# Requirements — v4.0 Vector DB Migration
 
-**Defined:** 2026-04-03
-**Core Value:** All LDS content searchable by meaning — find how scriptures are cited, applied, and discussed across decades of conference talks and discourse, with full referential integrity between talks, paragraphs, citations, and footnotes.
+## Milestone v4.0 Requirements
 
-## v3.0 Requirements
+### Benchmark Framework
 
-Requirements for the Remote MCP milestone. Each maps to roadmap phases.
+- [ ] **BENCH-01**: User can transform talk data into ChromaDB-safe flat metadata and native rich metadata via shared `flatten_metadata` / `rich_metadata` / `prepare_*` functions
+- [ ] **BENCH-02**: User can load talk bundles into a benchmark ChromaDB instance via a benchmark-specific ChromaDB loader
+- [ ] **BENCH-03**: User can load talk bundles into Weaviate (with schema creation and UUID mapping) via a Weaviate loader
+- [ ] **BENCH-04**: User can load talk bundles into Qdrant (with collection creation and payload indexes) via a Qdrant loader
+- [ ] **BENCH-05**: User can measure upsert speed, query latency (p50/p95/p99), concurrency throughput, and memory delta via metric dataclasses and `recall_at_k`
+- [ ] **BENCH-06**: User can run a canonical query set (paragraph + citation queries with and without filters) as the standard workload for all three DBs
+- [ ] **BENCH-07**: User can run the full benchmark from CLI (`benchmark/runner.py`) and receive a structured JSON report
 
-### Transport
+### Evaluation
 
-- [x] **TRANS-01**: User can connect any MCP client (Claude.ai, ChatGPT, etc.) via Streamable HTTP URL
-- [x] **TRANS-02**: Operator can verify server health via GET /health endpoint
+- [ ] **EVAL-01**: User can start ChromaDB, Weaviate, and Qdrant locally via a single Docker Compose file
+- [ ] **EVAL-02**: User can run a full benchmark (upsert, query latency, concurrency, memory) against all three DBs in a single command
+- [ ] **EVAL-03**: Each DB is fully populated with all 5,838 talks before query and concurrency benchmarks run, ensuring comparable results
+- [ ] **EVAL-04**: User can see recall@k10 and recall@k50 comparing Weaviate vs ChromaDB and Qdrant vs ChromaDB
+- [ ] **EVAL-05**: User can read a written decision report identifying the winning DB with rationale
 
-### Auth
+### Migration
 
-- **AUTH-01**: *(Removed — Phase 18)* Static key issuance removed; Auth0 handles authentication for remote deployments. `manage_keys.py` and `SqliteKeyStore` deleted.
-- [x] **AUTH-02**: Server rejects requests without a valid bearer token with 401 — Remote mode (AUTH0_DOMAIN set): per-method auth in dispatcher returns 401 for missing/invalid JWT. Local mode: unauthenticated (by design, localhost only).
-- **AUTH-03**: *(Removed — Phase 18)* Usage logging via SqliteKeyStore deleted. Auth0 tenant logs provide equivalent audit trail for remote deployments.
-
-### OAuth
-
-- [x] **OAUTH-01**: Claude Desktop (or Claude Code CLI) completes OAuth 2.1 handshake against the MCP server via Auth0 — delivered Phase 16.2
-- [x] **OAUTH-02**: Server validates Auth0-issued JWTs (single auth path; static bearer token fallback removed in Phase 18)
-- [x] **OAUTH-03**: Server serves `/.well-known/oauth-protected-resource/mcp` (RFC 9728) and proxies `/.well-known/oauth-authorization-server` to Auth0 — delivered Phase 16.2
-
-### Deployment
-
-- [x] **DEPLOY-01**: Operator can run full stack via `docker compose up` (mcp-server + ollama)
-- [x] **DEPLOY-02**: All secrets and paths configurable via .env file — no hardcoded values
-- [x] **DEPLOY-03**: Caddy reverse proxy handles TLS termination inside Compose stack
-- [x] **DEPLOY-04**: cloudflared in Compose stack exposes stable public URL via Cloudflare Tunnel
-
-### Docs
-
-- [x] **DOCS-01**: User can connect Claude.ai, ChatGPT, or any MCP client using the connection guide — delivered Phase 17
-- [x] **DOCS-02**: Operator can deploy stack on a new machine following the self-deploy guide — delivered Phase 17, updated Phase 18
-- [x] **DOCS-03**: *(Scope changed — Phase 18)* Key management guide removed (static keys deleted). OAuth 2.0 via Auth0 is the auth model for remote deployments.
+- [ ] **MIGR-01**: User can run the full pipeline against the winning DB via an updated `scripts/run_pipeline.py` (Phase 6 loader swapped)
+- [ ] **MIGR-02**: MCP server uses the winning DB client at runtime (server.py startup validation updated)
+- [ ] **MIGR-03**: Production Docker Compose stack uses the winning DB service (docker-compose.yml updated, .env.example reflects new vars)
+- [ ] **MIGR-04**: Winning DB is populated with all 5,838 GC talks and MCP `search` + `get_talk` tools verified end-to-end
 
 ## Future Requirements
 
-Deferred to future milestones. Tracked but not in current roadmap.
-
-### Auth
-
-- **AUTH-04**: OAuth 2.1 authorization flow (MCP spec compliant) — upgrade path from bearer tokens
-- **AUTH-05**: Per-user rate limiting
-- **AUTH-06**: Usage query / admin endpoint (view stats per user)
-
-### Content
-
-- **CONT-01**: Journal of Discourse content indexed and searchable — Milestone 4
-- **CONT-02**: Standard LDS scriptures indexed and searchable — Milestone 5+
+- Journal of Discourse and scriptures content — future milestones
+- Multi-user / hosted deployment support
+- Re-embedding with an updated model (if nomic-embed-text is superseded)
 
 ## Out of Scope
 
-| Feature | Reason |
-|---------|--------|
-| Custom Authorization Server | Auth0 handles all AS responsibilities (D-01) |
-| stdio fallback | Desktop use case retired; HTTP transport replaces it |
-| Usage admin endpoint | Nice-to-have; logs in SQLite are accessible directly |
-| Rate limiting | Audience is trusted users; defer until abuse is observed |
-| Remote/hosted ChromaDB | Local volume mount sufficient; VPS migration is a copy operation |
-| Web UI for key management | CLI/script sufficient for operator |
-| Per-user scopes / RBAC | All users get same tools; defer until differentiation needed |
+- Supporting multiple vector DBs in production simultaneously — one DB in production at a time; ChromaDB removed after migration
+- Re-embedding — same Ollama nomic-embed-text model used throughout benchmark and migration
+- Migrating SQLite — read-only source of truth stays unchanged
+- Journal of Discourse or scriptures content — future milestones
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
-
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| TRANS-01 | Phase 13 | Complete |
-| TRANS-02 | Phase 13 | Complete |
-| AUTH-01 | Phase 14 | Removed (Phase 18) |
-| AUTH-02 | Phase 14 → Phase 18 | Complete |
-| AUTH-03 | Phase 14 | Removed (Phase 18) |
-| OAUTH-01 | Phase 16.2 | Complete |
-| OAUTH-02 | Phase 16.2 | Complete |
-| OAUTH-03 | Phase 16.2 | Complete |
-| DEPLOY-01 | Phase 15 | Complete |
-| DEPLOY-02 | Phase 15 | Complete |
-| DEPLOY-03 | Phase 16 | Complete |
-| DEPLOY-04 | Phase 16 | Complete |
-| DOCS-01 | Phase 17 | Complete |
-| DOCS-02 | Phase 17 | Complete |
-| DOCS-03 | Phase 17 → Phase 18 | Complete (scope changed) |
-
-**Coverage:**
-- v3.0 requirements: 15 total
-- Mapped to phases: 15 (100%)
-- Unmapped: 0
-
----
-*Requirements defined: 2026-04-03*
-*Last updated: 2026-04-14 — Phase 18 cleanup: AUTH-01/AUTH-03 removed, all OAUTH/DOCS marked complete*
+| REQ-ID   | Phase | Notes |
+|----------|-------|-------|
+| BENCH-01 | 20    | Shared transforms — foundation for all loaders |
+| BENCH-02 | 21    | ChromaDB benchmark loader |
+| BENCH-03 | 21    | Weaviate loader (schema + UUID + batch) |
+| BENCH-04 | 21    | Qdrant loader (collections + payload indexes) |
+| BENCH-05 | 20    | Metrics dataclasses + recall_at_k |
+| BENCH-06 | 20    | Canonical query set |
+| BENCH-07 | 22    | benchmark/runner.py CLI |
+| EVAL-01  | 20    | Docker Compose for all 3 DBs |
+| EVAL-02  | 23    | Full benchmark run in one command |
+| EVAL-03  | 23    | Load gate — all 5,838 talks before query benchmarks |
+| EVAL-04  | 23    | recall@k10 and recall@k50 comparisons |
+| EVAL-05  | 23    | Written decision report with winner + rationale |
+| MIGR-01  | 24    | scripts/run_pipeline.py Phase 6 loader swapped |
+| MIGR-02  | 24    | server.py winning DB client + startup validation |
+| MIGR-03  | 24    | docker-compose.yml + .env.example updated |
+| MIGR-04  | 24    | Full pipeline re-run + MCP smoke test |

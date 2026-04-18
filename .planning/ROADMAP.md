@@ -5,6 +5,7 @@
 - ✅ **v1.0 General Conference Pipeline** — Phases 1–8 (shipped 2026-03-27)
 - ✅ **v2.0 MCP Server** — Phases 9–12 (shipped 2026-04-03)
 - ✅ **v3.0 Remote MCP** — Phases 13–19 (shipped 2026-04-17)
+- 🔄 **v4.0 Vector DB Migration** — Phases 20–24 (in progress)
 
 ## Phases
 
@@ -53,3 +54,90 @@ Full details: `.planning/milestones/v2.0-ROADMAP.md`
 Full details: `.planning/milestones/v3.0-ROADMAP.md`
 
 </details>
+
+## v4.0 Vector DB Migration (In Progress)
+
+| # | Phase | Goal | Requirements | Success Criteria |
+|---|-------|------|--------------|------------------|
+| 20 | Benchmark Infrastructure & Framework | All three DBs running locally; shared transforms, metrics, and canonical queries ready for loaders | EVAL-01, BENCH-01, BENCH-05, BENCH-06 | 4 |
+| 21 | DB Loaders | ChromaDB, Weaviate, and Qdrant each accept a talk bundle and persist it correctly | BENCH-02, BENCH-03, BENCH-04 | 3 |
+| 22 | Benchmark Runner | Single CLI command orchestrates end-to-end benchmark and emits a structured JSON report | BENCH-07 | 3 |
+| 23 | Benchmark Execution & Decision | All three DBs fully loaded and benchmarked; decision report names the winning DB | EVAL-02, EVAL-03, EVAL-04, EVAL-05 | 4 |
+| 24 | Production Migration | Production MCP server, pipeline loader, and Docker stack run on the winning DB; all 5,838 talks loaded and search verified | MIGR-01, MIGR-02, MIGR-03, MIGR-04 | 4 |
+
+- [ ] **Phase 20: Benchmark Infrastructure & Framework** — Docker Compose for all 3 DBs running locally; shared transform, metrics, and canonical query modules ready
+- [ ] **Phase 21: DB Loaders** — ChromaDB, Weaviate, and Qdrant loaders each accept a talk bundle and persist it correctly
+- [ ] **Phase 22: Benchmark Runner** — `benchmark/runner.py` CLI orchestrates a full benchmark run and emits a structured JSON report
+- [ ] **Phase 23: Benchmark Execution & Decision** — Full benchmark run completes; recall@k computed; written decision report names the winner
+- [ ] **Phase 24: Production Migration** — Pipeline loader, MCP server, and Docker stack all running on the winning DB with all 5,838 talks loaded
+
+### Phase Details
+
+#### Phase 20: Benchmark Infrastructure & Framework
+**Goal**: Developer can start all three vector DBs locally and has shared code (transforms, metrics, canonical queries) that all loaders and the runner will depend on
+**Depends on**: Phase 19 (v3.0 shipped)
+**Requirements**: EVAL-01, BENCH-01, BENCH-05, BENCH-06
+**Success Criteria** (what must be TRUE):
+  1. `docker compose up` in the benchmark directory starts ChromaDB, Weaviate, and Qdrant with no errors and all three pass a health check
+  2. `flatten_metadata` and `rich_metadata` (and `prepare_*` variants) are callable and produce the correct output shape for a sample talk bundle
+  3. Metric dataclasses and `recall_at_k` are importable and return correct results against a synthetic ranked list
+  4. Canonical query set is loadable as a Python list and covers both paragraph and citation queries, with and without metadata filters
+**Plans**: TBD
+**UI hint**: no
+
+#### Phase 21: DB Loaders
+**Goal**: Each of the three vector DBs has a dedicated loader that accepts a talk bundle and writes it to the DB using the shared transforms from Phase 20
+**Depends on**: Phase 20
+**Requirements**: BENCH-02, BENCH-03, BENCH-04
+**Success Criteria** (what must be TRUE):
+  1. ChromaDB benchmark loader inserts a sample talk bundle and a subsequent query returns the expected paragraph record
+  2. Weaviate loader creates the schema, maps UUIDs, and batch-loads a sample talk bundle; a query returns the expected record
+  3. Qdrant loader creates the collection, sets payload indexes, and batch-loads a sample talk bundle; a query returns the expected record
+**Plans**: TBD
+**UI hint**: no
+
+#### Phase 22: Benchmark Runner
+**Goal**: Developer can run a single CLI command against any of the three DBs and receive a structured JSON report covering all metric dimensions
+**Depends on**: Phase 21
+**Requirements**: BENCH-07
+**Success Criteria** (what must be TRUE):
+  1. `python benchmark/runner.py --help` shows the expected arguments (DB targets, upsert-limit, query-limit, output path)
+  2. Running the runner with `--upsert-limit 10 --query-limit 10` against a single DB completes without error and writes a JSON file with upsert speed, p50/p95/p99 latency, concurrency throughput, and memory delta fields
+  3. Running the runner against all three DBs produces three comparable JSON report files with identical schema
+  4. With a small dataset, the runner enforces the load gate — upsert phase completes before any query benchmarks execute; no query is issued before all target talks are loaded
+**Plans**: TBD
+**UI hint**: no
+
+#### Phase 23: Benchmark Execution & Decision
+**Goal**: All three DBs are fully loaded with 5,838 talks, benchmarks have run across all metric dimensions, recall@k is computed, and a written decision report names the winning DB with rationale
+**Depends on**: Phase 22
+**Requirements**: EVAL-02, EVAL-03, EVAL-04, EVAL-05
+**Success Criteria** (what must be TRUE):
+  1. A single command triggers the full benchmark pipeline (upsert, latency, concurrency, memory) against all three DBs and completes without manual intervention
+  2. All three DBs show 5,838 talks loaded before any query or concurrency benchmarks execute (load gate enforced in runner)
+  3. recall@k10 and recall@k50 scores are present in the JSON report for Weaviate vs ChromaDB and Qdrant vs ChromaDB comparisons
+  4. A written decision report (`docs/benchmark/DECISION.md` or equivalent) identifies the winning DB, shows the structured comparison table, and states the rationale
+**Plans**: TBD
+**UI hint**: no
+
+#### Phase 24: Production Migration
+**Goal**: The production MCP server, the full pipeline, and the Docker deployment stack all run on the winning vector DB; the old ChromaDB dependency is removed; all 5,838 GC talks are searchable via MCP tools
+**Depends on**: Phase 23
+**Requirements**: MIGR-01, MIGR-02, MIGR-03, MIGR-04
+**Success Criteria** (what must be TRUE):
+  1. `scripts/run_pipeline.py` completes a full 5,838-talk pipeline run writing to the winning DB with no ChromaDB references remaining in the Phase 6 loader path
+  2. `server.py` starts with the winning DB client, passes startup validation, and `GET /health` reports the winning DB as healthy
+  3. `docker compose up` in the project root starts the MCP server with the winning DB service; `.env.example` reflects the updated variable contract
+  4. `search` and `get_talk` MCP tools return correct results for at least three representative queries against the winning DB
+**Plans**: TBD
+**UI hint**: no
+
+## Progress Table
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 20. Benchmark Infrastructure & Framework | 0/TBD | Not started | - |
+| 21. DB Loaders | 0/TBD | Not started | - |
+| 22. Benchmark Runner | 0/TBD | Not started | - |
+| 23. Benchmark Execution & Decision | 0/TBD | Not started | - |
+| 24. Production Migration | 0/TBD | Not started | - |

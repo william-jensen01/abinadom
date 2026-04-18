@@ -48,9 +48,13 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - ✓ OAuth 2.1 via ScaleKit — native FastMCP server with two-mode ScalekitProvider auth (local passthrough / remote OAuth); Auth0 fallback path removed; 449 tests green — Phases 16.1, 16.2, 18, 19 (v3.0)
 - ✓ Operator docs — connection guide, self-deploy guide, root README entry point — Phase 17 (v3.0)
 
-### Active (v4.0 — Next Milestone)
+### Active (v4.0 — Vector DB Migration)
 
-*(No active requirements — define with `/gsd-new-milestone`)*
+- [ ] Benchmark framework — shared transforms, loaders (ChromaDB, Weaviate, Qdrant), metrics, canonical queries, runner CLI
+- [ ] Full benchmark run — upsert speed, query latency (p50/p95/p99), concurrency (10w/25w), memory, recall vs ChromaDB baseline
+- [ ] Decision report — structured comparison, winner declared with rationale
+- [ ] Production migration — replace ChromaDB in server.py, pipeline loader (phase6), and Docker stack
+- [ ] MCP server smoke test — `search` and `get_talk` tools verified end-to-end on new DB
 
 ### Out of Scope
 
@@ -60,11 +64,15 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - Web scraping — HTML is read from SQLite only, no live fetching
 - Multi-user / hosted deployment — personal use only
 
-## Current State: v3.0 Shipped — Planning Next Milestone
+## Current Milestone: v4.0 Vector DB Migration
 
-**v3.0 shipped 2026-04-17.** The server is now a publicly-accessible remote MCP endpoint with OAuth 2.1 auth via ScaleKit, served over HTTPS via Caddy + Cloudflare Tunnel, deployable with `docker compose up`.
+**Goal:** Evaluate ChromaDB, Weaviate, and Qdrant against the 5,838-talk corpus, then migrate the production MCP server to the winner.
 
-**Next:** Run `/gsd-new-milestone` to define v4.0 goals.
+**Target features:**
+- Benchmark framework (shared transforms, loaders, metrics, canonical queries, runner CLI)
+- Full benchmark run with structured comparison report
+- Production migration of server, pipeline loader, and Docker stack to winning DB
+- End-to-end MCP server smoke test on new DB
 
 ## Context
 
@@ -123,4 +131,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-17 after v3.0 milestone*
+*Last updated: 2026-04-18 — v4.0 milestone started*
