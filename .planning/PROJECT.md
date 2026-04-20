@@ -50,7 +50,8 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 
 ### Active (v4.0 — Vector DB Migration)
 
-- [ ] Benchmark framework — shared transforms, loaders (ChromaDB, Weaviate, Qdrant), metrics, canonical queries, runner CLI
+- ✓ Benchmark framework — `loaders/shared_transforms.py` (flatten_metadata, rich_metadata, prepare_*), `benchmark/metrics.py` (4 dataclasses + recall_at_k), `benchmark/queries.py` (8 canonical queries), `infra/docker-compose.vector-dbs.yml` (ChromaDB 1.5.7, Weaviate 1.37.1, Qdrant v1.17.1) — Phase 20 (v4.0)
+- [ ] DB loaders — ChromaDB, Weaviate, and Qdrant loaders each accept a talk bundle and persist it correctly
 - [ ] Full benchmark run — upsert speed, query latency (p50/p95/p99), concurrency (10w/25w), memory, recall vs ChromaDB baseline
 - [ ] Decision report — structured comparison, winner declared with rationale
 - [ ] Production migration — replace ChromaDB in server.py, pipeline loader (phase6), and Docker stack
