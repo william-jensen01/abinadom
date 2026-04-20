@@ -173,7 +173,7 @@ class TestCanonicalQueries:
     def test_has_john_filter(self):
         """At least one entry must have filter == {'book_name': 'John'} (CONTEXT D-10)."""
         has_john = any(
-            q.get("filter", {}).get("book_name") == "John"
+            (q.get("filter") or {}).get("book_name") == "John"
             for q in CANONICAL_QUERIES
         )
         assert has_john, "No CANONICAL_QUERIES entry with filter={'book_name': 'John'}"
