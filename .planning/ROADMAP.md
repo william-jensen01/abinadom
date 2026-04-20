@@ -59,7 +59,7 @@ Full details: `.planning/milestones/v3.0-ROADMAP.md`
 
 | # | Phase | Goal | Requirements | Success Criteria |
 |---|-------|------|--------------|------------------|
-| 20 | Benchmark Infrastructure & Framework | All three DBs running locally; shared transforms, metrics, and canonical queries ready for loaders | EVAL-01, BENCH-01, BENCH-05, BENCH-06 | 4 |
+| 20 | Benchmark Infrastructure & Framework | 3/4 | In Progress|  |
 | 21 | DB Loaders | ChromaDB, Weaviate, and Qdrant each accept a talk bundle and persist it correctly | BENCH-02, BENCH-03, BENCH-04 | 3 |
 | 22 | Benchmark Runner | Single CLI command orchestrates end-to-end benchmark and emits a structured JSON report | BENCH-07 | 3 |
 | 23 | Benchmark Execution & Decision | All three DBs fully loaded and benchmarked; decision report names the winning DB | EVAL-02, EVAL-03, EVAL-04, EVAL-05 | 4 |
@@ -85,8 +85,8 @@ Full details: `.planning/milestones/v3.0-ROADMAP.md`
 **Plans**: 4 plans
 Plans:
 - [x] 20-01-PLAN.md — Package markers + Wave 0 test stubs (test_shared_transforms.py, test_metrics.py) — completed 2026-04-20
-- [ ] 20-02-PLAN.md — loaders/shared_transforms.py extraction + phase6 import delegation
-- [ ] 20-03-PLAN.md — benchmark/metrics.py + benchmark/queries.py
+- [x] 20-02-PLAN.md — loaders/shared_transforms.py extraction + phase6 import delegation
+- [x] 20-03-PLAN.md — benchmark/metrics.py + benchmark/queries.py
 - [ ] 20-04-PLAN.md — infra/docker-compose.vector-dbs.yml (3-DB stack)
 **UI hint**: no
 
