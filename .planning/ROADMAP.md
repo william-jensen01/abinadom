@@ -84,7 +84,7 @@ Full details: `.planning/milestones/v3.0-ROADMAP.md`
   4. Canonical query set is loadable as a Python list and covers both paragraph and citation queries, with and without metadata filters
 **Plans**: 4 plans
 Plans:
-- [ ] 20-01-PLAN.md — Package markers + Wave 0 test stubs (test_shared_transforms.py, test_metrics.py)
+- [x] 20-01-PLAN.md — Package markers + Wave 0 test stubs (test_shared_transforms.py, test_metrics.py) — completed 2026-04-20
 - [ ] 20-02-PLAN.md — loaders/shared_transforms.py extraction + phase6 import delegation
 - [ ] 20-03-PLAN.md — benchmark/metrics.py + benchmark/queries.py
 - [ ] 20-04-PLAN.md — infra/docker-compose.vector-dbs.yml (3-DB stack)
@@ -141,7 +141,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 20. Benchmark Infrastructure & Framework | 0/4 | Not started | - |
+| 20. Benchmark Infrastructure & Framework | 1/4 | In progress | - |
 | 21. DB Loaders | 0/TBD | Not started | - |
 | 22. Benchmark Runner | 0/TBD | Not started | - |
 | 23. Benchmark Execution & Decision | 0/TBD | Not started | - |
