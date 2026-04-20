@@ -59,7 +59,7 @@ Full details: `.planning/milestones/v3.0-ROADMAP.md`
 
 | # | Phase | Goal | Requirements | Success Criteria |
 |---|-------|------|--------------|------------------|
-| 20 | Benchmark Infrastructure & Framework | 4/4 | Complete   | 2026-04-20 |
+| 20 | Benchmark Infrastructure & Framework | 4/4 | Complete    | 2026-04-20 |
 | 21 | DB Loaders | ChromaDB, Weaviate, and Qdrant each accept a talk bundle and persist it correctly | BENCH-02, BENCH-03, BENCH-04 | 3 |
 | 22 | Benchmark Runner | Single CLI command orchestrates end-to-end benchmark and emits a structured JSON report | BENCH-07 | 3 |
 | 23 | Benchmark Execution & Decision | All three DBs fully loaded and benchmarked; decision report names the winning DB | EVAL-02, EVAL-03, EVAL-04, EVAL-05 | 4 |
