@@ -98,7 +98,13 @@ Plans:
   1. ChromaDB benchmark loader inserts a sample talk bundle and a subsequent query returns the expected paragraph record
   2. Weaviate loader creates the schema, maps UUIDs, and batch-loads a sample talk bundle; a query returns the expected record
   3. Qdrant loader creates the collection, sets payload indexes, and batch-loads a sample talk bundle; a query returns the expected record
-**Plans**: TBD
+**Plans**: 5 plans
+Plans:
+- [ ] 21-01-PLAN.md — Wave 0: Pipfile deps + test_phase6.py unpack fixes + test infrastructure stubs
+- [ ] 21-02-PLAN.md — Wave 1: shared_transforms 4-element tuples + _rich variants + BaseLoader ABC + embeddings.py
+- [ ] 21-03-PLAN.md — Wave 2: loaders/chromadb_loader.py (ChromaDBLoader)
+- [ ] 21-04-PLAN.md — Wave 2: loaders/weaviate_loader.py (WeaviateLoader)
+- [ ] 21-05-PLAN.md — Wave 2: loaders/qdrant_loader.py (QdrantLoader)
 **UI hint**: no
 
 #### Phase 22: Benchmark Runner
@@ -142,7 +148,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 20. Benchmark Infrastructure & Framework | 1/4 | In progress | - |
-| 21. DB Loaders | 0/TBD | Not started | - |
+| 21. DB Loaders | 0/5 | Not started | - |
 | 22. Benchmark Runner | 0/TBD | Not started | - |
 | 23. Benchmark Execution & Decision | 0/TBD | Not started | - |
 | 24. Production Migration | 0/TBD | Not started | - |
