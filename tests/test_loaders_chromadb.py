@@ -27,15 +27,13 @@ class TestChromaDBLoader:
         loader.load(talk_bundle)
 
         # Query the paragraphs collection by vector
-        import chromadb
-        client = chromadb.HttpClient(host=_CHROMADB_HOST, port=_CHROMADB_PORT)
-        col = client.get_or_create_collection(name="conference_talk_paragraphs")
+        col = loader._client.get_or_create_collection(name="conference_talk_paragraphs")
         results = col.query(
             query_embeddings=[[0.1] * 768],
             n_results=1,
             include=["metadatas", "documents"],
         )
-        assert len(results["ids"][0]) == 1
+        assert len(results["ids"][0]) >= 1
         # The returned ID should belong to talk_id=9999
         returned_id = results["ids"][0][0]
         assert "para_" in returned_id

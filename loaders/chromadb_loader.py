@@ -21,7 +21,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 import chromadb
 from config.pipeline_config import CHROMADB_COLLECTION_NAMES
 from loaders import BaseLoader
-from loaders.shared_transforms import TalkBundle, prepare_talk_bundle_rich
+from loaders.shared_transforms import TalkBundle, prepare_talk_bundle
 
 logger = logging.getLogger(__name__)
 
@@ -58,11 +58,11 @@ class ChromaDBLoader(BaseLoader):
         """
         Load a single talk bundle into ChromaDB across all 4 collections.
 
-        Calls prepare_talk_bundle_rich() to get (doc, meta, id, vector) tuples,
+        Calls prepare_talk_bundle() to get (doc, meta, id, vector) tuples,
         then upserts in batches of self.batch_size. Errors per batch are logged
         as WARNING and execution continues (D-07).
         """
-        records = prepare_talk_bundle_rich(*bundle, embed_fn=self.embed_fn)
+        records = prepare_talk_bundle(*bundle, embed_fn=self.embed_fn)
 
         for key in ("talks", "paragraphs", "citations", "footnotes"):
             coll_name = CHROMADB_COLLECTION_NAMES[key]
