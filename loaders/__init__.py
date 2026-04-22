@@ -1,1 +1,53 @@
-# Package marker — intentionally empty.
+"""
+loaders package — BaseLoader ABC and DB-specific loader implementations.
+
+BaseLoader enforces the uniform load(bundle) interface (D-03).
+Phase 22 benchmark runner imports `BaseLoader` and iterates over a list[BaseLoader].
+"""
+import sys
+from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import Callable
+
+sys.path.append(str(Path(__file__).parent.parent))
+
+from loaders.shared_transforms import TalkBundle
+
+
+class BaseLoader(ABC):
+    """
+    Abstract base class for all vector DB loaders.
+
+    Constructor args (D-01, D-02, D-06):
+        host:       DB host (e.g. "localhost")
+        port:       DB port (e.g. 8000 for ChromaDB, 8080 for Weaviate, 6333 for Qdrant)
+        embed_fn:   Callable that accepts a str and returns list[float].
+                    Injected at constructor time (D-02); same function used for all .load() calls.
+        batch_size: Number of records per write batch (D-06). Default 100.
+    """
+
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        embed_fn: Callable[[str], list[float]],
+        batch_size: int = 100,
+    ) -> None:
+        self.host = host
+        self.port = port
+        self.embed_fn = embed_fn
+        self.batch_size = batch_size
+
+    @abstractmethod
+    def load(self, bundle: TalkBundle) -> None:
+        """
+        Load a single talk bundle into the target vector DB.
+
+        Implementations must:
+        - Accept a TalkBundle (5-tuple of Phase 1-5 outputs)
+        - Call prepare_talk_bundle() or prepare_talk_bundle_rich() from shared_transforms
+        - Upsert all 4 collections (talks, paragraphs, citations, footnotes)
+        - Skip-and-log bad records per D-07 (log WARNING, continue)
+        - Be idempotent: re-loading same bundle must not create duplicates
+        """
+        ...

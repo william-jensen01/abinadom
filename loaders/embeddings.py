@@ -1,0 +1,44 @@
+"""
+Ollama embedding helper for vector DB loaders.
+
+Provides a synchronous embed() function that calls Ollama nomic-embed-text
+and returns a 768-dimensional float vector (D-04, D-05).
+
+Import and inject as embed_fn at loader constructor time:
+    from loaders.embeddings import embed
+    loader = ChromaDBLoader("localhost", 8000, embed_fn=embed)
+"""
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).parent.parent))
+
+import ollama
+
+OLLAMA_URL = "http://localhost:11434"
+
+
+def embed(
+    text: str,
+    model: str = "nomic-embed-text",
+    url: str = OLLAMA_URL,
+) -> list[float]:
+    """
+    Return a 768-dim float vector from Ollama nomic-embed-text.
+
+    Args:
+        text:  Input text to embed.
+        model: Ollama model name. Default "nomic-embed-text" (768 dims).
+        url:   Ollama server URL. Default http://localhost:11434.
+
+    Returns:
+        list[float] of length 768.
+
+    Raises:
+        Exception: Propagates any Ollama connection or model errors.
+                   Callers (loaders) handle exceptions at the batch level (D-07).
+    """
+    response = ollama.Client(host=url).embed(model=model, input=text)
+    # EmbedResponse.embeddings: Sequence[Sequence[float]]
+    # Single input -> embeddings[0] is the 768-element vector
+    return list(response.embeddings[0])
