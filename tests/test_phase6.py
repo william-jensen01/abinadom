@@ -228,50 +228,50 @@ class TestFlattenMetadata:
 class TestPrepareTalkRecord:
     def test_prepare_talk_record_with_preview(self):
         metadata = make_talk_metadata(title="The Test Talk", talk_preview="This is a preview.")
-        doc, meta, doc_id = prepare_talk_record(metadata, annotation_texts=[])
+        doc, meta, doc_id, _ = prepare_talk_record(metadata, annotation_texts=[])
         assert doc == "The Test Talk\n\nThis is a preview."
         assert doc_id == "talk_8820"
 
     def test_prepare_talk_record_no_preview(self):
         metadata = make_talk_metadata(title="The Test Talk", talk_preview=None)
-        doc, meta, doc_id = prepare_talk_record(metadata, annotation_texts=[])
+        doc, meta, doc_id, _ = prepare_talk_record(metadata, annotation_texts=[])
         assert doc == "The Test Talk"
         assert doc_id == "talk_8820"
 
     def test_prepare_talk_record_empty_preview_string(self):
         """Empty string talk_preview should fall back to title only."""
         metadata = make_talk_metadata(title="The Test Talk", talk_preview="")
-        doc, meta, doc_id = prepare_talk_record(metadata, annotation_texts=[])
+        doc, meta, doc_id, _ = prepare_talk_record(metadata, annotation_texts=[])
         assert doc == "The Test Talk"
 
     def test_prepare_talk_record_metadata_has_required_fields(self):
         metadata = make_talk_metadata()
-        doc, meta, doc_id = prepare_talk_record(metadata, annotation_texts=[])
+        doc, meta, doc_id, _ = prepare_talk_record(metadata, annotation_texts=[])
         assert meta["talk_id"] == 8820
         assert meta["speaker_name"] == "Elder Tester"
         assert meta["conference_year"] == 2020
 
     def test_prepare_talk_record_metadata_excludes_none_fields(self):
         metadata = make_talk_metadata(session_id=None, session_description=None)
-        doc, meta, doc_id = prepare_talk_record(metadata, annotation_texts=[])
+        doc, meta, doc_id, _ = prepare_talk_record(metadata, annotation_texts=[])
         assert "session_id" not in meta
         assert "session_description" not in meta
 
     def test_prepare_talk_record_with_annotations(self):
         metadata = make_talk_metadata()
         annotation_texts = ["Anno text 1", "Anno text 2"]
-        doc, meta, doc_id = prepare_talk_record(metadata, annotation_texts=annotation_texts)
+        doc, meta, doc_id, _ = prepare_talk_record(metadata, annotation_texts=annotation_texts)
         assert meta["annotations"] == "Anno text 1|Anno text 2"
 
     def test_prepare_talk_record_no_annotations_field_absent(self):
         """When no annotations, the annotations key should not appear in metadata."""
         metadata = make_talk_metadata()
-        doc, meta, doc_id = prepare_talk_record(metadata, annotation_texts=[])
+        doc, meta, doc_id, _ = prepare_talk_record(metadata, annotation_texts=[])
         assert "annotations" not in meta
 
     def test_prepare_talk_record_id_format(self):
         metadata = make_talk_metadata(talk_id=12345)
-        doc, meta, doc_id = prepare_talk_record(metadata, annotation_texts=[])
+        doc, meta, doc_id, _ = prepare_talk_record(metadata, annotation_texts=[])
         assert doc_id == "talk_12345"
 
 
@@ -293,14 +293,14 @@ class TestPrepareParagraphRecords:
         p = make_paragraph(paragraph_id=88200001, text="The paragraph content.")
         talk_paras = make_talk_paragraphs([p])
         records, _ = prepare_paragraph_records(talk_paras)
-        doc, meta, doc_id = records[0]
+        doc, meta, doc_id, _ = records[0]
         assert doc == "The paragraph content."
 
     def test_prepare_paragraph_records_id_format(self):
         p = make_paragraph(paragraph_id=88200001)
         talk_paras = make_talk_paragraphs([p])
         records, _ = prepare_paragraph_records(talk_paras)
-        doc, meta, doc_id = records[0]
+        doc, meta, doc_id, _ = records[0]
         assert doc_id == "para_88200001"
 
     def test_annotation_exclusion(self):
@@ -310,7 +310,7 @@ class TestPrepareParagraphRecords:
         talk_paras = make_talk_paragraphs([p_normal, p_anno])
         records, annotation_texts = prepare_paragraph_records(talk_paras)
         assert len(records) == 1
-        doc, meta, doc_id = records[0]
+        doc, meta, doc_id, _ = records[0]
         assert doc_id == "para_88200001"
 
     def test_annotation_folding(self):
@@ -331,7 +331,7 @@ class TestPrepareParagraphRecords:
         )
         talk_paras = make_talk_paragraphs([p])
         records, _ = prepare_paragraph_records(talk_paras)
-        doc, meta, doc_id = records[0]
+        doc, meta, doc_id, _ = records[0]
         assert meta["extraction_warnings"] == "warn1|warn2"
 
     def test_prepare_paragraph_records_empty_warnings_excluded(self):
@@ -339,7 +339,7 @@ class TestPrepareParagraphRecords:
         p = make_paragraph(paragraph_id=88200001, text="Clean text.", extraction_warnings=[])
         talk_paras = make_talk_paragraphs([p])
         records, _ = prepare_paragraph_records(talk_paras)
-        doc, meta, doc_id = records[0]
+        doc, meta, doc_id, _ = records[0]
         assert "extraction_warnings" not in meta
 
     def test_enrichment_injects_four_fields(self):
@@ -347,7 +347,7 @@ class TestPrepareParagraphRecords:
         meta = make_talk_metadata()
         records, _ = prepare_paragraph_records(paras, talk_metadata=meta)
         assert len(records) == 2
-        for _, flat_meta, _ in records:
+        for _, flat_meta, _, _ in records:
             assert flat_meta["speaker_name"] == "Elder Tester"
             assert flat_meta["title"] == "The Test Talk"
             assert flat_meta["conference_year"] == 2020
@@ -362,14 +362,14 @@ class TestPrepareParagraphRecords:
         records, annotations = prepare_paragraph_records(paras, talk_metadata=meta)
         assert len(records) == 1
         assert len(annotations) == 1
-        _, flat_meta, _ = records[0]
+        _, flat_meta, _, _ = records[0]
         assert flat_meta["speaker_name"] == "Elder Tester"
 
     def test_enrichment_absent_when_talk_metadata_none(self):
         paras = make_talk_paragraphs([make_paragraph(paragraph_id=1)])
         records, _ = prepare_paragraph_records(paras)
         assert len(records) == 1
-        _, flat_meta, _ = records[0]
+        _, flat_meta, _, _ = records[0]
         assert "speaker_name" not in flat_meta
         assert "title" not in flat_meta
         assert "conference_year" not in flat_meta
@@ -392,7 +392,7 @@ class TestPrepareCitationRecords:
         c = make_citation(context_window="the surrounding context window text")
         talk_cites = make_talk_citations([c])
         records = prepare_citation_records(talk_cites)
-        doc, meta, doc_id = records[0]
+        doc, meta, doc_id, _ = records[0]
         assert doc == "the surrounding context window text"
 
     def test_prepare_citation_records_fallback_to_raw(self):
@@ -400,14 +400,14 @@ class TestPrepareCitationRecords:
         c = make_citation(context_window="", citation_text_raw="D&C 84:32-44")
         talk_cites = make_talk_citations([c])
         records = prepare_citation_records(talk_cites)
-        doc, meta, doc_id = records[0]
+        doc, meta, doc_id, _ = records[0]
         assert doc == "D&C 84:32-44"
 
     def test_prepare_citation_records_id_format(self):
         c = make_citation(citation_id=42, paragraph_id=88200003)
         talk_cites = make_talk_citations([c])
         records = prepare_citation_records(talk_cites)
-        doc, meta, doc_id = records[0]
+        doc, meta, doc_id, _ = records[0]
         assert doc_id == "cite_42_88200003"
 
     def test_prepare_citation_records_verse_list_flattened(self):
@@ -415,7 +415,7 @@ class TestPrepareCitationRecords:
         c = make_citation(verse_list=[32, 33, 44])
         talk_cites = make_talk_citations([c])
         records = prepare_citation_records(talk_cites)
-        doc, meta, doc_id = records[0]
+        doc, meta, doc_id, _ = records[0]
         assert meta["verse_list"] == "32,33,44"
 
     def test_annotation_citation_included(self):
@@ -448,7 +448,7 @@ class TestPrepareFootnoteRecords:
         fn = make_footnote(context_window="context around the footnote reference")
         talk_fns = make_talk_footnotes([fn])
         records = prepare_footnote_records(talk_fns)
-        doc, meta, doc_id = records[0]
+        doc, meta, doc_id, _ = records[0]
         assert doc == "context around the footnote reference"
 
     def test_prepare_footnote_records_fallback_to_raw(self):
@@ -456,14 +456,14 @@ class TestPrepareFootnoteRecords:
         fn = make_footnote(context_window="", footnote_text_raw="See John 3:16")
         talk_fns = make_talk_footnotes([fn])
         records = prepare_footnote_records(talk_fns)
-        doc, meta, doc_id = records[0]
+        doc, meta, doc_id, _ = records[0]
         assert doc == "See John 3:16"
 
     def test_prepare_footnote_records_id_format(self):
         fn = make_footnote(footnote_id=88200100)
         talk_fns = make_talk_footnotes([fn])
         records = prepare_footnote_records(talk_fns)
-        doc, meta, doc_id = records[0]
+        doc, meta, doc_id, _ = records[0]
         assert doc_id == "fn_88200100"
 
     def test_prepare_footnote_records_warnings_flattened(self):
@@ -471,7 +471,7 @@ class TestPrepareFootnoteRecords:
         fn = make_footnote(extraction_warnings=["w1", "w2"])
         talk_fns = make_talk_footnotes([fn])
         records = prepare_footnote_records(talk_fns)
-        doc, meta, doc_id = records[0]
+        doc, meta, doc_id, _ = records[0]
         assert meta["extraction_warnings"] == "w1|w2"
 
 
@@ -511,7 +511,7 @@ class TestPrepareTalkBundle:
         bundle = self._make_bundle()
         result = prepare_talk_bundle(*bundle)
         assert len(result["talks"]) == 1
-        doc, meta, doc_id = result["talks"][0]
+        doc, meta, doc_id, _ = result["talks"][0]
         assert doc_id == "talk_8820"
 
     def test_prepare_talk_bundle_paragraphs_list(self):
@@ -555,7 +555,7 @@ class TestPrepareTalkBundle:
         assert result["paragraphs"][0][2] == "para_88200001"
 
         # Talk metadata has annotations field
-        doc, meta, doc_id = result["talks"][0]
+        doc, meta, doc_id, _ = result["talks"][0]
         assert meta.get("annotations") == "Annotation content."
 
     def test_bundle_paragraph_records_contain_enriched_fields(self):
@@ -570,7 +570,7 @@ class TestPrepareTalkBundle:
         result = prepare_talk_bundle(metadata, paragraphs, citations, footnotes, validation_report)
 
         assert len(result["paragraphs"]) >= 1
-        _, para_meta, _ = result["paragraphs"][0]
+        _, para_meta, _, _ = result["paragraphs"][0]
         assert "speaker_name" in para_meta
         assert para_meta["speaker_name"] == "Elder Tester"
 
