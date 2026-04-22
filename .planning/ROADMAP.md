@@ -101,7 +101,7 @@ Plans:
 **Plans**: 5 plans
 Plans:
 - [x] 21-01-PLAN.md — Wave 0: Pipfile deps + test_phase6.py unpack fixes + test infrastructure stubs — completed 2026-04-22
-- [ ] 21-02-PLAN.md — Wave 1: shared_transforms 4-element tuples + _rich variants + BaseLoader ABC + embeddings.py
+- [x] 21-02-PLAN.md — Wave 1: shared_transforms 4-element tuples + _rich variants + BaseLoader ABC + embeddings.py — completed 2026-04-22
 - [ ] 21-03-PLAN.md — Wave 2: loaders/chromadb_loader.py (ChromaDBLoader)
 - [ ] 21-04-PLAN.md — Wave 2: loaders/weaviate_loader.py (WeaviateLoader)
 - [ ] 21-05-PLAN.md — Wave 2: loaders/qdrant_loader.py (QdrantLoader)
