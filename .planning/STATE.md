@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Vector DB Migration
-status: executing
-last_updated: "2026-04-20T21:46:30.544Z"
-last_activity: 2026-04-20
+status: ready_to_execute
+last_updated: "2026-04-21T00:00:00.000Z"
+last_activity: 2026-04-21
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 4
+  total_plans: 9
   completed_plans: 4
-  percent: 100
+  percent: 20
 ---
 
 # Project State
@@ -20,16 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-18)
 
 **Core value:** All LDS content searchable by meaning — find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** Phase 20 — benchmark-infrastructure-framework
+**Current focus:** Phase 21 — db-loaders
 
 ## Current Position
 
 Phase: 21
-Plan: Not started
-Status: Executing Phase 20
-Last activity: 2026-04-20
+Plan: 21-01 complete, 21-02 next
+Status: In progress — Wave 1 done, Wave 2 (21-02) and Wave 3 (21-03/04/05) pending
+Last activity: 2026-04-22
 
-Progress: [█░░░░░░░░░░░░░░░░░░░] 5% — 1/4 plans complete
+Progress: [███░░░░░░░░░░░░░░░░░] 25% — 5/9 plans complete
 
 ## Performance Metrics
 
