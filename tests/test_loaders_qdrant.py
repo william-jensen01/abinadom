@@ -9,7 +9,11 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
 
+import os
 import pytest
+
+_QDRANT_HOST = os.environ.get("BENCHMARK_QDRANT_HOST", "10.0.0.231")
+_QDRANT_PORT = int(os.environ.get("BENCHMARK_QDRANT_PORT", "6333"))
 
 
 class TestQdrantLoader:
@@ -20,7 +24,7 @@ class TestQdrantLoader:
         def _mock_embed(text: str) -> list[float]:
             return [0.1] * 768
 
-        loader = QdrantLoader("localhost", 6333, embed_fn=_mock_embed, batch_size=10)
+        loader = QdrantLoader(_QDRANT_HOST, _QDRANT_PORT, embed_fn=_mock_embed, batch_size=10)
         loader.load(talk_bundle)
 
         results = loader._client.query_points(

@@ -9,7 +9,11 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
 
+import os
 import pytest
+
+_CHROMADB_HOST = os.environ.get("BENCHMARK_CHROMADB_HOST", "10.0.0.231")
+_CHROMADB_PORT = int(os.environ.get("BENCHMARK_CHROMADB_PORT", "8763"))
 
 
 class TestChromaDBLoader:
@@ -19,13 +23,12 @@ class TestChromaDBLoader:
 
         def _mock_embed(text: str) -> list[float]:
             return [0.1] * 768
-
-        loader = ChromaDBLoader("localhost", 8000, embed_fn=_mock_embed, batch_size=10)
+        loader = ChromaDBLoader(_CHROMADB_HOST, _CHROMADB_PORT, embed_fn=_mock_embed, batch_size=10)
         loader.load(talk_bundle)
 
         # Query the paragraphs collection by vector
         import chromadb
-        client = chromadb.HttpClient(host="localhost", port=8000)
+        client = chromadb.HttpClient(host=_CHROMADB_HOST, port=_CHROMADB_PORT)
         col = client.get_or_create_collection(name="conference_talk_paragraphs")
         results = col.query(
             query_embeddings=[[0.1] * 768],

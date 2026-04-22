@@ -4,6 +4,7 @@ Shared pytest fixtures for Phase 21 loader integration tests.
 Port-check fixtures (D-08): session-scoped, auto-skip when Docker is down.
 TalkBundle fixture (D-09): deterministic minimal bundle (talk_id=9999) shared by all 3 loader tests.
 """
+import os
 import socket
 import sys
 from pathlib import Path
@@ -20,6 +21,19 @@ from loaders.shared_transforms import TalkBundle
 
 
 # ---------------------------------------------------------------------------
+# Connection config from environment variables (D-08)
+# ---------------------------------------------------------------------------
+
+CHROMADB_HOST = os.environ.get("BENCHMARK_CHROMADB_HOST", "10.0.0.231")
+CHROMADB_PORT = int(os.environ.get("BENCHMARK_CHROMADB_PORT", "8763"))
+QDRANT_HOST = os.environ.get("BENCHMARK_QDRANT_HOST", "10.0.0.231")
+QDRANT_PORT = int(os.environ.get("BENCHMARK_QDRANT_PORT", "6333"))
+WEAVIATE_HOST = os.environ.get("BENCHMARK_WEAVIATE_HOST", "10.0.0.231")
+WEAVIATE_PORT = int(os.environ.get("BENCHMARK_WEAVIATE_PORT", "8051"))
+OLLAMA_HOST = os.environ.get("BENCHMARK_OLLAMA_HOST", "10.0.0.231")
+OLLAMA_PORT = int(os.environ.get("BENCHMARK_OLLAMA_PORT", "11434"))
+
+# ---------------------------------------------------------------------------
 # Port-check helpers (D-08)
 # ---------------------------------------------------------------------------
 
@@ -33,30 +47,30 @@ def _is_port_open(host: str, port: int, timeout: float = 1.0) -> bool:
 
 @pytest.fixture(scope="session")
 def chromadb_available():
-    """Skip test module if ChromaDB is not reachable at localhost:8000."""
-    if not _is_port_open("localhost", 8000):
-        pytest.skip("ChromaDB not reachable at localhost:8000 — start Docker Compose")
+    """Skip test module if ChromaDB is not reachable."""
+    if not _is_port_open(CHROMADB_HOST, CHROMADB_PORT):
+        pytest.skip(f"ChromaDB not reachable at {CHROMADB_HOST}:{CHROMADB_PORT} — start Docker Compose")
 
 
 @pytest.fixture(scope="session")
 def weaviate_available():
-    """Skip test module if Weaviate is not reachable at localhost:8080."""
-    if not _is_port_open("localhost", 8080):
-        pytest.skip("Weaviate not reachable at localhost:8080 — start Docker Compose")
+    """Skip test module if Weaviate is not reachable."""
+    if not _is_port_open(WEAVIATE_HOST, WEAVIATE_PORT):
+        pytest.skip(f"Weaviate not reachable at {WEAVIATE_HOST}:{WEAVIATE_PORT} — start Docker Compose")
 
 
 @pytest.fixture(scope="session")
 def qdrant_available():
-    """Skip test module if Qdrant is not reachable at localhost:6333."""
-    if not _is_port_open("localhost", 6333):
-        pytest.skip("Qdrant not reachable at localhost:6333 — start Docker Compose")
+    """Skip test module if Qdrant is not reachable."""
+    if not _is_port_open(QDRANT_HOST, QDRANT_PORT):
+        pytest.skip(f"Qdrant not reachable at {QDRANT_HOST}:{QDRANT_PORT} — start Docker Compose")
 
 
 @pytest.fixture(scope="session")
 def ollama_available():
-    """Skip test if Ollama is not reachable at localhost:11434."""
-    if not _is_port_open("localhost", 11434):
-        pytest.skip("Ollama not reachable at localhost:11434")
+    """Skip test if Ollama is not reachable."""
+    if not _is_port_open(OLLAMA_HOST, OLLAMA_PORT):
+        pytest.skip(f"Ollama not reachable at {OLLAMA_HOST}:{OLLAMA_PORT}")
 
 
 # ---------------------------------------------------------------------------

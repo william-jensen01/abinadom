@@ -9,7 +9,11 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
 
+import os
 import pytest
+
+_WEAVIATE_HOST = os.environ.get("BENCHMARK_WEAVIATE_HOST", "10.0.0.231")
+_WEAVIATE_PORT = int(os.environ.get("BENCHMARK_WEAVIATE_PORT", "8051"))
 
 
 class TestWeaviateLoader:
@@ -28,7 +32,7 @@ class TestWeaviateLoader:
         def _mock_embed(text: str) -> list[float]:
             return [0.1] * 768
 
-        self.loader = WeaviateLoader("localhost", 8080, embed_fn=_mock_embed, batch_size=10)
+        self.loader = WeaviateLoader(_WEAVIATE_HOST, _WEAVIATE_PORT, embed_fn=_mock_embed, batch_size=10)
         self.loader.load(talk_bundle)
 
         col = self.loader._client.collections.use("Paragraph")
