@@ -4,6 +4,20 @@
   "parallelization": true,
   "commit_docs": true,
   "model_profile": "adaptive",
+  "model_overrides": {
+    "gsd-planner": "sonnet",
+    "gsd-roadmapper": "sonnet",
+    "gsd-executor": "sonnet",
+    "gsd-phase-researcher": "sonnet",
+    "gsd-project-researcher": "sonnet",
+    "gsd-research-synthesizer": "haiku",
+    "gsd-debugger": "sonnet",
+    "gsd-codebase-mapper": "haiku",
+    "gsd-verifier": "sonnet",
+    "gsd-plan-checker": "haiku",
+    "gsd-integration-checker": "haiku",
+    "gsd-nyquist-auditor": "haiku"
+  },
   "workflow": {
     "research": true,
     "plan_check": true,
