@@ -84,16 +84,18 @@ class QdrantLoader(BaseLoader):
                         distance=Distance.COSINE,
                     ),
                 )
-                # Payload indexes for common filter fields
-                self._client.create_payload_index(
-                    name, "talk_id", PayloadSchemaType.INTEGER
-                )
-                self._client.create_payload_index(
-                    name, "conference_year", PayloadSchemaType.INTEGER
-                )
-                self._client.create_payload_index(
-                    name, "speaker_name", PayloadSchemaType.KEYWORD
-                )
+            # Always ensure payload indexes exist — idempotent on pre-existing collections.
+            # Indexes are required for Phase 22 filtered queries; without this guard they
+            # would be absent when connecting to a collection created in a prior run.
+            self._client.create_payload_index(
+                name, "talk_id", PayloadSchemaType.INTEGER
+            )
+            self._client.create_payload_index(
+                name, "conference_year", PayloadSchemaType.INTEGER
+            )
+            self._client.create_payload_index(
+                name, "speaker_name", PayloadSchemaType.KEYWORD
+            )
 
     def load(self, bundle: TalkBundle) -> None:
         """
