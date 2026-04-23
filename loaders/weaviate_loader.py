@@ -234,10 +234,10 @@ class WeaviateLoader(BaseLoader):
                         )
                     except Exception as e:
                         logger.warning("Weaviate skip %s: %s", doc_id, e)
-            # Check failed_objects on the context manager object (batch_ctx), not col.batch.
-            # In weaviate-client v4, failed_objects is a property of the batch context object.
-            if batch_ctx.failed_objects:
-                for err in batch_ctx.failed_objects:
+            # failed_objects lives on col.batch (_BatchCollectionWrapper / _BatchWrapper),
+            # not on batch_ctx (_BatchCollection / _BatchBase which only has number_errors).
+            if col.batch.failed_objects:
+                for err in col.batch.failed_objects:
                     logger.warning(
                         "Weaviate batch error in class %s: %s",
                         class_name,
