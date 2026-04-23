@@ -77,10 +77,11 @@ def rich_metadata(meta: dict[str, Any]) -> dict[str, Any]:
     Unlike flatten_metadata, this function preserves Python list types
     rather than joining them to strings. Rules applied:
       - None values: removed
+      - Empty lists: removed (Weaviate rejects empty arrays for TEXT_ARRAY / INT_ARRAY)
       - Lists: kept as-is (no joining or flattening)
       - str / int / float / bool: kept as-is
     """
-    return {k: v for k, v in meta.items() if v is not None}
+    return {k: v for k, v in meta.items() if v is not None and v != []}
 
 
 # =============================================================================
