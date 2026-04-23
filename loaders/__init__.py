@@ -38,6 +38,10 @@ class BaseLoader(ABC):
         self.embed_fn = embed_fn
         self.batch_size = batch_size
 
+    def close(self) -> None:
+        """Release any held connections. Default is no-op. Override when needed."""
+        pass
+
     @abstractmethod
     def load(self, bundle: TalkBundle) -> None:
         """

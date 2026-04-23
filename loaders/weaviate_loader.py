@@ -244,6 +244,13 @@ class WeaviateLoader(BaseLoader):
                         err,
                     )
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
+
     def close(self) -> None:
         """Close the Weaviate client and release the gRPC connection (Pitfall 1)."""
         self._client.close()
