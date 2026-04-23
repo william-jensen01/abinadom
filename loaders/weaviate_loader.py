@@ -224,19 +224,20 @@ class WeaviateLoader(BaseLoader):
 
         for key, class_name in collection_map.items():
             col = self._client.collections.use(class_name)
-            with col.batch.fixed_size(batch_size=self.batch_size) as batch:
+            with col.batch.fixed_size(batch_size=self.batch_size) as batch_ctx:
                 for doc, meta, doc_id, vector in records[key]:
                     try:
-                        batch.add_object(
+                        batch_ctx.add_object(
                             properties=meta,
                             uuid=generate_uuid5(doc_id),
                             vector=vector,
                         )
                     except Exception as e:
                         logger.warning("Weaviate skip %s: %s", doc_id, e)
-            # Check for batch-level errors after context manager exits (Pitfall 5, D-07)
-            if col.batch.failed_objects:
-                for err in col.batch.failed_objects:
+            # Check failed_objects on the context manager object (batch_ctx), not col.batch.
+            # In weaviate-client v4, failed_objects is a property of the batch context object.
+            if batch_ctx.failed_objects:
+                for err in batch_ctx.failed_objects:
                     logger.warning(
                         "Weaviate batch error in class %s: %s",
                         class_name,
