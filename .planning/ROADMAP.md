@@ -61,7 +61,7 @@ Full details: `.planning/milestones/v3.0-ROADMAP.md`
 |---|-------|------|--------------|------------------|
 | 20 | Benchmark Infrastructure & Framework | 4/4 | Complete    | 2026-04-20 |
 | 21 | DB Loaders | 5/5 | Complete   | 2026-04-22 |
-| 22 | Benchmark Runner | Single CLI command orchestrates end-to-end benchmark and emits a structured JSON report | BENCH-07 | 3 |
+| 22 | Benchmark Runner | 2/3 | In Progress|  |
 | 23 | Benchmark Execution & Decision | All three DBs fully loaded and benchmarked; decision report names the winning DB | EVAL-02, EVAL-03, EVAL-04, EVAL-05 | 4 |
 | 24 | Production Migration | Production MCP server, pipeline loader, and Docker stack run on the winning DB; all 5,838 talks loaded and search verified | MIGR-01, MIGR-02, MIGR-03, MIGR-04 | 4 |
 
@@ -119,7 +119,7 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [x] 22-01-PLAN.md — Wave 1: Pipfile psutil + ScalabilityCurveEntry dataclass in benchmark/metrics.py — completed 2026-04-24
-- [ ] 22-02-PLAN.md — Wave 2: BenchmarkRunner class with all 10 measurement methods in benchmark/runner.py
+- [x] 22-02-PLAN.md — Wave 2: BenchmarkRunner class with all 10 measurement methods in benchmark/runner.py
 - [ ] 22-03-PLAN.md — Wave 3: run_all() + main() CLI entrypoint + _write_report() + multi-DB orchestration
 **UI hint**: no
 
