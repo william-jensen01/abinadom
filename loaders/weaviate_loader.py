@@ -244,6 +244,60 @@ class WeaviateLoader(BaseLoader):
                         err,
                     )
 
+    def query(
+        self,
+        collection: str,
+        query_text: str,
+        k: int,
+        filter: dict | None = None,
+    ) -> list[str]:
+        """
+        Query a Weaviate collection and return the top-k document IDs.
+
+        Args:
+            collection: Collection name in snake_case (e.g. "paragraphs").
+                        Mapped to PascalCase Weaviate class name internally.
+            query_text: Query string to embed and search.
+            k:          Number of results to return.
+            filter:     Optional filter dict (e.g. {"book_name": "John"}).
+                        Translated to a Weaviate Filter object.
+
+        Returns:
+            list[str] of document IDs (from the "id" metadata field).
+        """
+        # Map snake_case collection name to PascalCase Weaviate class
+        name_map = {
+            "talks": "Talk",
+            "paragraphs": "Paragraph",
+            "citations": "Citation",
+            "footnotes": "Footnote",
+            # Accept PascalCase directly too
+            "Talk": "Talk",
+            "Paragraph": "Paragraph",
+            "Citation": "Citation",
+            "Footnote": "Footnote",
+        }
+        class_name = name_map.get(collection, collection)
+        col = self._client.collections.use(class_name)
+        query_embedding = self.embed_fn(query_text)
+
+        kwargs: dict = {"near_vector": query_embedding, "limit": k}
+        if filter is not None:
+            # Build a simple equality filter for each key-value pair
+            from weaviate.classes.query import Filter
+            conditions = [Filter.by_property(k).equal(v) for k, v in filter.items()]
+            if len(conditions) == 1:
+                kwargs["filters"] = conditions[0]
+            else:
+                from weaviate.classes.query import Filter
+                combined = conditions[0]
+                for cond in conditions[1:]:
+                    combined = combined & cond
+                kwargs["filters"] = combined
+
+        result = col.query.near_vector(**kwargs)
+        return [obj.properties.get("id", str(obj.uuid)) for obj in result.objects]
+
     def __enter__(self):
         return self
 

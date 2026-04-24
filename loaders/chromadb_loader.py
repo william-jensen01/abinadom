@@ -88,3 +88,35 @@ class ChromaDBLoader(BaseLoader):
                         coll_name,
                         e,
                     )
+
+    def query(
+        self,
+        collection: str,
+        query_text: str,
+        k: int,
+        filter: dict | None = None,
+    ) -> list[str]:
+        """
+        Query a ChromaDB collection and return the top-k document IDs.
+
+        Args:
+            collection: Collection name (e.g. "conference_talk_paragraphs").
+            query_text: Query string to embed and search.
+            k:          Number of results to return.
+            filter:     Optional ChromaDB where-clause dict (e.g. {"book_name": "John"}).
+
+        Returns:
+            list[str] of document IDs (e.g. ["para_123", "para_456"]).
+        """
+        col = self._client.get_or_create_collection(name=collection)
+        query_embedding = self.embed_fn(query_text)
+        kwargs: dict = {
+            "query_embeddings": [query_embedding],
+            "n_results": k,
+            "include": ["documents"],
+        }
+        if filter is not None:
+            kwargs["where"] = filter
+        result = col.query(**kwargs)
+        ids = result.get("ids", [[]])[0]
+        return list(ids)

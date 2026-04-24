@@ -132,3 +132,47 @@ class QdrantLoader(BaseLoader):
                         points=points,
                         wait=True,
                     )
+
+    def query(
+        self,
+        collection: str,
+        query_text: str,
+        k: int,
+        filter: dict | None = None,
+    ) -> list[str]:
+        """
+        Query a Qdrant collection and return the top-k document IDs.
+
+        Args:
+            collection: Collection name (e.g. "paragraphs").
+            query_text: Query string to embed and search.
+            k:          Number of results to return.
+            filter:     Optional filter dict (e.g. {"book_name": "John"}).
+                        Translated to a Qdrant FieldCondition filter.
+
+        Returns:
+            list[str] of original document IDs (from payload["_doc_id"]).
+        """
+        from qdrant_client.models import Filter as QFilter, FieldCondition, MatchValue
+
+        query_embedding = self.embed_fn(query_text)
+
+        qdrant_filter = None
+        if filter is not None:
+            conditions = [
+                FieldCondition(key=k, match=MatchValue(value=v))
+                for k, v in filter.items()
+            ]
+            qdrant_filter = QFilter(must=conditions)
+
+        results = self._client.query_points(
+            collection_name=collection,
+            query=query_embedding,
+            limit=k,
+            query_filter=qdrant_filter,
+            with_payload=["_doc_id"],
+        )
+        return [
+            hit.payload.get("_doc_id", str(hit.id))
+            for hit in results.points
+        ]
