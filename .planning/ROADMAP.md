@@ -66,7 +66,7 @@ Full details: `.planning/milestones/v3.0-ROADMAP.md`
 | 24 | Production Migration | Production MCP server, pipeline loader, and Docker stack run on the winning DB; all 5,838 talks loaded and search verified | MIGR-01, MIGR-02, MIGR-03, MIGR-04 | 4 |
 
 - [x] **Phase 20: Benchmark Infrastructure & Framework** — Docker Compose for all 3 DBs running locally; shared transform, metrics, and canonical query modules ready (completed 2026-04-20)
-- [x] **Phase 21: DB Loaders** — ChromaDB, Weaviate, and Qdrant loaders each accept a talk bundle and persist it correctly (completed 2026-04-22)
+- [x] **Phase 21: DB Loaders** — ChromaDB, Weaviate, and Qdrant loaders each accept a talk bundle and persist it correctly (completed 2026-04-22)
 - [ ] **Phase 22: Benchmark Runner** — `benchmark/runner.py` CLI orchestrates a full benchmark run and emits a structured JSON report
 - [ ] **Phase 23: Benchmark Execution & Decision** — Full benchmark run completes; recall@k computed; written decision report names the winner
 - [ ] **Phase 24: Production Migration** — Pipeline loader, MCP server, and Docker stack all running on the winning DB with all 5,838 talks loaded
@@ -116,7 +116,11 @@ Plans:
   2. Running the runner with `--upsert-limit 10 --query-limit 10` against a single DB completes without error and writes a JSON file with upsert speed, p50/p95/p99 latency, concurrency throughput, and memory delta fields
   3. Running the runner against all three DBs produces three comparable JSON report files with identical schema
   4. With a small dataset, the runner enforces the load gate — upsert phase completes before any query benchmarks execute; no query is issued before all target talks are loaded
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 22-01-PLAN.md — Wave 1: Pipfile psutil + ScalabilityCurveEntry dataclass in benchmark/metrics.py
+- [ ] 22-02-PLAN.md — Wave 2: BenchmarkRunner class with all 10 measurement methods in benchmark/runner.py
+- [ ] 22-03-PLAN.md — Wave 3: run_all() + main() CLI entrypoint + _write_report() + multi-DB orchestration
 **UI hint**: no
 
 #### Phase 23: Benchmark Execution & Decision
@@ -147,8 +151,8 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 20. Benchmark Infrastructure & Framework | 1/4 | In progress | - |
-| 21. DB Loaders | 0/5 | Not started | - |
-| 22. Benchmark Runner | 0/TBD | Not started | - |
+| 20. Benchmark Infrastructure & Framework | 4/4 | Complete | 2026-04-20 |
+| 21. DB Loaders | 5/5 | Complete | 2026-04-22 |
+| 22. Benchmark Runner | 0/3 | Not started | - |
 | 23. Benchmark Execution & Decision | 0/TBD | Not started | - |
 | 24. Production Migration | 0/TBD | Not started | - |
