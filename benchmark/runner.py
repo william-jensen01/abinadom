@@ -120,6 +120,15 @@ class BenchmarkRunner:
         config: argparse.Namespace,
         db_name: str,
     ) -> None:
+        """
+        Initialize the benchmark runner for a single vector DB.
+
+        Args:
+            loader:   Concrete loader instance (ChromaDBLoader, WeaviateLoader, QdrantLoader).
+            queries:  CANONICAL_QUERIES list (8 entries from benchmark/queries.py).
+            config:   Parsed argparse.Namespace with upsert_limit, query_limit, workers, output.
+            db_name:  String identifier for the DB ("chroma", "weaviate", "qdrant").
+        """
         self._loader = loader
         self._queries = queries
         self._config = config
