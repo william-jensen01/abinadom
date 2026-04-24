@@ -466,3 +466,53 @@ class BenchmarkRunner:
         mean_k50 = statistics.mean(k50_scores) if k50_scores else 0.0
         self.results["recall"] = {"mean_k10": mean_k10, "mean_k50": mean_k50}
         logger.info("[%s] recall@k10=%.3f recall@k50=%.3f", self._db_name, mean_k10, mean_k50)
+
+    def run_all(self, chroma_baseline: "dict[str, list[str]] | None" = None) -> dict:
+        """
+        Sequence all 10 benchmark dimensions in order.
+        Returns the assembled report dict (self.results) ready for JSON serialization.
+
+        ORDERING CONTRACT (SPEC Req 10):
+            1. run_memory_upsert()        — capture RSS baseline BEFORE upsert starts
+            2. run_upsert_phase()         — load gate; all upserts complete before return
+            3. _finalize_memory_upsert()  — capture RSS AFTER upsert completes
+            4. run_cold_warm()            — FIRST query after load gate clears (cold read)
+            5. run_serial_latency()       — serial p50/p95/p99 at 1 worker
+            6. run_filtered_unfiltered()  — split QueryMetrics by filter presence
+            7. run_scalability_curve()    — [1,5,10,20] workers, same --query-limit at each
+            8. run_memory_query()         — peak RSS during concurrent query phase
+            9. run_latency_under_load()   — degradation ratio from scalability_curve
+           10. run_determinism()          — Jaccard stability across 10 runs per query
+           11. run_recall(chroma_baseline) — ChromaDB ground-truth recall@k10 + k50
+
+        Args:
+            chroma_baseline: Pre-collected ChromaDB result IDs per query_text (for Weaviate/Qdrant).
+                             None when this runner is for ChromaDB itself, or ChromaDB is unreachable.
+        """
+        logger.info("[%s] === benchmark start ===", self._db_name)
+
+        # Step 1: Memory baseline before upsert
+        self.run_memory_upsert()
+
+        # Step 2: Load gate — all upserts complete before ANY query
+        self.run_upsert_phase()
+
+        # Step 3: Memory after upsert
+        self._finalize_memory_upsert()
+
+        # Step 4: Cold/warm — MUST be the first query-issuing method after load gate
+        self.run_cold_warm()
+
+        # Steps 5–9: Query benchmarks
+        self.run_serial_latency()
+        self.run_filtered_unfiltered()
+        self.run_scalability_curve()
+        self.run_memory_query()
+        self.run_latency_under_load()
+        self.run_determinism()
+
+        # Step 10: recall@k (null for ChromaDB itself)
+        self.run_recall(chroma_baseline)
+
+        logger.info("[%s] === benchmark complete ===", self._db_name)
+        return self.results
