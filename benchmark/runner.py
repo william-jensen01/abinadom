@@ -516,3 +516,181 @@ class BenchmarkRunner:
 
         logger.info("[%s] === benchmark complete ===", self._db_name)
         return self.results
+
+
+# ---------------------------------------------------------------------------
+# Module-level functions: CLI, report writing, loader factory, baseline
+# ---------------------------------------------------------------------------
+
+def _write_report(report: dict, output_dir: str) -> Path:
+    """
+    Write report dict to {output_dir}/{db}_{YYYYMMDD_HHMMSS}.json.
+    Creates output_dir if it does not exist (mkdir -p).
+    Returns the Path of the written file.
+    """
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    db = report.get("db", "unknown")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = out / f"{db}_{ts}.json"
+    with open(filename, "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2)
+    logger.info("Report written: %s", filename)
+    return filename
+
+
+def _build_loader(db_name: str, config: argparse.Namespace) -> BaseLoader:
+    """Instantiate the correct loader for db_name using Docker default ports."""
+    if db_name == "chroma":
+        return ChromaDBLoader(host="localhost", port=8000, embed_fn=embed, batch_size=100)
+    elif db_name == "weaviate":
+        return WeaviateLoader(host="localhost", port=8080, embed_fn=embed, batch_size=100)
+    elif db_name == "qdrant":
+        return QdrantLoader(host="localhost", port=6333, embed_fn=embed, batch_size=100)
+    else:
+        raise ValueError(f"Unknown db: {db_name!r}. Must be one of: chroma, weaviate, qdrant")
+
+
+def _collect_chroma_baseline(queries: list[dict[str, Any]]) -> "dict[str, list[str]] | None":
+    """
+    Query ChromaDB for top-50 result IDs per canonical query.
+    Returns None if ChromaDB is unreachable (D-05: log WARNING, no crash).
+    Called once before Weaviate/Qdrant benchmarks to establish recall@k baseline (D-04).
+    """
+    try:
+        chroma = ChromaDBLoader(host="localhost", port=8000, embed_fn=embed, batch_size=100)
+        baseline: dict[str, list[str]] = {}
+        for q in queries:
+            try:
+                ids = chroma.query(
+                    collection=q["collection"],
+                    query_text=q["query_text"],
+                    k=50,
+                    filter=q.get("filter"),
+                )
+                baseline[q["query_text"]] = ids
+            except Exception as e:
+                logger.warning("ChromaDB baseline query failed for '%s': %s", q["query_text"][:40], e)
+                baseline[q["query_text"]] = []
+        return baseline
+    except Exception as e:
+        logger.warning("ChromaDB unreachable for recall@k baseline: %s — recall will be null", e)
+        return None
+
+
+def _build_argparser() -> argparse.ArgumentParser:
+    """Build the argparse CLI definition per SPEC Req 1."""
+    parser = argparse.ArgumentParser(
+        description="Run vector DB performance benchmarks and emit a structured JSON report.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--db",
+        choices=["chroma", "weaviate", "qdrant", "all"],
+        default="all",
+        help="Target DB to benchmark. 'all' benchmarks all three in order: chroma -> weaviate -> qdrant.",
+    )
+    parser.add_argument(
+        "--upsert-limit",
+        type=int,
+        default=100,
+        dest="upsert_limit",
+        help="Number of talks to load from SQLite into the target DB.",
+    )
+    parser.add_argument(
+        "--query-limit",
+        type=int,
+        default=100,
+        dest="query_limit",
+        help="Total number of queries to issue per benchmark dimension (cycled through CANONICAL_QUERIES).",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=10,
+        help="Worker count for latency-under-load measurement and ThreadPoolExecutor concurrency.",
+    )
+    parser.add_argument(
+        "--output",
+        default="benchmark/results/",
+        help="Directory to write JSON report files. Created if absent.",
+    )
+    return parser
+
+
+def main() -> None:
+    """
+    Iterate over resolved DB list, run all benchmark dimensions per DB, write JSON reports.
+
+    DB ordering for --db all: chroma -> weaviate -> qdrant (SPEC Req 14, D-04).
+    ChromaDB benchmarked first so its result IDs are available as recall@k baseline.
+
+    Error handling (D-03, D-05):
+    - Single-DB run, ChromaDB unreachable for recall baseline: recall=null, exit 0 (not a fatal error).
+    - --db all, a primary target (Weaviate or Qdrant) unreachable at connection time:
+      log ERROR, skip that DB, continue, exit non-zero at end.
+    """
+    parser = _build_argparser()
+    args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+    )
+
+    # Resolve DB list. Ordering: chroma first (establishes recall@k baseline).
+    if args.db == "all":
+        db_list = ["chroma", "weaviate", "qdrant"]
+    else:
+        db_list = [args.db]
+
+    # Validate Ollama reachability before starting any DB work.
+    try:
+        embed("hello", model="nomic-embed-text")
+    except Exception as e:
+        logger.error("Ollama unreachable: %s — ensure Ollama is running with nomic-embed-text pulled", e)
+        sys.exit(1)
+
+    # Collect ChromaDB recall@k baseline ONCE before Weaviate/Qdrant runs.
+    # (When --db chroma, baseline is not needed — chroma IS the baseline.)
+    chroma_baseline: "dict[str, list[str]] | None" = None
+    if any(db in db_list for db in ["weaviate", "qdrant"]):
+        chroma_baseline = _collect_chroma_baseline(CANONICAL_QUERIES)
+        if chroma_baseline is None:
+            logger.warning("ChromaDB baseline unavailable — recall will be null for Weaviate/Qdrant")
+
+    had_failure = False
+
+    for db_name in db_list:
+        loader: "BaseLoader | None" = None
+        try:
+            loader = _build_loader(db_name, args)
+        except Exception as e:
+            logger.error("[%s] Failed to connect to DB: %s — skipping", db_name, e)
+            had_failure = True
+            continue
+
+        try:
+            # ChromaDB itself has recall=null (it IS the baseline, per SPEC Req 12)
+            baseline = None if db_name == "chroma" else chroma_baseline
+            runner = BenchmarkRunner(
+                loader=loader,
+                queries=CANONICAL_QUERIES,
+                config=args,
+                db_name=db_name,
+            )
+            report = runner.run_all(chroma_baseline=baseline)
+            _write_report(report, args.output)
+        except Exception as e:
+            logger.error("[%s] Benchmark failed: %s", db_name, e)
+            had_failure = True
+        finally:
+            if loader is not None:
+                loader.close()
+
+    if had_failure:
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
