@@ -51,6 +51,17 @@ class MemoryMetrics:
     delta_mb: float
 
 
+@dataclass
+class ScalabilityCurveEntry:
+    """Per-worker-level result for the scalability curve benchmark (SPEC Req 7, D-09)."""
+
+    workers: int
+    throughput_qps: float
+    p50_ms: float
+    p95_ms: float
+    p99_ms: float
+
+
 def recall_at_k(baseline_ids: list[str], candidate_ids: list[str], k: int) -> float:
     """
     Compute recall@k: fraction of baseline_ids[:k] that appear in candidate_ids[:k].
