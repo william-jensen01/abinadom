@@ -118,7 +118,7 @@ Plans:
   4. With a small dataset, the runner enforces the load gate — upsert phase completes before any query benchmarks execute; no query is issued before all target talks are loaded
 **Plans**: 3 plans
 Plans:
-- [ ] 22-01-PLAN.md — Wave 1: Pipfile psutil + ScalabilityCurveEntry dataclass in benchmark/metrics.py
+- [x] 22-01-PLAN.md — Wave 1: Pipfile psutil + ScalabilityCurveEntry dataclass in benchmark/metrics.py — completed 2026-04-24
 - [ ] 22-02-PLAN.md — Wave 2: BenchmarkRunner class with all 10 measurement methods in benchmark/runner.py
 - [ ] 22-03-PLAN.md — Wave 3: run_all() + main() CLI entrypoint + _write_report() + multi-DB orchestration
 **UI hint**: no
@@ -153,6 +153,6 @@ Plans:
 |-------|----------------|--------|-----------|
 | 20. Benchmark Infrastructure & Framework | 4/4 | Complete | 2026-04-20 |
 | 21. DB Loaders | 5/5 | Complete | 2026-04-22 |
-| 22. Benchmark Runner | 0/3 | Not started | - |
+| 22. Benchmark Runner | 1/3 | In Progress | - |
 | 23. Benchmark Execution & Decision | 0/TBD | Not started | - |
 | 24. Production Migration | 0/TBD | Not started | - |
