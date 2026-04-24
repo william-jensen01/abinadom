@@ -67,7 +67,7 @@ Full details: `.planning/milestones/v3.0-ROADMAP.md`
 
 - [x] **Phase 20: Benchmark Infrastructure & Framework** — Docker Compose for all 3 DBs running locally; shared transform, metrics, and canonical query modules ready (completed 2026-04-20)
 - [x] **Phase 21: DB Loaders** — ChromaDB, Weaviate, and Qdrant loaders each accept a talk bundle and persist it correctly (completed 2026-04-22)
-- [ ] **Phase 22: Benchmark Runner** — `benchmark/runner.py` CLI orchestrates a full benchmark run and emits a structured JSON report
+- [x] **Phase 22: Benchmark Runner** — `benchmark/runner.py` CLI orchestrates a full benchmark run and emits a structured JSON report (completed 2026-04-24)
 - [ ] **Phase 23: Benchmark Execution & Decision** — Full benchmark run completes; recall@k computed; written decision report names the winner
 - [ ] **Phase 24: Production Migration** — Pipeline loader, MCP server, and Docker stack all running on the winning DB with all 5,838 talks loaded
 
@@ -120,7 +120,7 @@ Plans:
 Plans:
 - [x] 22-01-PLAN.md — Wave 1: Pipfile psutil + ScalabilityCurveEntry dataclass in benchmark/metrics.py — completed 2026-04-24
 - [x] 22-02-PLAN.md — Wave 2: BenchmarkRunner class with all 10 measurement methods in benchmark/runner.py
-- [ ] 22-03-PLAN.md — Wave 3: run_all() + main() CLI entrypoint + _write_report() + multi-DB orchestration
+- [x] 22-03-PLAN.md — Wave 3: run_all() + main() CLI entrypoint + _write_report() + multi-DB orchestration — completed 2026-04-24
 **UI hint**: no
 
 #### Phase 23: Benchmark Execution & Decision
@@ -153,6 +153,6 @@ Plans:
 |-------|----------------|--------|-----------|
 | 20. Benchmark Infrastructure & Framework | 4/4 | Complete | 2026-04-20 |
 | 21. DB Loaders | 5/5 | Complete | 2026-04-22 |
-| 22. Benchmark Runner | 1/3 | In Progress | - |
+| 22. Benchmark Runner | 3/3 | Complete | 2026-04-24 |
 | 23. Benchmark Execution & Decision | 0/TBD | Not started | - |
 | 24. Production Migration | 0/TBD | Not started | - |
