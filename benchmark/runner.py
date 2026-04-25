@@ -186,18 +186,26 @@ class BenchmarkRunner:
 
     def run_memory_upsert(self) -> None:
         """
-        Capture RSS baseline before upsert starts (D-07).
-        After upsert completes, call _finalize_memory_upsert() to record the delta.
-        Stores intermediate state in self._mem_upsert_baseline_bytes.
+        Capture RSS baseline and start background polling before upsert starts (D-07).
+        After upsert completes, call _finalize_memory_upsert() to stop polling and record the peak.
+        Stores intermediate state in self._mem_upsert_baseline_bytes, self._mem_upsert_samples,
+        self._mem_upsert_stop, and self._mem_upsert_poller.
         """
         proc = psutil.Process()
         self._mem_upsert_baseline_bytes = proc.memory_info().rss
+        self._mem_upsert_samples: list[int] = []
+        self._mem_upsert_stop = threading.Event()
+        self._mem_upsert_poller = threading.Thread(
+            target=_poll_memory, args=(self._mem_upsert_samples, self._mem_upsert_stop), daemon=True
+        )
+        self._mem_upsert_poller.start()
         logger.info("[%s] memory upsert baseline: %.1f MB", self._db_name, self._mem_upsert_baseline_bytes / 1024**2)
 
     def _finalize_memory_upsert(self) -> None:
-        proc = psutil.Process()
-        peak_bytes = proc.memory_info().rss
+        self._mem_upsert_stop.set()
+        self._mem_upsert_poller.join(timeout=1.0)
         baseline_mb = self._mem_upsert_baseline_bytes / 1024**2
+        peak_bytes = max(self._mem_upsert_samples) if self._mem_upsert_samples else self._mem_upsert_baseline_bytes
         peak_mb = peak_bytes / 1024**2
         self.results["memory_upsert"] = asdict(MemoryMetrics(
             baseline_mb=baseline_mb,
