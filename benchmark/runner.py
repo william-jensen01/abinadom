@@ -14,6 +14,7 @@ Usage:
 import argparse
 import json
 import logging
+import math
 import os
 import statistics
 import sys
@@ -76,8 +77,9 @@ def _compute_query_metrics(latencies_ms: list[float], failed: int = 0) -> QueryM
     n = len(sorted_lat)
 
     def percentile(p: float) -> float:
-        idx = int(p / 100 * n)
-        return sorted_lat[min(idx, n - 1)]
+        # Nearest-rank (1-based): rank = ceil(p/100 * n), then convert to 0-based index
+        idx = max(0, math.ceil(p / 100.0 * n) - 1)
+        return sorted_lat[idx]
 
     return QueryMetrics(
         p50_ms=percentile(50),
