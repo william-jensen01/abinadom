@@ -475,8 +475,12 @@ class BenchmarkRunner:
                 )
             except Exception:
                 candidate_ids_50 = candidate_ids
-            baseline_ids_50 = baseline_ids[:50] if len(baseline_ids) >= 50 else baseline_ids
-            k50_scores.append(recall_at_k(baseline_ids_50, candidate_ids_50, k=50))
+            if len(baseline_ids) < 50:
+                logger.debug(
+                    "[%s] recall@k50: baseline has only %d results for '%s'",
+                    self._db_name, len(baseline_ids), q["query_text"],
+                )
+            k50_scores.append(recall_at_k(baseline_ids, candidate_ids_50, k=50))
 
         mean_k10 = statistics.mean(k10_scores) if k10_scores else 0.0
         mean_k50 = statistics.mean(k50_scores) if k50_scores else 0.0
