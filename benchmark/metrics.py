@@ -64,7 +64,9 @@ class ScalabilityCurveEntry:
 
 def recall_at_k(baseline_ids: list[str], candidate_ids: list[str], k: int) -> float:
     """
-    Compute recall@k: fraction of baseline_ids[:k] that appear in candidate_ids[:k].
+    Compute recall@k: fraction of the top-k slots that appear in both baseline and candidate.
+
+    Formally: |baseline_ids[:k] ∩ candidate_ids[:k]| / k
 
     Args:
         baseline_ids:   Ground-truth ranked list (e.g., ChromaDB results).
@@ -74,6 +76,9 @@ def recall_at_k(baseline_ids: list[str], candidate_ids: list[str], k: int) -> fl
     Returns:
         Float in [0.0, 1.0]. Example: recall_at_k(["a","b","c"], ["a","c","d"], k=3)
         returns 0.6666... (2 overlapping IDs / k=3).
+
+    Note: if baseline_ids has fewer than k elements, the maximum achievable score
+    is len(baseline_ids) / k (< 1.0), not 1.0.
     """
     if k == 0:
         return 0.0
