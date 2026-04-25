@@ -582,20 +582,23 @@ def _collect_chroma_baseline(queries: list[dict[str, Any]]) -> "dict[str, list[s
             embed_fn=embed,
             batch_size=100,
         )
-        baseline: dict[str, list[str]] = {}
-        for q in queries:
-            try:
-                ids = chroma.query(
-                    collection=q["collection"],
-                    query_text=q["query_text"],
-                    k=50,
-                    filter=q.get("filter"),
-                )
-                baseline[q["query_text"]] = ids
-            except Exception as e:
-                logger.warning("ChromaDB baseline query failed for '%s': %s", q["query_text"][:40], e)
-                baseline[q["query_text"]] = []
-        return baseline
+        try:
+            baseline: dict[str, list[str]] = {}
+            for q in queries:
+                try:
+                    ids = chroma.query(
+                        collection=q["collection"],
+                        query_text=q["query_text"],
+                        k=50,
+                        filter=q.get("filter"),
+                    )
+                    baseline[q["query_text"]] = ids
+                except Exception as e:
+                    logger.warning("ChromaDB baseline query failed for '%s': %s", q["query_text"][:40], e)
+                    baseline[q["query_text"]] = []
+            return baseline
+        finally:
+            chroma.close()
     except Exception as e:
         logger.warning("ChromaDB unreachable for recall@k baseline: %s — recall will be null", e)
         return None
