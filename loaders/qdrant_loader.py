@@ -160,8 +160,8 @@ class QdrantLoader(BaseLoader):
         qdrant_filter = None
         if filter is not None:
             conditions = [
-                FieldCondition(key=k, match=MatchValue(value=v))
-                for k, v in filter.items()
+                FieldCondition(key=field, match=MatchValue(value=v))
+                for field, v in filter.items()
             ]
             qdrant_filter = QFilter(must=conditions)
 
@@ -176,3 +176,7 @@ class QdrantLoader(BaseLoader):
             hit.payload.get("_doc_id", str(hit.id))
             for hit in results.points
         ]
+
+    def close(self) -> None:
+        """Close the Qdrant client and release its underlying connection."""
+        self._client.close()
