@@ -89,6 +89,24 @@ class ChromaDBLoader(BaseLoader):
                         e,
                     )
 
+    def close(self) -> None:
+        """Close the chromadb client and release its HTTP connections.
+
+        chromadb.HttpClient creates two separate httpx sessions (main + admin).
+        Neither is closed by client.close() since FastAPI has no stop() hook,
+        so we explicitly close both to prevent ResourceWarning on process exit.
+        """
+        try:
+            self._client._server._session.close()
+        except Exception:
+            pass
+        try:
+            if hasattr(self._client, "_admin_client"):
+                self._client._admin_client._server._session.close()
+        except Exception:
+            pass
+        self._client.close()
+
     def query(
         self,
         collection: str,

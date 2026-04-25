@@ -61,7 +61,7 @@ Full details: `.planning/milestones/v3.0-ROADMAP.md`
 |---|-------|------|--------------|------------------|
 | 20 | Benchmark Infrastructure & Framework | 4/4 | Complete    | 2026-04-20 |
 | 21 | DB Loaders | 5/5 | Complete   | 2026-04-22 |
-| 22 | Benchmark Runner | 2/3 | In Progress|  |
+| 22 | Benchmark Runner | 3/3 | Complete | 2026-04-25 |
 | 23 | Benchmark Execution & Decision | All three DBs fully loaded and benchmarked; decision report names the winning DB | EVAL-02, EVAL-03, EVAL-04, EVAL-05 | 4 |
 | 24 | Production Migration | Production MCP server, pipeline loader, and Docker stack run on the winning DB; all 5,838 talks loaded and search verified | MIGR-01, MIGR-02, MIGR-03, MIGR-04 | 4 |
 

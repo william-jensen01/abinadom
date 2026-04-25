@@ -8,6 +8,7 @@ Import and inject as embed_fn at loader constructor time:
     from loaders.embeddings import embed
     loader = ChromaDBLoader("localhost", 8000, embed_fn=embed)
 """
+import atexit
 import sys
 from pathlib import Path
 
@@ -16,6 +17,11 @@ sys.path.append(str(Path(__file__).parent.parent))
 import ollama
 
 OLLAMA_URL = "http://localhost:11434"
+
+# Module-level singleton reused across all embed() calls.
+# atexit closes the underlying httpx session to prevent ResourceWarning on exit.
+_client = ollama.Client(host=OLLAMA_URL)
+atexit.register(_client._client.close)
 
 
 def embed(
@@ -38,7 +44,7 @@ def embed(
         Exception: Propagates any Ollama connection or model errors.
                    Callers (loaders) handle exceptions at the batch level (D-07).
     """
-    response = ollama.Client(host=url).embed(model=model, input=text)
+    response = _client.embed(model=model, input=text)
     # EmbedResponse.embeddings: Sequence[Sequence[float]]
     # Single input -> embeddings[0] is the 768-element vector
     return list(response.embeddings[0])
