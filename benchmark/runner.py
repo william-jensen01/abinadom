@@ -320,13 +320,15 @@ class BenchmarkRunner:
                     fails += 1
             return _compute_query_metrics(lats, fails)
 
-        uf_metrics = _run_group(unfiltered)
-        f_metrics = _run_group(filtered)
-        self.results["query_latency_unfiltered"] = asdict(uf_metrics)
-        self.results["query_latency_filtered"] = asdict(f_metrics)
+        uf_metrics = _run_group(unfiltered) if unfiltered else None
+        f_metrics = _run_group(filtered) if filtered else None
+        self.results["query_latency_unfiltered"] = asdict(uf_metrics) if uf_metrics else None
+        self.results["query_latency_filtered"] = asdict(f_metrics) if f_metrics else None
         logger.info(
             "[%s] unfiltered q_count=%d filtered q_count=%d",
-            self._db_name, uf_metrics.query_count, f_metrics.query_count,
+            self._db_name,
+            uf_metrics.query_count if uf_metrics else 0,
+            f_metrics.query_count if f_metrics else 0,
         )
 
     def run_scalability_curve(self) -> list[ScalabilityCurveEntry]:
