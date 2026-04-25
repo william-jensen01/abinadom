@@ -93,8 +93,11 @@ def _compute_query_metrics(latencies_ms: list[float], failed: int = 0) -> QueryM
     )
 
 
-def _poll_memory(samples: list[float], stop_event: threading.Event, interval_s: float = 0.150) -> None:
-    """Background daemon: poll process RSS every ~150ms until stop_event is set."""
+def _poll_memory(samples: list[int], stop_event: threading.Event, interval_s: float = 0.150) -> None:
+    """Background daemon: poll process RSS every ~150ms until stop_event is set.
+
+    Appends RSS values in bytes (int) to samples.
+    """
     proc = psutil.Process()
     while not stop_event.is_set():
         samples.append(proc.memory_info().rss)
@@ -374,7 +377,7 @@ class BenchmarkRunner:
         """
         proc = psutil.Process()
         baseline_bytes = proc.memory_info().rss
-        samples: list[float] = []
+        samples: list[int] = []  # RSS in bytes
         stop_event = threading.Event()
         poller = threading.Thread(target=_poll_memory, args=(samples, stop_event), daemon=True)
         poller.start()
