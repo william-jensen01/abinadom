@@ -285,7 +285,7 @@ class WeaviateLoader(BaseLoader):
         if filter is not None:
             # Build a simple equality filter for each key-value pair
             from weaviate.classes.query import Filter
-            conditions = [Filter.by_property(k).equal(v) for k, v in filter.items()]
+            conditions = [Filter.by_property(prop).equal(v) for prop, v in filter.items()]
             if len(conditions) == 1:
                 kwargs["filters"] = conditions[0]
             else:
