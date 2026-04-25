@@ -43,6 +43,17 @@ class BaseLoader(ABC):
         pass
 
     @abstractmethod
+    def query(
+        self,
+        collection: str,
+        query_text: str,
+        k: int,
+        filter: dict | None = None,
+    ) -> list[str]:
+        """Query the target DB and return top-k document IDs."""
+        ...
+
+    @abstractmethod
     def load(self, bundle: TalkBundle) -> None:
         """
         Load a single talk bundle into the target vector DB.
