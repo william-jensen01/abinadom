@@ -147,8 +147,13 @@ class BenchmarkRunner:
     # Helper methods
     # -----------------------------------------------------------------------
 
-    def _query_db(self, query: dict[str, Any]) -> list[str]:
-        """Issue one canonical query; return list of result IDs. Returns [] on failure."""
+    def _query_db(self, query: dict[str, Any]) -> list[str] | None:
+        """Issue one canonical query; return list of result IDs.
+
+        Returns:
+            list[str]: Query results (may be empty if the collection has no matches).
+            None:      Query raised an exception (genuine failure).
+        """
         try:
             return self._loader.query(
                 collection=query["collection"],
@@ -158,7 +163,7 @@ class BenchmarkRunner:
             )
         except Exception as e:
             logger.warning("Query failed [%s] %s: %s", self._db_name, query["query_text"][:40], e)
-            return []
+            return None
 
     def _timed_query(self, q: dict[str, Any]) -> float | None:
         """Issue one query and return latency in ms, or None on failure."""
@@ -280,7 +285,7 @@ class BenchmarkRunner:
             t0 = time.monotonic()
             ids = self._query_db(q)
             latencies.append((time.monotonic() - t0) * 1000.0)
-            if not ids:
+            if ids is None:
                 failed += 1
         metrics = _compute_query_metrics(latencies, failed)
         self.results["query_latency_serial"] = asdict(metrics)
@@ -303,7 +308,7 @@ class BenchmarkRunner:
                 t0 = time.monotonic()
                 ids = self._query_db(q)
                 lats.append((time.monotonic() - t0) * 1000.0)
-                if not ids:
+                if ids is None:
                     fails += 1
             return _compute_query_metrics(lats, fails)
 
@@ -422,7 +427,7 @@ class BenchmarkRunner:
             all_id_sets: list[set[str]] = []
             for _ in range(10):
                 ids = self._query_db(q)
-                all_id_sets.append(set(ids))
+                all_id_sets.append(set(ids) if ids is not None else set())
             if all_id_sets:
                 intersection = set.intersection(*all_id_sets)
                 union = set.union(*all_id_sets)
@@ -450,7 +455,7 @@ class BenchmarkRunner:
             baseline_ids = chroma_baseline.get(q["query_text"], [])
             if not baseline_ids:
                 continue
-            candidate_ids = self._query_db(q)
+            candidate_ids = self._query_db(q) or []
             k10_scores.append(recall_at_k(baseline_ids, candidate_ids, k=10))
             # For k50, re-query with k=50
             try:
