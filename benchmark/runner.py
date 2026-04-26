@@ -466,8 +466,8 @@ class BenchmarkRunner:
         k50_scores: list[float] = []
         for q in self._queries:
             baseline_ids = chroma_baseline.get(q["query_text"], [])
-            if not baseline_ids:
-                continue
+            # Do NOT skip empty baselines — they contribute recall=0.0 to the mean,
+            # keeping the denominator consistent across all N queries.
             candidate_ids = self._query_db(q) or []
             k10_scores.append(recall_at_k(baseline_ids, candidate_ids, k=10))
             # For k50, re-query with k=50
