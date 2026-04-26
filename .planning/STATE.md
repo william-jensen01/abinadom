@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 
 ## Current Position
 
-Phase: 22.1 (address-recall-k-0-0-bug) — NEXT
-Plan: 0 of 0
-Status: Ready to execute
-Last activity: 2026-04-26 -- Phase 22.1 planning complete
+Phase: 22.1 (address-recall-k-0-0-bug) — EXECUTING
+Plan: 2 of 3 (Wave 1 complete — awaiting smoke test checkpoint)
+Status: Wave 2 pending human action (Weaviate volume reset)
+Last activity: 2026-04-25 -- Phase 22.1 Wave 1 complete (plans 01+02 merged)
 
 Progress: [████████████░░░░░░░░] 60% — 12/12 plans complete (v4.0 milestone, Phase 22 done)
 
