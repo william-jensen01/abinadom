@@ -98,13 +98,13 @@ class ChromaDBLoader(BaseLoader):
         """
         try:
             self._client._server._session.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("ChromaDB: failed to close _server._session (private API may have changed): %s", e)
         try:
             if hasattr(self._client, "_admin_client"):
                 self._client._admin_client._server._session.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("ChromaDB: failed to close _admin_client._server._session (private API may have changed): %s", e)
         self._client.close()
 
     def query(
