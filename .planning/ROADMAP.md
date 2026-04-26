@@ -125,13 +125,15 @@ Plans:
 
 ### Phase 22.1: address Recall@k = 0.0 bug (INSERTED)
 
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
+**Goal:** Fix two root-cause bugs causing recall@k10 and recall@k50 to report 0.0 for Weaviate and Qdrant, confirmed by a local smoke test
+**Requirements**: REQ-22.1-1, REQ-22.1-2, REQ-22.1-3, REQ-22.1-4
 **Depends on:** Phase 22
-**Plans:** 0 plans
+**Plans:** 3 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 22.1 to break down)
+- [ ] 22.1-01-PLAN.md — Wave 1: Fix ChromaDBLoader.query() — resolve collection name through CHROMADB_COLLECTION_NAMES (Bug 1)
+- [ ] 22.1-02-PLAN.md — Wave 1: Fix WeaviateLoader — add doc_id_str schema property, store in load(), return in query() (Bug 2)
+- [ ] 22.1-03-PLAN.md — Wave 2: Smoke test (--upsert-limit 10 --query-limit 10 --db all) confirming non-zero recall
 
 #### Phase 23: Benchmark Execution & Decision
 **Goal**: All three DBs are fully loaded with 5,838 talks, benchmarks have run across all metric dimensions, recall@k is computed, and a written decision report names the winning DB with rationale
@@ -164,5 +166,6 @@ Plans:
 | 20. Benchmark Infrastructure & Framework | 4/4 | Complete | 2026-04-20 |
 | 21. DB Loaders | 5/5 | Complete | 2026-04-22 |
 | 22. Benchmark Runner | 3/3 | Complete | 2026-04-24 |
+| 22.1. Address Recall@k = 0.0 Bug | 0/3 | Not started | - |
 | 23. Benchmark Execution & Decision | 0/TBD | Not started | - |
 | 24. Production Migration | 0/TBD | Not started | - |
