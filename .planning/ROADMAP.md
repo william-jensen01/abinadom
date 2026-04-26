@@ -123,6 +123,16 @@ Plans:
 - [x] 22-03-PLAN.md — Wave 3: run_all() + main() CLI entrypoint + _write_report() + multi-DB orchestration — completed 2026-04-24
 **UI hint**: no
 
+### Phase 22.1: address Recall@k = 0.0 bug (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 22
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 22.1 to break down)
+
 #### Phase 23: Benchmark Execution & Decision
 **Goal**: All three DBs are fully loaded with 5,838 talks, benchmarks have run across all metric dimensions, recall@k is computed, and a written decision report names the winning DB with rationale
 **Depends on**: Phase 22
