@@ -133,7 +133,17 @@ Plans:
 Plans:
 - [x] 22.1-01-PLAN.md — Wave 1: Fix ChromaDBLoader.query() — resolve collection name through CHROMADB_COLLECTION_NAMES (Bug 1) — completed 2026-04-25
 - [x] 22.1-02-PLAN.md — Wave 1: Fix WeaviateLoader — add doc_id_str schema property, store in load(), return in query() (Bug 2) — completed 2026-04-25
-- [ ] 22.1-03-PLAN.md — Wave 2: Smoke test (--upsert-limit 10 --query-limit 10 --db all) confirming non-zero recall
+- [x] 22.1-03-PLAN.md — Wave 2: Smoke test (--upsert-limit 10 --query-limit 10 --db all) confirming non-zero recall — completed 2026-04-26
+
+### Phase 22.2: optimize benchmark loaders for efficiency (INSERTED)
+
+**Goal:** [Urgent work - to be planned]
+**Requirements**: TBD
+**Depends on:** Phase 22.1
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 22.2 to break down)
 
 #### Phase 23: Benchmark Execution & Decision
 **Goal**: All three DBs are fully loaded with 5,838 talks, benchmarks have run across all metric dimensions, recall@k is computed, and a written decision report names the winning DB with rationale
@@ -166,6 +176,7 @@ Plans:
 | 20. Benchmark Infrastructure & Framework | 4/4 | Complete | 2026-04-20 |
 | 21. DB Loaders | 5/5 | Complete | 2026-04-22 |
 | 22. Benchmark Runner | 3/3 | Complete | 2026-04-24 |
-| 22.1. Address Recall@k = 0.0 Bug | 2/3 | In Progress | - |
+| 22.1. Address Recall@k = 0.0 Bug | 3/3 | Complete | 2026-04-26 |
+| 22.2. Optimize Benchmark Loaders for Efficiency | 0/TBD | Not started | - |
 | 23. Benchmark Execution & Decision | 0/TBD | Not started | - |
 | 24. Production Migration | 0/TBD | Not started | - |
