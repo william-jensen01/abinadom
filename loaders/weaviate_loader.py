@@ -130,6 +130,7 @@ class WeaviateLoader(BaseLoader):
             Property(name="extraction_timestamp", data_type=DataType.TEXT),
             Property(name="extraction_version", data_type=DataType.TEXT),
             Property(name="annotations", data_type=DataType.TEXT),
+            Property(name="doc_id_str",  data_type=DataType.TEXT),
         ]
 
     def _paragraph_properties(self) -> list:
@@ -154,6 +155,7 @@ class WeaviateLoader(BaseLoader):
             Property(name="title", data_type=DataType.TEXT),
             Property(name="conference_year", data_type=DataType.INT),
             Property(name="conference_month", data_type=DataType.TEXT),
+            Property(name="doc_id_str",       data_type=DataType.TEXT),
         ]
 
     def _citation_properties(self) -> list:
@@ -184,6 +186,7 @@ class WeaviateLoader(BaseLoader):
             Property(name="context_before", data_type=DataType.TEXT),
             Property(name="context_after", data_type=DataType.TEXT),
             Property(name="context_window", data_type=DataType.TEXT),
+            Property(name="doc_id_str",     data_type=DataType.TEXT),
         ]
 
     def _footnote_properties(self) -> list:
@@ -200,6 +203,7 @@ class WeaviateLoader(BaseLoader):
             Property(name="context_after", data_type=DataType.TEXT),
             Property(name="context_window", data_type=DataType.TEXT),
             Property(name="parse_success", data_type=DataType.BOOL),
+            Property(name="doc_id_str",    data_type=DataType.TEXT),
         ]
 
     def load(self, bundle: TalkBundle) -> None:
@@ -228,7 +232,7 @@ class WeaviateLoader(BaseLoader):
                 for doc, meta, doc_id, vector in records[key]:
                     try:
                         batch_ctx.add_object(
-                            properties=meta,
+                            properties={**meta, "doc_id_str": doc_id},
                             uuid=generate_uuid5(doc_id),
                             vector=vector,
                         )
@@ -296,7 +300,7 @@ class WeaviateLoader(BaseLoader):
                 kwargs["filters"] = combined
 
         result = col.query.near_vector(**kwargs)
-        return [obj.properties.get("id", str(obj.uuid)) for obj in result.objects]
+        return [obj.properties.get("doc_id_str", str(obj.uuid)) for obj in result.objects]
 
     def __enter__(self):
         return self
