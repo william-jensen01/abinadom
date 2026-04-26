@@ -267,7 +267,8 @@ class WeaviateLoader(BaseLoader):
                         Translated to a Weaviate Filter object.
 
         Returns:
-            list[str] of document IDs (from the "id" metadata field).
+            list[str] of document IDs (from the "doc_id_str" metadata field,
+            falls back to UUID string if not present).
         """
         # Map snake_case collection name to PascalCase Weaviate class
         name_map = {
