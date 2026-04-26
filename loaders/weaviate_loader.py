@@ -282,6 +282,12 @@ class WeaviateLoader(BaseLoader):
             "Footnote": "Footnote",
         }
         class_name = name_map.get(collection, collection)
+        if class_name not in ["Talk", "Paragraph", "Citation", "Footnote"]:
+            raise ValueError(
+                f"Unknown collection: {collection!r}. "
+                "Must be one of: talks, paragraphs, citations, footnotes, "
+                "Talk, Paragraph, Citation, Footnote"
+            )
         col = self._client.collections.use(class_name)
         query_embedding = self.embed_fn(query_text)
 
