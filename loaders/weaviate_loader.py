@@ -232,7 +232,7 @@ class WeaviateLoader(BaseLoader):
                 for doc, meta, doc_id, vector in records[key]:
                     try:
                         batch_ctx.add_object(
-                            properties=meta,
+                            properties={**meta, "doc_id_str": doc_id},
                             uuid=generate_uuid5(doc_id),
                             vector=vector,
                         )
@@ -300,7 +300,7 @@ class WeaviateLoader(BaseLoader):
                 kwargs["filters"] = combined
 
         result = col.query.near_vector(**kwargs)
-        return [obj.properties.get("id", str(obj.uuid)) for obj in result.objects]
+        return [obj.properties.get("doc_id_str", str(obj.uuid)) for obj in result.objects]
 
     def __enter__(self):
         return self
