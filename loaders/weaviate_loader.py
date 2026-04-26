@@ -291,15 +291,15 @@ class WeaviateLoader(BaseLoader):
         col = self._client.collections.use(class_name)
         query_embedding = self.embed_fn(query_text)
 
+        from weaviate.classes.query import Filter
+
         kwargs: dict = {"near_vector": query_embedding, "limit": k}
         if filter is not None:
             # Build a simple equality filter for each key-value pair
-            from weaviate.classes.query import Filter
             conditions = [Filter.by_property(prop).equal(v) for prop, v in filter.items()]
             if len(conditions) == 1:
                 kwargs["filters"] = conditions[0]
             else:
-                from weaviate.classes.query import Filter
                 combined = conditions[0]
                 for cond in conditions[1:]:
                     combined = combined & cond
