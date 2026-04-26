@@ -699,13 +699,10 @@ def main() -> None:
         logger.error("Ollama unreachable: %s — ensure Ollama is running with nomic-embed-text pulled", e)
         sys.exit(1)
 
-    # Collect ChromaDB recall@k baseline ONCE before Weaviate/Qdrant runs.
-    # (When --db chroma, baseline is not needed — chroma IS the baseline.)
+    # Baseline is collected AFTER ChromaDB benchmark runs so it reflects the
+    # just-loaded dataset (same talks as Weaviate/Qdrant). Collecting before
+    # populate would return results from a prior run or an empty collection.
     chroma_baseline: "dict[str, list[str]] | None" = None
-    if any(db in db_list for db in ["weaviate", "qdrant"]):
-        chroma_baseline = _collect_chroma_baseline(CANONICAL_QUERIES)
-        if chroma_baseline is None:
-            logger.warning("ChromaDB baseline unavailable — recall will be null for Weaviate/Qdrant")
 
     had_failure = False
 
@@ -735,6 +732,13 @@ def main() -> None:
         finally:
             if loader is not None:
                 loader.close()
+
+        # After ChromaDB benchmark, collect recall@k baseline (data now present).
+        # This runs inside the loop so ChromaDB is populated before querying.
+        if db_name == "chroma" and any(db in db_list for db in ["weaviate", "qdrant"]):
+            chroma_baseline = _collect_chroma_baseline(CANONICAL_QUERIES)
+            if chroma_baseline is None:
+                logger.warning("ChromaDB baseline unavailable — recall will be null for Weaviate/Qdrant")
 
     if had_failure:
         sys.exit(1)
