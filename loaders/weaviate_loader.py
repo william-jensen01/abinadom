@@ -130,6 +130,7 @@ class WeaviateLoader(BaseLoader):
             Property(name="extraction_timestamp", data_type=DataType.TEXT),
             Property(name="extraction_version", data_type=DataType.TEXT),
             Property(name="annotations", data_type=DataType.TEXT),
+            Property(name="doc_id_str",  data_type=DataType.TEXT),
         ]
 
     def _paragraph_properties(self) -> list:
@@ -154,6 +155,7 @@ class WeaviateLoader(BaseLoader):
             Property(name="title", data_type=DataType.TEXT),
             Property(name="conference_year", data_type=DataType.INT),
             Property(name="conference_month", data_type=DataType.TEXT),
+            Property(name="doc_id_str",       data_type=DataType.TEXT),
         ]
 
     def _citation_properties(self) -> list:
@@ -184,6 +186,7 @@ class WeaviateLoader(BaseLoader):
             Property(name="context_before", data_type=DataType.TEXT),
             Property(name="context_after", data_type=DataType.TEXT),
             Property(name="context_window", data_type=DataType.TEXT),
+            Property(name="doc_id_str",     data_type=DataType.TEXT),
         ]
 
     def _footnote_properties(self) -> list:
@@ -200,6 +203,7 @@ class WeaviateLoader(BaseLoader):
             Property(name="context_after", data_type=DataType.TEXT),
             Property(name="context_window", data_type=DataType.TEXT),
             Property(name="parse_success", data_type=DataType.BOOL),
+            Property(name="doc_id_str",    data_type=DataType.TEXT),
         ]
 
     def load(self, bundle: TalkBundle) -> None:
