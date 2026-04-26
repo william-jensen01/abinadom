@@ -118,7 +118,10 @@ class ChromaDBLoader(BaseLoader):
         Query a ChromaDB collection and return the top-k document IDs.
 
         Args:
-            collection: Collection name (e.g. "conference_talk_paragraphs").
+            collection: Collection name or short-key alias (e.g. "paragraphs" or
+                        "conference_talk_paragraphs"). Short-key aliases are resolved
+                        through CHROMADB_COLLECTION_NAMES; unknown names pass through
+                        unchanged (same fallback behaviour as load()).
             query_text: Query string to embed and search.
             k:          Number of results to return.
             filter:     Optional ChromaDB where-clause dict (e.g. {"book_name": "John"}).
@@ -126,7 +129,8 @@ class ChromaDBLoader(BaseLoader):
         Returns:
             list[str] of document IDs (e.g. ["para_123", "para_456"]).
         """
-        col = self._client.get_or_create_collection(name=collection)
+        coll_name = CHROMADB_COLLECTION_NAMES.get(collection, collection)
+        col = self._client.get_or_create_collection(name=coll_name)
         query_embedding = self.embed_fn(query_text)
         kwargs: dict = {
             "query_embeddings": [query_embedding],
