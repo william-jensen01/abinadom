@@ -7,6 +7,10 @@ and returns a 768-dimensional float vector (D-04, D-05).
 Import and inject as embed_fn at loader constructor time:
     from loaders.embeddings import embed
     loader = ChromaDBLoader("localhost", 8000, embed_fn=embed)
+
+For batch embedding (one Ollama round-trip for N texts):
+    from loaders.embeddings import embed_batch
+    loader = ChromaDBLoader("localhost", 8000, embed_fn=embed_batch)
 """
 import atexit
 import sys
@@ -48,3 +52,27 @@ def embed(
     # EmbedResponse.embeddings: Sequence[Sequence[float]]
     # Single input -> embeddings[0] is the 768-element vector
     return list(response.embeddings[0])
+
+
+def embed_batch(
+    texts: list[str],
+    model: str = "nomic-embed-text",
+    url: str = OLLAMA_URL,
+) -> list[list[float]]:
+    """
+    Return a list of 768-dim float vectors from Ollama nomic-embed-text.
+    Sends all texts in a single HTTP round-trip via Ollama batch embed API.
+
+    Args:
+        texts: Input texts to embed (list of strings).
+        model: Ollama model name. Default "nomic-embed-text" (768 dims).
+        url:   Ollama server URL. Default http://localhost:11434.
+
+    Returns:
+        list[list[float]], one vector per input text, same order.
+
+    Raises:
+        Exception: Propagates any Ollama connection or model errors.
+    """
+    response = _client.embed(model=model, input=texts)
+    return [list(v) for v in response.embeddings]
