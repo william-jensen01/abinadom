@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Vector DB Migration
 status: executing
-last_updated: "2026-04-27T00:00:00.000Z"
-last_activity: 2026-04-27 -- Phase 22.2 planning complete
+last_updated: "2026-04-27T20:30:00.000Z"
+last_activity: 2026-04-27 -- Phase 22.2 Wave 1 complete — embed_batch() added to loaders/embeddings.py
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 19
-  completed_plans: 12
-  percent: 63
+  completed_plans: 13
+  percent: 68
 ---
 
 # Project State
@@ -24,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 
 ## Current Position
 
-Phase: 22.2 (optimize-benchmark-loaders) — Ready to execute
-Plan: 0 of 4
-Status: Ready to execute
-Last activity: 2026-04-27 -- Phase 22.2 planning complete — 4 plans in 3 waves
+Phase: 22.2 (optimize-benchmark-loaders) — Executing
+Plan: 1 of 4
+Status: Wave 1 complete; waves 2–3 pending
+Last activity: 2026-04-27 -- Wave 1 complete — embed_batch() added to loaders/embeddings.py
 
-Progress: [████████████░░░░░░░░] 60% — 12/12 plans complete (v4.0 milestone, Phase 22 done)
+Progress: [█████████████░░░░░░░] 68% — 13/19 plans complete (v4.0 milestone, Phase 22.2 Wave 1 done)
 
 ## Performance Metrics
 

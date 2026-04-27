@@ -143,7 +143,7 @@ Plans:
 **Plans:** 4 plans
 
 Plans:
-- [ ] 22.2-01-PLAN.md — Wave 1: Add embed_batch() to loaders/embeddings.py
+- [x] 22.2-01-PLAN.md — Wave 1: Add embed_batch() to loaders/embeddings.py — completed 2026-04-27
 
 **Wave 2 *(blocked on Wave 1 completion)*:**
 - [ ] 22.2-02-PLAN.md — Wave 2: Refactor shared_transforms.py to collect-embed-distribute pattern
@@ -184,6 +184,6 @@ Plans:
 | 21. DB Loaders | 5/5 | Complete | 2026-04-22 |
 | 22. Benchmark Runner | 3/3 | Complete | 2026-04-24 |
 | 22.1. Address Recall@k = 0.0 Bug | 3/3 | Complete | 2026-04-26 |
-| 22.2. Optimize Benchmark Loaders for Efficiency | 0/4 | Ready to execute | - |
+| 22.2. Optimize Benchmark Loaders for Efficiency | 1/4 | Executing (Wave 1 complete) | - |
 | 23. Benchmark Execution & Decision | 0/TBD | Not started | - |
 | 24. Production Migration | 0/TBD | Not started | - |
