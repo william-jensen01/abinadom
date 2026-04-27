@@ -137,13 +137,16 @@ Plans:
 
 ### Phase 22.2: optimize benchmark loaders for efficiency (INSERTED)
 
-**Goal:** [Urgent work - to be planned]
-**Requirements**: TBD
+**Goal:** Reduce benchmark upsert time from 2-7 hours to a feasible range by batching Ollama embed calls (one per talk bundle) and parallelizing talk loading with a ThreadPoolExecutor
+**Requirements**: SPEC-22.2-1, SPEC-22.2-2, SPEC-22.2-3, SPEC-22.2-4
 **Depends on:** Phase 22.1
-**Plans:** 0 plans
+**Plans:** 4 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 22.2 to break down)
+- [ ] 22.2-01-PLAN.md — Wave 1: Add embed_batch() to loaders/embeddings.py
+- [ ] 22.2-02-PLAN.md — Wave 2: Refactor shared_transforms.py to collect-embed-distribute pattern
+- [ ] 22.2-03-PLAN.md — Wave 2: Update loader type annotations + WeaviateLoader insert_many + test stubs
+- [ ] 22.2-04-PLAN.md — Wave 3: Parallelize runner.py upsert phase + --workers default 4 + smoke test checkpoint
 
 #### Phase 23: Benchmark Execution & Decision
 **Goal**: All three DBs are fully loaded with 5,838 talks, benchmarks have run across all metric dimensions, recall@k is computed, and a written decision report names the winning DB with rationale
@@ -177,6 +180,6 @@ Plans:
 | 21. DB Loaders | 5/5 | Complete | 2026-04-22 |
 | 22. Benchmark Runner | 3/3 | Complete | 2026-04-24 |
 | 22.1. Address Recall@k = 0.0 Bug | 3/3 | Complete | 2026-04-26 |
-| 22.2. Optimize Benchmark Loaders for Efficiency | 0/TBD | Not started | - |
+| 22.2. Optimize Benchmark Loaders for Efficiency | 0/4 | Not started | - |
 | 23. Benchmark Execution & Decision | 0/TBD | Not started | - |
 | 24. Production Migration | 0/TBD | Not started | - |
