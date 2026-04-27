@@ -144,8 +144,12 @@ Plans:
 
 Plans:
 - [ ] 22.2-01-PLAN.md — Wave 1: Add embed_batch() to loaders/embeddings.py
+
+**Wave 2 *(blocked on Wave 1 completion)*:**
 - [ ] 22.2-02-PLAN.md — Wave 2: Refactor shared_transforms.py to collect-embed-distribute pattern
 - [ ] 22.2-03-PLAN.md — Wave 2: Update loader type annotations + WeaviateLoader insert_many + test stubs
+
+**Wave 3 *(blocked on Wave 2 completion)*:**
 - [ ] 22.2-04-PLAN.md — Wave 3: Parallelize runner.py upsert phase + --workers default 4 + smoke test checkpoint
 
 #### Phase 23: Benchmark Execution & Decision
@@ -180,6 +184,6 @@ Plans:
 | 21. DB Loaders | 5/5 | Complete | 2026-04-22 |
 | 22. Benchmark Runner | 3/3 | Complete | 2026-04-24 |
 | 22.1. Address Recall@k = 0.0 Bug | 3/3 | Complete | 2026-04-26 |
-| 22.2. Optimize Benchmark Loaders for Efficiency | 0/4 | Not started | - |
+| 22.2. Optimize Benchmark Loaders for Efficiency | 0/4 | Ready to execute | - |
 | 23. Benchmark Execution & Decision | 0/TBD | Not started | - |
 | 24. Production Migration | 0/TBD | Not started | - |
