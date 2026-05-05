@@ -146,8 +146,8 @@ Plans:
 - [x] 22.2-01-PLAN.md — Wave 1: Add embed_batch() to loaders/embeddings.py — completed 2026-04-27
 
 **Wave 2 *(blocked on Wave 1 completion)*:**
-- [ ] 22.2-02-PLAN.md — Wave 2: Refactor shared_transforms.py to collect-embed-distribute pattern
-- [ ] 22.2-03-PLAN.md — Wave 2: Update loader type annotations + WeaviateLoader insert_many + test stubs
+- [x] 22.2-02-PLAN.md — Wave 2: Refactor shared_transforms.py to collect-embed-distribute pattern — completed 2026-05-05
+- [x] 22.2-03-PLAN.md — Wave 2: Update loader type annotations + WeaviateLoader insert_many + test stubs — completed 2026-05-05
 
 **Wave 3 *(blocked on Wave 2 completion)*:**
 - [ ] 22.2-04-PLAN.md — Wave 3: Parallelize runner.py upsert phase + --workers default 4 + smoke test checkpoint

@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Vector DB Migration
 status: executing
-last_updated: "2026-04-27T20:30:00.000Z"
-last_activity: 2026-04-27 -- Phase 22.2 Wave 1 complete — embed_batch() added to loaders/embeddings.py
+last_updated: "2026-05-05T00:00:00.000Z"
+last_activity: 2026-05-05 -- Phase 22.2 Wave 2 complete — shared_transforms batch pattern + loader annotations + Weaviate insert_many
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 19
-  completed_plans: 13
-  percent: 68
+  completed_plans: 15
+  percent: 79
 ---
 
 # Project State
@@ -20,16 +20,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-18)
 
 **Core value:** All LDS content searchable by meaning — find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** Phase 22.2 — optimize benchmark loaders for efficiency
+**Current focus:** Phase 22.2 — Wave 3 pending (plan 04: parallel runner.py + smoke test checkpoint)
 
 ## Current Position
 
 Phase: 22.2 (optimize-benchmark-loaders) — Executing
-Plan: 1 of 4
-Status: Wave 1 complete; waves 2–3 pending
-Last activity: 2026-04-27 -- Wave 1 complete — embed_batch() added to loaders/embeddings.py
+Plan: 3 of 4
+Status: Wave 2 complete; wave 3 pending
+Last activity: 2026-05-05 -- Wave 2 complete — collect-embed-distribute in shared_transforms, loader annotations, Weaviate insert_many
 
-Progress: [█████████████░░░░░░░] 68% — 13/19 plans complete (v4.0 milestone, Phase 22.2 Wave 1 done)
+Progress: [████████████████░░░░] 79% — 15/19 plans complete (v4.0 milestone, Phase 22.2 Wave 2 done)
 
 ## Performance Metrics
 
