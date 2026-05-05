@@ -398,23 +398,39 @@ def prepare_talk_bundle(
         )
         return {"talks": [], "paragraphs": [], "citations": [], "footnotes": []}
 
-    # Prepare paragraphs first to collect annotation texts
+    # Phase 1: prepare all records WITHOUT embedding (embed_fn=None)
     paragraph_records, annotation_texts = prepare_paragraph_records(
-        paragraphs, talk_metadata=metadata, embed_fn=embed_fn
+        paragraphs, talk_metadata=metadata, embed_fn=None
     )
+    talk_record = prepare_talk_record(metadata, annotation_texts, embed_fn=None)
+    citation_records = prepare_citation_records(citations, embed_fn=None)
+    footnote_records = prepare_footnote_records(footnotes, embed_fn=None)
 
-    # Prepare talk record with annotations folded in
-    talk_record = prepare_talk_record(metadata, annotation_texts, embed_fn=embed_fn)
+    all_records = [talk_record] + paragraph_records + citation_records + footnote_records
 
-    # Prepare citation and footnote records
-    citation_records = prepare_citation_records(citations, embed_fn=embed_fn)
-    footnote_records = prepare_footnote_records(footnotes, embed_fn=embed_fn)
+    # Phase 2: batch-embed all documents in one call
+    if embed_fn is not None:
+        texts = [doc for doc, _meta, _id, _vec in all_records]
+        vectors = embed_fn(texts)
+        all_records = [
+            (doc, meta, doc_id, vec)
+            for (doc, meta, doc_id, _), vec in zip(all_records, vectors)
+        ]
+
+    # Phase 3: redistribute back into per-collection lists
+    n_talk = 1
+    n_para = len(paragraph_records)
+    n_cite = len(citation_records)
+    talk_recs = all_records[:n_talk]
+    para_recs = all_records[n_talk : n_talk + n_para]
+    cite_recs = all_records[n_talk + n_para : n_talk + n_para + n_cite]
+    fn_recs   = all_records[n_talk + n_para + n_cite :]
 
     return {
-        "talks": [talk_record],
-        "paragraphs": paragraph_records,
-        "citations": citation_records,
-        "footnotes": footnote_records,
+        "talks": talk_recs,
+        "paragraphs": para_recs,
+        "citations": cite_recs,
+        "footnotes": fn_recs,
     }
 
 
@@ -456,16 +472,37 @@ def prepare_talk_bundle_rich(
         )
         return {"talks": [], "paragraphs": [], "citations": [], "footnotes": []}
 
+    # Phase 1: prepare all records WITHOUT embedding (embed_fn=None)
     paragraph_records, annotation_texts = _prepare_paragraph_records_rich(
-        paragraphs, talk_metadata=metadata, embed_fn=embed_fn
+        paragraphs, talk_metadata=metadata, embed_fn=None
     )
-    talk_record = _prepare_talk_record_rich(metadata, annotation_texts, embed_fn=embed_fn)
-    citation_records = _prepare_citation_records_rich(citations, embed_fn=embed_fn)
-    footnote_records = _prepare_footnote_records_rich(footnotes, embed_fn=embed_fn)
+    talk_record = _prepare_talk_record_rich(metadata, annotation_texts, embed_fn=None)
+    citation_records = _prepare_citation_records_rich(citations, embed_fn=None)
+    footnote_records = _prepare_footnote_records_rich(footnotes, embed_fn=None)
+
+    all_records = [talk_record] + paragraph_records + citation_records + footnote_records
+
+    # Phase 2: batch-embed all documents in one call
+    if embed_fn is not None:
+        texts = [doc for doc, _meta, _id, _vec in all_records]
+        vectors = embed_fn(texts)
+        all_records = [
+            (doc, meta, doc_id, vec)
+            for (doc, meta, doc_id, _), vec in zip(all_records, vectors)
+        ]
+
+    # Phase 3: redistribute back into per-collection lists
+    n_talk = 1
+    n_para = len(paragraph_records)
+    n_cite = len(citation_records)
+    talk_recs = all_records[:n_talk]
+    para_recs = all_records[n_talk : n_talk + n_para]
+    cite_recs = all_records[n_talk + n_para : n_talk + n_para + n_cite]
+    fn_recs   = all_records[n_talk + n_para + n_cite :]
 
     return {
-        "talks": [talk_record],
-        "paragraphs": paragraph_records,
-        "citations": citation_records,
-        "footnotes": footnote_records,
+        "talks": talk_recs,
+        "paragraphs": para_recs,
+        "citations": cite_recs,
+        "footnotes": fn_recs,
     }
