@@ -21,6 +21,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 import weaviate
 import weaviate.classes as wvc
 from weaviate.classes.config import DataType, Property, Configure
+from weaviate.classes.data import DataObject
 from weaviate.util import generate_uuid5
 from loaders import BaseLoader
 from loaders.shared_transforms import TalkBundle, prepare_talk_bundle_rich
@@ -211,8 +212,8 @@ class WeaviateLoader(BaseLoader):
         Load a single talk bundle into Weaviate across all 4 classes.
 
         Calls prepare_talk_bundle_rich() to get (doc, meta, id, vector) tuples,
-        then batch-inserts using fixed_size batches. After each batch context exits,
-        checks failed_objects and logs any errors as WARNING (D-07, Pitfall 5).
+        then insert_many for each collection. Errors are logged as WARNING
+        (D-03, D-04) and execution continues to the next collection.
 
         The rich bundle uses rich_metadata() so list fields (topics, verse_list)
         are preserved as native Python lists for Weaviate's TEXT_ARRAY / INT_ARRAY.
@@ -228,25 +229,30 @@ class WeaviateLoader(BaseLoader):
 
         for key, class_name in collection_map.items():
             col = self._client.collections.use(class_name)
-            with col.batch.fixed_size(batch_size=self.batch_size) as batch_ctx:
-                for doc, meta, doc_id, vector in records[key]:
-                    try:
-                        batch_ctx.add_object(
-                            properties={**meta, "doc_id_str": doc_id},
-                            uuid=generate_uuid5(doc_id),
-                            vector=vector,
+            objects = [
+                DataObject(
+                    properties={**meta, "doc_id_str": doc_id},
+                    uuid=generate_uuid5(doc_id),
+                    vector=vector,
+                )
+                for doc, meta, doc_id, vector in records[key]
+            ]
+            try:
+                result = col.data.insert_many(objects)
+                if result.has_errors:
+                    for uuid, err in result.errors.items():
+                        logger.warning(
+                            "Weaviate insert error in %s: %s",
+                            class_name,
+                            uuid,
                         )
-                    except Exception as e:
-                        logger.warning("Weaviate skip %s: %s", doc_id, e)
-            # failed_objects lives on col.batch (_BatchCollectionWrapper / _BatchWrapper),
-            # not on batch_ctx (_BatchCollection / _BatchBase which only has number_errors).
-            if col.batch.failed_objects:
-                for err in col.batch.failed_objects:
-                    logger.warning(
-                        "Weaviate batch error in class %s: %s",
-                        class_name,
-                        err,
-                    )
+            except Exception as e:
+                logger.warning(
+                    "Weaviate insert_many error in %s: %s",
+                    class_name,
+                    e,
+                )
+                # continue to next collection — never crash a talk load (D-04)
 
     def query(
         self,
