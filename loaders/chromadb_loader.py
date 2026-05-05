@@ -47,7 +47,7 @@ class ChromaDBLoader(BaseLoader):
         self,
         host: str,
         port: int,
-        embed_fn: Callable[[str], list[float]],
+        embed_fn: Callable[[list[str]], list[list[float]]],
         batch_size: int = 100,
     ) -> None:
         super().__init__(host, port, embed_fn, batch_size)
@@ -131,7 +131,7 @@ class ChromaDBLoader(BaseLoader):
         """
         coll_name = CHROMADB_COLLECTION_NAMES.get(collection, collection)
         col = self._client.get_or_create_collection(name=coll_name)
-        query_embedding = self.embed_fn(query_text)
+        query_embedding = self.embed_fn([query_text])[0]
         kwargs: dict = {
             "query_embeddings": [query_embedding],
             "n_results": k,

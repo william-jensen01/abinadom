@@ -55,7 +55,7 @@ class WeaviateLoader(BaseLoader):
         self,
         host: str,
         port: int,
-        embed_fn: Callable[[str], list[float]],
+        embed_fn: Callable[[list[str]], list[list[float]]],
         batch_size: int = 100,
     ) -> None:
         super().__init__(host, port, embed_fn, batch_size)
@@ -290,7 +290,7 @@ class WeaviateLoader(BaseLoader):
                 "Talk, Paragraph, Citation, Footnote"
             )
         col = self._client.collections.use(class_name)
-        query_embedding = self.embed_fn(query_text)
+        query_embedding = self.embed_fn([query_text])[0]
 
         from weaviate.classes.query import Filter
 
