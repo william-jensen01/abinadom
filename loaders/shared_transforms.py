@@ -92,7 +92,7 @@ def rich_metadata(meta: dict[str, Any]) -> dict[str, Any]:
 def prepare_talk_record(
     metadata: TalkMetadata,
     annotation_texts: list[str],
-    embed_fn: Callable[[str], list[float]] | None = None,
+    embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
 ) -> tuple[str, dict[str, Any], str, list[float] | None]:
     """
     Transform a TalkMetadata into a (document, metadata, id, vector|None) tuple.
@@ -111,7 +111,7 @@ def prepare_talk_record(
     Args:
         metadata:         Phase 1 output for this talk.
         annotation_texts: Text strings from annotation paragraphs (may be empty).
-        embed_fn:         Optional callable (str) -> list[float]. When None, vector is None.
+        embed_fn:         Optional callable (list[str]) -> list[list[float]]. When None, vector is None.
 
     Returns:
         (document, metadata_dict, doc_id, vector|None)
@@ -141,7 +141,7 @@ def prepare_talk_record(
 def prepare_paragraph_records(
     paragraphs: TalkParagraphs,
     talk_metadata: TalkMetadata | None = None,
-    embed_fn: Callable[[str], list[float]] | None = None,
+    embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
 ) -> tuple[list[tuple[str, dict[str, Any], str, list[float] | None]], list[str]]:
     """
     Transform TalkParagraphs into records, splitting by source_type.
@@ -161,7 +161,7 @@ def prepare_paragraph_records(
         talk_metadata: Optional Phase 1 metadata. When provided, speaker_name,
             title, conference_year, and conference_month are injected into each
             paragraph record's metadata for denormalized search results.
-        embed_fn:      Optional callable (str) -> list[float]. When None, vector is None.
+        embed_fn:      Optional callable (list[str]) -> list[list[float]]. When None, vector is None.
 
     Returns:
         (list_of_records, annotation_texts)
@@ -193,7 +193,7 @@ def prepare_paragraph_records(
 
 def prepare_citation_records(
     citations: TalkCitations,
-    embed_fn: Callable[[str], list[float]] | None = None,
+    embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
 ) -> list[tuple[str, dict[str, Any], str, list[float] | None]]:
     """
     Transform TalkCitations into records.
@@ -213,7 +213,7 @@ def prepare_citation_records(
 
     Args:
         citations: Phase 3 output container.
-        embed_fn:  Optional callable (str) -> list[float]. When None, vector is None.
+        embed_fn:  Optional callable (list[str]) -> list[list[float]]. When None, vector is None.
 
     Returns:
         List of (document, metadata, id, vector|None) tuples.
@@ -233,7 +233,7 @@ def prepare_citation_records(
 
 def prepare_footnote_records(
     footnotes: TalkFootnotes,
-    embed_fn: Callable[[str], list[float]] | None = None,
+    embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
 ) -> list[tuple[str, dict[str, Any], str, list[float] | None]]:
     """
     Transform TalkFootnotes into records.
@@ -249,7 +249,7 @@ def prepare_footnote_records(
 
     Args:
         footnotes: Phase 4 output container.
-        embed_fn:  Optional callable (str) -> list[float]. When None, vector is None.
+        embed_fn:  Optional callable (list[str]) -> list[list[float]]. When None, vector is None.
 
     Returns:
         List of (document, metadata, id, vector|None) tuples.
@@ -275,7 +275,7 @@ def prepare_footnote_records(
 def _prepare_talk_record_rich(
     metadata: TalkMetadata,
     annotation_texts: list[str],
-    embed_fn: Callable[[str], list[float]] | None = None,
+    embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
 ) -> tuple[str, dict[str, Any], str, list[float] | None]:
     """Rich variant: uses rich_metadata() instead of flatten_metadata()."""
     if metadata.talk_preview:
@@ -296,7 +296,7 @@ def _prepare_talk_record_rich(
 def _prepare_paragraph_records_rich(
     paragraphs: TalkParagraphs,
     talk_metadata: TalkMetadata | None = None,
-    embed_fn: Callable[[str], list[float]] | None = None,
+    embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
 ) -> tuple[list[tuple[str, dict[str, Any], str, list[float] | None]], list[str]]:
     """Rich variant: uses rich_metadata() instead of flatten_metadata()."""
     records: list[tuple[str, dict[str, Any], str, list[float] | None]] = []
@@ -321,7 +321,7 @@ def _prepare_paragraph_records_rich(
 
 def _prepare_citation_records_rich(
     citations: TalkCitations,
-    embed_fn: Callable[[str], list[float]] | None = None,
+    embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
 ) -> list[tuple[str, dict[str, Any], str, list[float] | None]]:
     """Rich variant: uses rich_metadata() instead of flatten_metadata()."""
     records: list[tuple[str, dict[str, Any], str, list[float] | None]] = []
@@ -337,7 +337,7 @@ def _prepare_citation_records_rich(
 
 def _prepare_footnote_records_rich(
     footnotes: TalkFootnotes,
-    embed_fn: Callable[[str], list[float]] | None = None,
+    embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
 ) -> list[tuple[str, dict[str, Any], str, list[float] | None]]:
     """Rich variant: uses rich_metadata() instead of flatten_metadata()."""
     records: list[tuple[str, dict[str, Any], str, list[float] | None]] = []
@@ -362,7 +362,7 @@ def prepare_talk_bundle(
     citations: TalkCitations,
     footnotes: TalkFootnotes,
     validation_report: ValidationReport,
-    embed_fn: Callable[[str], list[float]] | None = None,
+    embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
 ) -> dict[str, list[tuple[str, dict[str, Any], str, list[float] | None]]]:
     """
     Prepare a complete set of ChromaDB records for a single talk across all 4 collections.
@@ -383,7 +383,7 @@ def prepare_talk_bundle(
         citations:          Phase 3 output.
         footnotes:          Phase 4 output.
         validation_report:  Phase 5 output.
-        embed_fn:           Optional callable (str) -> list[float]. When None, vector is None
+        embed_fn:           Optional callable (list[str]) -> list[list[float]]. When None, vector is None
                             (backward compatible with existing callers that pass no embed_fn).
 
     Returns:
@@ -398,23 +398,39 @@ def prepare_talk_bundle(
         )
         return {"talks": [], "paragraphs": [], "citations": [], "footnotes": []}
 
-    # Prepare paragraphs first to collect annotation texts
+    # Phase 1: prepare all records WITHOUT embedding (embed_fn=None)
     paragraph_records, annotation_texts = prepare_paragraph_records(
-        paragraphs, talk_metadata=metadata, embed_fn=embed_fn
+        paragraphs, talk_metadata=metadata, embed_fn=None
     )
+    talk_record = prepare_talk_record(metadata, annotation_texts, embed_fn=None)
+    citation_records = prepare_citation_records(citations, embed_fn=None)
+    footnote_records = prepare_footnote_records(footnotes, embed_fn=None)
 
-    # Prepare talk record with annotations folded in
-    talk_record = prepare_talk_record(metadata, annotation_texts, embed_fn=embed_fn)
+    all_records = [talk_record] + paragraph_records + citation_records + footnote_records
 
-    # Prepare citation and footnote records
-    citation_records = prepare_citation_records(citations, embed_fn=embed_fn)
-    footnote_records = prepare_footnote_records(footnotes, embed_fn=embed_fn)
+    # Phase 2: batch-embed all documents in one call
+    if embed_fn is not None:
+        texts = [doc for doc, _meta, _id, _vec in all_records]
+        vectors = embed_fn(texts)
+        all_records = [
+            (doc, meta, doc_id, vec)
+            for (doc, meta, doc_id, _), vec in zip(all_records, vectors)
+        ]
+
+    # Phase 3: redistribute back into per-collection lists
+    n_talk = 1
+    n_para = len(paragraph_records)
+    n_cite = len(citation_records)
+    talk_recs = all_records[:n_talk]
+    para_recs = all_records[n_talk : n_talk + n_para]
+    cite_recs = all_records[n_talk + n_para : n_talk + n_para + n_cite]
+    fn_recs   = all_records[n_talk + n_para + n_cite :]
 
     return {
-        "talks": [talk_record],
-        "paragraphs": paragraph_records,
-        "citations": citation_records,
-        "footnotes": footnote_records,
+        "talks": talk_recs,
+        "paragraphs": para_recs,
+        "citations": cite_recs,
+        "footnotes": fn_recs,
     }
 
 
@@ -424,7 +440,7 @@ def prepare_talk_bundle_rich(
     citations: TalkCitations,
     footnotes: TalkFootnotes,
     validation_report: ValidationReport,
-    embed_fn: Callable[[str], list[float]] | None = None,
+    embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
 ) -> dict[str, list[tuple[str, dict[str, Any], str, list[float] | None]]]:
     """
     Prepare a complete set of records for Weaviate/Qdrant (rich metadata — native lists preserved).
@@ -442,7 +458,7 @@ def prepare_talk_bundle_rich(
         citations:          Phase 3 output.
         footnotes:          Phase 4 output.
         validation_report:  Phase 5 output.
-        embed_fn:           Optional callable (str) -> list[float]. When None, vector is None.
+        embed_fn:           Optional callable (list[str]) -> list[list[float]]. When None, vector is None.
 
     Returns:
         dict with keys "talks", "paragraphs", "citations", "footnotes",
@@ -456,16 +472,37 @@ def prepare_talk_bundle_rich(
         )
         return {"talks": [], "paragraphs": [], "citations": [], "footnotes": []}
 
+    # Phase 1: prepare all records WITHOUT embedding (embed_fn=None)
     paragraph_records, annotation_texts = _prepare_paragraph_records_rich(
-        paragraphs, talk_metadata=metadata, embed_fn=embed_fn
+        paragraphs, talk_metadata=metadata, embed_fn=None
     )
-    talk_record = _prepare_talk_record_rich(metadata, annotation_texts, embed_fn=embed_fn)
-    citation_records = _prepare_citation_records_rich(citations, embed_fn=embed_fn)
-    footnote_records = _prepare_footnote_records_rich(footnotes, embed_fn=embed_fn)
+    talk_record = _prepare_talk_record_rich(metadata, annotation_texts, embed_fn=None)
+    citation_records = _prepare_citation_records_rich(citations, embed_fn=None)
+    footnote_records = _prepare_footnote_records_rich(footnotes, embed_fn=None)
+
+    all_records = [talk_record] + paragraph_records + citation_records + footnote_records
+
+    # Phase 2: batch-embed all documents in one call
+    if embed_fn is not None:
+        texts = [doc for doc, _meta, _id, _vec in all_records]
+        vectors = embed_fn(texts)
+        all_records = [
+            (doc, meta, doc_id, vec)
+            for (doc, meta, doc_id, _), vec in zip(all_records, vectors)
+        ]
+
+    # Phase 3: redistribute back into per-collection lists
+    n_talk = 1
+    n_para = len(paragraph_records)
+    n_cite = len(citation_records)
+    talk_recs = all_records[:n_talk]
+    para_recs = all_records[n_talk : n_talk + n_para]
+    cite_recs = all_records[n_talk + n_para : n_talk + n_para + n_cite]
+    fn_recs   = all_records[n_talk + n_para + n_cite :]
 
     return {
-        "talks": [talk_record],
-        "paragraphs": paragraph_records,
-        "citations": citation_records,
-        "footnotes": footnote_records,
+        "talks": talk_recs,
+        "paragraphs": para_recs,
+        "citations": cite_recs,
+        "footnotes": fn_recs,
     }
