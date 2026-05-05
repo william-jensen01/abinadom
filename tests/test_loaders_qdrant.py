@@ -21,8 +21,8 @@ class TestQdrantLoader:
         """Insert a talk bundle then vector search paragraphs collection; expect the inserted point."""
         from loaders.qdrant_loader import QdrantLoader
 
-        def _mock_embed(text: str) -> list[float]:
-            return [0.1] * 768
+        def _mock_embed(texts: list[str]) -> list[list[float]]:
+            return [[0.1] * 768 for _ in texts]
 
         loader = QdrantLoader(_QDRANT_HOST, _QDRANT_PORT, embed_fn=_mock_embed, batch_size=10)
         loader.load(talk_bundle)
