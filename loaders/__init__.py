@@ -21,7 +21,7 @@ class BaseLoader(ABC):
     Constructor args (D-01, D-02, D-06):
         host:       DB host (e.g. "localhost")
         port:       DB port (e.g. 8000 for ChromaDB, 8080 for Weaviate, 6333 for Qdrant)
-        embed_fn:   Callable that accepts a str and returns list[float].
+        embed_fn:   Callable that accepts list[str] and returns list[list[float]].
                     Injected at constructor time (D-02); same function used for all .load() calls.
         batch_size: Number of records per write batch (D-06). Default 100.
     """
@@ -30,7 +30,7 @@ class BaseLoader(ABC):
         self,
         host: str,
         port: int,
-        embed_fn: Callable[[str], list[float]],
+        embed_fn: Callable[[list[str]], list[list[float]]],
         batch_size: int = 100,
     ) -> None:
         self.host = host

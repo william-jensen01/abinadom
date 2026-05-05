@@ -29,8 +29,8 @@ class TestWeaviateLoader:
         from loaders.weaviate_loader import WeaviateLoader
         from weaviate.classes.query import MetadataQuery
 
-        def _mock_embed(text: str) -> list[float]:
-            return [0.1] * 768
+        def _mock_embed(texts: list[str]) -> list[list[float]]:
+            return [[0.1] * 768 for _ in texts]
 
         self.loader = WeaviateLoader(_WEAVIATE_HOST, _WEAVIATE_PORT, embed_fn=_mock_embed, batch_size=10)
         self.loader.load(talk_bundle)
