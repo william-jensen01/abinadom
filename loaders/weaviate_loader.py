@@ -237,14 +237,17 @@ class WeaviateLoader(BaseLoader):
                 )
                 for doc, meta, doc_id, vector in records[key]
             ]
+            if not objects:
+                continue
             try:
                 result = col.data.insert_many(objects)
                 if result.has_errors:
-                    for uuid, err in result.errors.items():
+                    for obj_idx, err in result.errors.items():
                         logger.warning(
-                            "Weaviate insert error in %s: %s",
+                            "Weaviate insert error in %s idx=%s: %s",
                             class_name,
-                            uuid,
+                            obj_idx,
+                            err,
                         )
             except Exception as e:
                 logger.warning(
