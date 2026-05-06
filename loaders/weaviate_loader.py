@@ -73,25 +73,25 @@ class WeaviateLoader(BaseLoader):
         if not self._client.collections.exists("Talk"):
             self._client.collections.create(
                 name="Talk",
-                vectorizer_config=wvc.config.Configure.Vectorizer.none(),
+                vector_config=wvc.config.Configure.Vectors.self_provided(),
                 properties=self._talk_properties(),
             )
         if not self._client.collections.exists("Paragraph"):
             self._client.collections.create(
                 name="Paragraph",
-                vectorizer_config=wvc.config.Configure.Vectorizer.none(),
+                vector_config=wvc.config.Configure.Vectors.self_provided(),
                 properties=self._paragraph_properties(),
             )
         if not self._client.collections.exists("Citation"):
             self._client.collections.create(
                 name="Citation",
-                vectorizer_config=wvc.config.Configure.Vectorizer.none(),
+                vector_config=wvc.config.Configure.Vectors.self_provided(),
                 properties=self._citation_properties(),
             )
         if not self._client.collections.exists("Footnote"):
             self._client.collections.create(
                 name="Footnote",
-                vectorizer_config=wvc.config.Configure.Vectorizer.none(),
+                vector_config=wvc.config.Configure.Vectors.self_provided(),
                 properties=self._footnote_properties(),
             )
 
@@ -233,7 +233,7 @@ class WeaviateLoader(BaseLoader):
                 DataObject(
                     properties={**meta, "doc_id_str": doc_id},
                     uuid=generate_uuid5(doc_id),
-                    vector=vector,
+                    vector={"default": vector},
                 )
                 for doc, meta, doc_id, vector in records[key]
             ]
@@ -300,7 +300,7 @@ class WeaviateLoader(BaseLoader):
 
         from weaviate.classes.query import Filter
 
-        kwargs: dict = {"near_vector": query_embedding, "limit": k}
+        kwargs: dict = {"near_vector": query_embedding, "limit": k, "target_vector": "default"}
         if filter is not None:
             # Build a simple equality filter for each key-value pair
             conditions = [Filter.by_property(prop).equal(v) for prop, v in filter.items()]
