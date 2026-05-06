@@ -46,7 +46,7 @@ from extractors.phase5_validation import validate_talk
 from extractors.pipeline import process_talk_pipeline
 from loaders import BaseLoader
 from loaders.chromadb_loader import ChromaDBLoader
-from loaders.embeddings import embed
+from loaders.embeddings import embed, embed_batch
 from loaders.qdrant_loader import QdrantLoader
 from loaders.weaviate_loader import WeaviateLoader
 
@@ -570,21 +570,21 @@ def _build_loader(db_name: str, config: argparse.Namespace) -> BaseLoader:
         return ChromaDBLoader(
             host=os.environ.get("BENCHMARK_CHROMADB_HOST", "localhost"),
             port=int(os.environ.get("BENCHMARK_CHROMADB_PORT", "8000")),
-            embed_fn=embed,
+            embed_fn=embed_batch,
             batch_size=100,
         )
     elif db_name == "weaviate":
         return WeaviateLoader(
             host=os.environ.get("BENCHMARK_WEAVIATE_HOST", "localhost"),
             port=int(os.environ.get("BENCHMARK_WEAVIATE_PORT", "8080")),
-            embed_fn=embed,
+            embed_fn=embed_batch,
             batch_size=100,
         )
     elif db_name == "qdrant":
         return QdrantLoader(
             host=os.environ.get("BENCHMARK_QDRANT_HOST", "localhost"),
             port=int(os.environ.get("BENCHMARK_QDRANT_PORT", "6333")),
-            embed_fn=embed,
+            embed_fn=embed_batch,
             batch_size=100,
         )
     else:
@@ -601,7 +601,7 @@ def _collect_chroma_baseline(queries: list[dict[str, Any]]) -> "dict[str, list[s
         chroma = ChromaDBLoader(
             host=os.environ.get("BENCHMARK_CHROMADB_HOST", "localhost"),
             port=int(os.environ.get("BENCHMARK_CHROMADB_PORT", "8000")),
-            embed_fn=embed,
+            embed_fn=embed_batch,
             batch_size=100,
         )
         try:
@@ -655,8 +655,8 @@ def _build_argparser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--workers",
         type=int,
-        default=10,
-        help="Worker count for latency-under-load measurement and ThreadPoolExecutor concurrency.",
+        default=4,
+        help="Worker count for upsert parallelism and latency-under-load measurement. Default 4.",
     )
     parser.add_argument(
         "--output",
