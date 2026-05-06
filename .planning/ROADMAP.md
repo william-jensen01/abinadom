@@ -150,7 +150,7 @@ Plans:
 - [x] 22.2-03-PLAN.md — Wave 2: Update loader type annotations + WeaviateLoader insert_many + test stubs — completed 2026-05-05
 
 **Wave 3 *(blocked on Wave 2 completion)*:**
-- [ ] 22.2-04-PLAN.md — Wave 3: Parallelize runner.py upsert phase + --workers default 4 + smoke test checkpoint
+- [x] 22.2-04-PLAN.md — Wave 3: Parallelize runner.py upsert phase + --workers default 4 + smoke test checkpoint — completed 2026-05-06
 
 #### Phase 23: Benchmark Execution & Decision
 **Goal**: All three DBs are fully loaded with 5,838 talks, benchmarks have run across all metric dimensions, recall@k is computed, and a written decision report names the winning DB with rationale
@@ -184,6 +184,6 @@ Plans:
 | 21. DB Loaders | 5/5 | Complete | 2026-04-22 |
 | 22. Benchmark Runner | 3/3 | Complete | 2026-04-24 |
 | 22.1. Address Recall@k = 0.0 Bug | 3/3 | Complete | 2026-04-26 |
-| 22.2. Optimize Benchmark Loaders for Efficiency | 1/4 | Executing (Wave 1 complete) | - |
+| 22.2. Optimize Benchmark Loaders for Efficiency | 4/4 | Complete | 2026-05-06 |
 | 23. Benchmark Execution & Decision | 0/TBD | Not started | - |
 | 24. Production Migration | 0/TBD | Not started | - |
