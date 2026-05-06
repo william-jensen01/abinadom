@@ -105,6 +105,19 @@ def _poll_memory(samples: list[int], stop_event: threading.Event, interval_s: fl
 
 
 # ---------------------------------------------------------------------------
+# Thread-local storage for per-thread loader instances (D-05)
+# ---------------------------------------------------------------------------
+_tls = threading.local()
+
+
+def _init_worker(db_name: str, config: "argparse.Namespace") -> None:
+    """ThreadPoolExecutor initializer: create a per-thread loader and register cleanup."""
+    import atexit
+    _tls.loader = _build_loader(db_name, config)
+    atexit.register(_tls.loader.close)
+
+
+# ---------------------------------------------------------------------------
 # BenchmarkRunner class
 # ---------------------------------------------------------------------------
 
@@ -233,22 +246,39 @@ class BenchmarkRunner:
         total_records = 0
         t0 = time.monotonic()
 
-        for talk_id in talk_ids:
+        def _load_one_talk(talk_id: int) -> int:
+            """Worker: process pipeline + load one talk. Returns 1 on success, 0 on skip/error."""
             try:
                 result = process_talk_pipeline(content_db, core_db, talk_id, book_cache, PARAGRAPH_CONFIG)
                 if not result.success:
-                    logger.warning("[%s] pipeline failed talk_id=%d: %s", self._db_name, talk_id, "; ".join(result.errors))
-                    continue
-                validation = validate_talk(result.metadata, result.paragraphs, result.citations, result.footnotes, db=core_db)
+                    logger.warning(
+                        "[%s] pipeline failed talk_id=%d: %s",
+                        self._db_name,
+                        talk_id,
+                        "; ".join(result.errors),
+                    )
+                    return 0
+                validation = validate_talk(
+                    result.metadata, result.paragraphs, result.citations, result.footnotes, db=core_db
+                )
                 if not validation.is_valid:
                     logger.warning("[%s] validation failed talk_id=%d", self._db_name, talk_id)
-                    continue
+                    return 0
                 bundle = (result.metadata, result.paragraphs, result.citations, result.footnotes, validation)
-                self._loader.load(bundle)
-                total_records += 1
-                logger.debug("[%s] upsert complete talk_id=%d (%d/%d)", self._db_name, talk_id, total_records, len(talk_ids))
+                _tls.loader.load(bundle)
+                return 1
             except Exception as e:
                 logger.warning("[%s] upsert error talk_id=%d: %s", self._db_name, talk_id, e)
+                return 0
+
+        with ThreadPoolExecutor(
+            max_workers=self._config.workers,
+            initializer=_init_worker,
+            initargs=(self._db_name, self._config),
+        ) as executor:
+            futures = {executor.submit(_load_one_talk, tid): tid for tid in talk_ids}
+            for fut in as_completed(futures):
+                total_records += fut.result()
 
         elapsed = time.monotonic() - t0
         rps = total_records / elapsed if elapsed > 0 else 0.0
