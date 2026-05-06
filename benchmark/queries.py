@@ -54,12 +54,12 @@ CANONICAL_QUERIES: list[dict[str, Any]] = [
         "filter": None,
     },
     # --- Citation queries ---
-    # D-10: At least one citation query uses filter={"book_name": "John"}
+    # D-10: At least one citation query uses filter={"book": "John"} (schema property is "book")
     {
         "query_text": "light of the world",
         "k": 10,
         "collection": "citations",
-        "filter": {"book_name": "John"},
+        "filter": {"book": "John"},
     },
     {
         "query_text": "love one another as I have loved you",
