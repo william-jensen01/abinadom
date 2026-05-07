@@ -17,13 +17,21 @@ _CHROMADB_PORT = int(os.environ.get("BENCHMARK_CHROMADB_PORT", "8763"))
 
 
 class TestChromaDBLoader:
+    def setup_method(self, method):
+        self.loader = None
+
+    def teardown_method(self, method):
+        if self.loader is not None:
+            self.loader.close()
+
     def test_round_trip_paragraph(self, chromadb_available, talk_bundle):
         """Insert a talk bundle then query paragraphs collection by vector; expect the inserted record."""
         from loaders.chromadb_loader import ChromaDBLoader
 
         def _mock_embed(texts: list[str]) -> list[list[float]]:
             return [[0.1] * 768 for _ in texts]
-        loader = ChromaDBLoader(_CHROMADB_HOST, _CHROMADB_PORT, embed_fn=_mock_embed, batch_size=10)
+        self.loader = ChromaDBLoader(_CHROMADB_HOST, _CHROMADB_PORT, embed_fn=_mock_embed, batch_size=10)
+        loader = self.loader
 
         # Remove any stale records for talk_id=9999 from prior runs before loading,
         # so the round-trip assertion cannot match a different talk's paragraph (WR-05).

@@ -17,6 +17,13 @@ _QDRANT_PORT = int(os.environ.get("BENCHMARK_QDRANT_PORT", "6333"))
 
 
 class TestQdrantLoader:
+    def setup_method(self, method):
+        self.loader = None
+
+    def teardown_method(self, method):
+        if self.loader is not None:
+            self.loader.close()
+
     def test_round_trip_paragraph(self, qdrant_available, talk_bundle):
         """Insert a talk bundle then vector search paragraphs collection; expect the inserted point."""
         from loaders.qdrant_loader import QdrantLoader
@@ -24,7 +31,8 @@ class TestQdrantLoader:
         def _mock_embed(texts: list[str]) -> list[list[float]]:
             return [[0.1] * 768 for _ in texts]
 
-        loader = QdrantLoader(_QDRANT_HOST, _QDRANT_PORT, embed_fn=_mock_embed, batch_size=10)
+        self.loader = QdrantLoader(_QDRANT_HOST, _QDRANT_PORT, embed_fn=_mock_embed, batch_size=10)
+        loader = self.loader
         loader.load(talk_bundle)
 
         results = loader._client.query_points(
