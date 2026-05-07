@@ -412,6 +412,12 @@ def prepare_talk_bundle(
     if embed_fn is not None:
         texts = [doc for doc, _meta, _id, _vec in all_records]
         vectors = embed_fn(texts)
+        if len(vectors) != len(all_records):
+            logger.error(
+                "embed_fn returned %d vectors for %d records — skipping bundle talk_id=%s",
+                len(vectors), len(all_records), metadata.talk_id,
+            )
+            return {"talks": [], "paragraphs": [], "citations": [], "footnotes": []}
         all_records = [
             (doc, meta, doc_id, vec)
             for (doc, meta, doc_id, _), vec in zip(all_records, vectors)
@@ -486,6 +492,12 @@ def prepare_talk_bundle_rich(
     if embed_fn is not None:
         texts = [doc for doc, _meta, _id, _vec in all_records]
         vectors = embed_fn(texts)
+        if len(vectors) != len(all_records):
+            logger.error(
+                "embed_fn returned %d vectors for %d records — skipping bundle talk_id=%s",
+                len(vectors), len(all_records), metadata.talk_id,
+            )
+            return {"talks": [], "paragraphs": [], "citations": [], "footnotes": []}
         all_records = [
             (doc, meta, doc_id, vec)
             for (doc, meta, doc_id, _), vec in zip(all_records, vectors)
