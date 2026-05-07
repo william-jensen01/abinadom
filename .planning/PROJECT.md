@@ -51,8 +51,10 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 ### Active (v4.0 — Vector DB Migration)
 
 - ✓ Benchmark framework — `loaders/shared_transforms.py` (flatten_metadata, rich_metadata, prepare_*), `benchmark/metrics.py` (4 dataclasses + recall_at_k), `benchmark/queries.py` (8 canonical queries), `infra/docker-compose.vector-dbs.yml` (ChromaDB 1.5.7, Weaviate 1.37.1, Qdrant v1.17.1) — Phase 20 (v4.0)
-- [ ] DB loaders — ChromaDB, Weaviate, and Qdrant loaders each accept a talk bundle and persist it correctly
-- [ ] Full benchmark run — upsert speed, query latency (p50/p95/p99), concurrency (10w/25w), memory, recall vs ChromaDB baseline
+- ✓ DB loaders — ChromaDB, Weaviate, and Qdrant loaders each accept a talk bundle and persist it correctly — Phase 21 (v4.0)
+- ✓ Benchmark runner — `benchmark/runner.py` CLI orchestrates full benchmark run and emits structured JSON reports; recall@k bug fixed (ChromaDB phantom collection + Weaviate UUID fallback); Weaviate and Qdrant recall@k10=1.0 confirmed on smoke test — Phases 22, 22.1 (v4.0)
+- ✓ Benchmark efficiency — `embed_batch()` batches all embed calls per talk (1 Ollama call vs N); `shared_transforms.py` collect-embed-distribute pattern; `WeaviateLoader` uses `insert_many`; `runner.py` upsert parallelized with ThreadPoolExecutor (thread-local loaders, `--workers` default 4); smoke test confirmed all 3 DBs exceed pre-22.2 rps baselines — Phase 22.2 (v4.0)
+- [ ] Full benchmark run — all 3 DBs loaded with 5,838 talks; upsert speed, p50/p95/p99 latency, concurrency, memory, recall@k comparison across DBs
 - [ ] Decision report — structured comparison, winner declared with rationale
 - [ ] Production migration — replace ChromaDB in server.py, pipeline loader (phase6), and Docker stack
 - [ ] MCP server smoke test — `search` and `get_talk` tools verified end-to-end on new DB
@@ -112,6 +114,9 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 | infra/ as separate Compose stack for Caddy + cloudflared | Proxy stack is independent of app stack; can restart independently | ✓ Good — clean separation, external Docker network |
 | ScaleKit over Auth0 for OAuth 2.1 | ScaleKit has native FastMCP integration via built-in ScalekitProvider; Auth0 required manual JWT wiring | ✓ Good — FastAPI/JSON-RPC dispatcher removed entirely |
 | Two-mode auth (local passthrough / remote OAuth) | Local dev needs no auth; production needs OAuth; one binary serves both | ✓ Good — SCALEKIT_ env vars determine mode at startup |
+| doc_id_str as TEXT property in Weaviate schemas (Phase 22.1) | Weaviate query() was falling back to UUID strings which never match ChromaDB's para_N baseline IDs; storing doc_id_str alongside the UUID gives a stable set-intersection key | ✓ Good — recall@k10=0.0 → 1.0 after fix |
+| ChromaDB collection name resolution in query() (Phase 22.1) | Short keys like "paragraphs" must be resolved through CHROMADB_COLLECTION_NAMES before calling get_or_create_collection, otherwise a phantom empty collection is silently created | ✓ Good — phantom collection creation eliminated |
+| Runner baseline collected after ChromaDB populates (Phase 22.1) | On a fresh stack, collecting the baseline before the ChromaDB benchmark loop runs guarantees an empty baseline and 0.0 recall for all comparators | ✓ Good — ordering fix ensures correct recall on fresh stacks |
 
 ---
 ## Evolution
@@ -132,4 +137,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-18 — v4.0 milestone started*
+*Last updated: 2026-05-06 — after Phase 22.2 (benchmark efficiency: batch embed + parallel upsert)*
