@@ -33,6 +33,17 @@ class TestQdrantLoader:
 
         self.loader = QdrantLoader(_QDRANT_HOST, _QDRANT_PORT, embed_fn=_mock_embed, batch_size=10)
         loader = self.loader
+
+        # Delete any stale points for talk_id=9999 from prior runs before loading
+        # so the round-trip assertion cannot match a stale record non-deterministically.
+        from qdrant_client.models import Filter as QFilter, FieldCondition, MatchValue
+        loader._client.delete(
+            collection_name="paragraphs",
+            points_selector=QFilter(
+                must=[FieldCondition(key="talk_id", match=MatchValue(value=9999))]
+            ),
+        )
+
         loader.load(talk_bundle)
 
         results = loader._client.query_points(
