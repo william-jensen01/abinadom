@@ -108,13 +108,15 @@ def _poll_memory(samples: list[int], stop_event: threading.Event, interval_s: fl
 # Thread-local storage for per-thread loader instances (D-05)
 # ---------------------------------------------------------------------------
 _tls = threading.local()
+_worker_loaders_lock = threading.Lock()
+_worker_loaders: list = []
 
 
 def _init_worker(db_name: str, config: "argparse.Namespace") -> None:
-    """ThreadPoolExecutor initializer: create a per-thread loader and register cleanup."""
-    import atexit
+    """ThreadPoolExecutor initializer: create a per-thread loader and track for explicit close."""
     _tls.loader = _build_loader(db_name, config)
-    atexit.register(_tls.loader.close)
+    with _worker_loaders_lock:
+        _worker_loaders.append(_tls.loader)
 
 
 # ---------------------------------------------------------------------------
@@ -271,6 +273,10 @@ class BenchmarkRunner:
                 logger.warning("[%s] upsert error talk_id=%d: %s", self._db_name, talk_id, e)
                 return 0
 
+        # Reset per-pool tracker so only this pool's loaders are closed after exit
+        with _worker_loaders_lock:
+            _worker_loaders.clear()
+
         with ThreadPoolExecutor(
             max_workers=self._config.workers,
             initializer=_init_worker,
@@ -279,6 +285,12 @@ class BenchmarkRunner:
             futures = {executor.submit(_load_one_talk, tid): tid for tid in talk_ids}
             for fut in as_completed(futures):
                 total_records += fut.result()
+
+        # Close worker loaders immediately after pool exits (not deferred to process exit).
+        with _worker_loaders_lock:
+            for ldr in _worker_loaders:
+                ldr.close()
+            _worker_loaders.clear()
 
         elapsed = time.monotonic() - t0
         rps = total_records / elapsed if elapsed > 0 else 0.0
