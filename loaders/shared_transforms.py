@@ -134,7 +134,7 @@ def prepare_talk_record(
         flat_meta["annotations"] = "|".join(annotation_texts)
 
     doc_id = f"talk_{metadata.talk_id}"
-    vector = embed_fn(document) if embed_fn is not None else None
+    vector = embed_fn([document])[0] if embed_fn is not None else None
     return document, flat_meta, doc_id, vector
 
 
@@ -185,7 +185,7 @@ def prepare_paragraph_records(
             flat_meta["conference_year"] = talk_metadata.conference_year
             flat_meta["conference_month"] = talk_metadata.conference_month
         doc_id = f"para_{para.paragraph_id}"
-        vector = embed_fn(document) if embed_fn is not None else None
+        vector = embed_fn([document])[0] if embed_fn is not None else None
         records.append((document, flat_meta, doc_id, vector))
 
     return records, annotation_texts
@@ -225,7 +225,7 @@ def prepare_citation_records(
         raw_meta = asdict(cite)
         flat_meta = flatten_metadata(raw_meta)
         doc_id = f"cite_{cite.citation_id}_{cite.paragraph_id}"
-        vector = embed_fn(document) if embed_fn is not None else None
+        vector = embed_fn([document])[0] if embed_fn is not None else None
         records.append((document, flat_meta, doc_id, vector))
 
     return records
@@ -261,7 +261,7 @@ def prepare_footnote_records(
         raw_meta = asdict(fn)
         flat_meta = flatten_metadata(raw_meta)
         doc_id = f"fn_{fn.footnote_id}"
-        vector = embed_fn(document) if embed_fn is not None else None
+        vector = embed_fn([document])[0] if embed_fn is not None else None
         records.append((document, flat_meta, doc_id, vector))
 
     return records
@@ -289,7 +289,7 @@ def _prepare_talk_record_rich(
     if annotation_texts:
         meta["annotations"] = "|".join(annotation_texts)
     doc_id = f"talk_{metadata.talk_id}"
-    vector = embed_fn(document) if embed_fn is not None else None
+    vector = embed_fn([document])[0] if embed_fn is not None else None
     return document, meta, doc_id, vector
 
 
@@ -314,7 +314,7 @@ def _prepare_paragraph_records_rich(
             meta["conference_year"] = talk_metadata.conference_year
             meta["conference_month"] = talk_metadata.conference_month
         doc_id = f"para_{para.paragraph_id}"
-        vector = embed_fn(document) if embed_fn is not None else None
+        vector = embed_fn([document])[0] if embed_fn is not None else None
         records.append((document, meta, doc_id, vector))
     return records, annotation_texts
 
@@ -330,7 +330,7 @@ def _prepare_citation_records_rich(
         raw_meta = asdict(cite)
         meta = rich_metadata(raw_meta)
         doc_id = f"cite_{cite.citation_id}_{cite.paragraph_id}"
-        vector = embed_fn(document) if embed_fn is not None else None
+        vector = embed_fn([document])[0] if embed_fn is not None else None
         records.append((document, meta, doc_id, vector))
     return records
 
@@ -346,7 +346,7 @@ def _prepare_footnote_records_rich(
         raw_meta = asdict(fn)
         meta = rich_metadata(raw_meta)
         doc_id = f"fn_{fn.footnote_id}"
-        vector = embed_fn(document) if embed_fn is not None else None
+        vector = embed_fn([document])[0] if embed_fn is not None else None
         records.append((document, meta, doc_id, vector))
     return records
 
