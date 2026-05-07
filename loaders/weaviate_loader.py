@@ -58,13 +58,14 @@ class WeaviateLoader(BaseLoader):
         port: int,
         embed_fn: Callable[[list[str]], list[list[float]]],
         batch_size: int = 100,
+        grpc_port: int = 50051,
     ) -> None:
         super().__init__(host, port, embed_fn, batch_size)
-        # MUST include grpc_port=50051 — Weaviate Docker exposes both 8080 and 50051 (Pitfall 3)
+        # MUST include grpc_port — Weaviate Docker exposes both HTTP and gRPC ports (Pitfall 3)
         self._client = weaviate.connect_to_local(
             host=host,
             port=port,
-            grpc_port=50051,
+            grpc_port=grpc_port,
         )
         self._ensure_schema()
 

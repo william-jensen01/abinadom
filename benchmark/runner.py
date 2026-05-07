@@ -607,6 +607,7 @@ def _build_loader(db_name: str, config: argparse.Namespace) -> BaseLoader:
         return WeaviateLoader(
             host=os.environ.get("BENCHMARK_WEAVIATE_HOST", "localhost"),
             port=int(os.environ.get("BENCHMARK_WEAVIATE_PORT", "8080")),
+            grpc_port=int(os.environ.get("BENCHMARK_WEAVIATE_GRPC_PORT", "50051")),
             embed_fn=embed_batch,
             batch_size=100,
         )
