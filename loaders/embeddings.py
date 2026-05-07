@@ -31,15 +31,17 @@ atexit.register(_client._client.close)
 def embed(
     text: str,
     model: str = "nomic-embed-text",
-    url: str = OLLAMA_URL,
 ) -> list[float]:
     """
     Return a 768-dim float vector from Ollama nomic-embed-text.
 
+    Uses the module-level singleton _client (created from OLLAMA_URL at import time).
+    To use a different Ollama endpoint, set the OLLAMA_URL environment variable before
+    importing this module.
+
     Args:
         text:  Input text to embed.
         model: Ollama model name. Default "nomic-embed-text" (768 dims).
-        url:   Ollama server URL. Default http://localhost:11434.
 
     Returns:
         list[float] of length 768.
@@ -57,16 +59,18 @@ def embed(
 def embed_batch(
     texts: list[str],
     model: str = "nomic-embed-text",
-    url: str = OLLAMA_URL,
 ) -> list[list[float]]:
     """
     Return a list of 768-dim float vectors from Ollama nomic-embed-text.
     Sends all texts in a single HTTP round-trip via Ollama batch embed API.
 
+    Uses the module-level singleton _client (created from OLLAMA_URL at import time).
+    To use a different Ollama endpoint, set the OLLAMA_URL environment variable before
+    importing this module.
+
     Args:
         texts: Input texts to embed (list of strings).
         model: Ollama model name. Default "nomic-embed-text" (768 dims).
-        url:   Ollama server URL. Default http://localhost:11434.
 
     Returns:
         list[list[float]], one vector per input text, same order.
