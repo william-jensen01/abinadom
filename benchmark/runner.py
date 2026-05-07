@@ -337,9 +337,11 @@ class BenchmarkRunner:
         for q in queries:
             t0 = time.monotonic()
             ids = self._query_db(q)
-            latencies.append((time.monotonic() - t0) * 1000.0)
+            elapsed = (time.monotonic() - t0) * 1000.0
             if ids is None:
                 failed += 1
+            else:
+                latencies.append(elapsed)
         metrics = _compute_query_metrics(latencies, failed)
         self.results["query_latency_serial"] = asdict(metrics)
         logger.info("[%s] serial latency p50=%.1fms p99=%.1fms", self._db_name, metrics.p50_ms, metrics.p99_ms)
@@ -360,9 +362,11 @@ class BenchmarkRunner:
             for q in group:
                 t0 = time.monotonic()
                 ids = self._query_db(q)
-                lats.append((time.monotonic() - t0) * 1000.0)
+                elapsed = (time.monotonic() - t0) * 1000.0
                 if ids is None:
                     fails += 1
+                else:
+                    lats.append(elapsed)
             return _compute_query_metrics(lats, fails)
 
         uf_metrics = _run_group(unfiltered) if unfiltered else None
