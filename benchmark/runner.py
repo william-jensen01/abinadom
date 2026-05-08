@@ -238,7 +238,10 @@ class BenchmarkRunner:
         Records UpsertMetrics and stores in self.results["upsert"].
         """
         all_ids = _get_all_gc_talk_ids()
-        talk_ids = all_ids[: self._config.upsert_limit]
+        if self._config.upsert_limit is not None:
+            talk_ids = all_ids[: self._config.upsert_limit]
+        else:
+            talk_ids = all_ids
         self._talk_ids = talk_ids
 
         book_cache = fetch_all_books(core_db)
@@ -688,9 +691,15 @@ def _build_argparser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--upsert-limit",
         type=int,
-        default=100,
+        default=None,
         dest="upsert_limit",
-        help="Number of talks to load from SQLite into the target DB.",
+        help="Number of talks to load from SQLite into the target DB. Load all talks if not specified.",
+    )
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        default=False,
+        help="Delete and recreate collections before loading. Scope matches --db (per D-01).",
     )
     parser.add_argument(
         "--query-limit",
@@ -755,6 +764,34 @@ def main() -> None:
 
     for db_name in db_list:
         loader: "BaseLoader | None" = None
+
+        # Pre-flight: reset collections before loading (D-01, D-02).
+        # Reset creates a temporary client, deletes collections, then returns.
+        # The subsequent _build_loader() call will recreate them via get_or_create / _ensure_schema.
+        if args.reset:
+            try:
+                if db_name == "chroma":
+                    ChromaDBLoader.reset(
+                        host=os.environ.get("BENCHMARK_CHROMADB_HOST", "localhost"),
+                        port=int(os.environ.get("BENCHMARK_CHROMADB_PORT", "8000")),
+                    )
+                elif db_name == "weaviate":
+                    WeaviateLoader.reset(
+                        host=os.environ.get("BENCHMARK_WEAVIATE_HOST", "localhost"),
+                        port=int(os.environ.get("BENCHMARK_WEAVIATE_PORT", "8080")),
+                        grpc_port=int(os.environ.get("BENCHMARK_WEAVIATE_GRPC_PORT", "50051")),
+                    )
+                elif db_name == "qdrant":
+                    QdrantLoader.reset(
+                        host=os.environ.get("BENCHMARK_QDRANT_HOST", "localhost"),
+                        port=int(os.environ.get("BENCHMARK_QDRANT_PORT", "6333")),
+                    )
+                logger.info("[%s] reset complete — collections deleted, loader will recreate", db_name)
+            except Exception as e:
+                logger.error("[%s] reset failed: %s — aborting this DB", db_name, e)
+                had_failure = True
+                continue
+
         try:
             loader = _build_loader(db_name, args)
         except Exception as e:
