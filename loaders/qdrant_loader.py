@@ -195,7 +195,11 @@ class QdrantLoader(BaseLoader):
                     client.delete_collection(name)
                     logger.info("Qdrant: deleted collection %r", name)
                 except Exception as e:
-                    logger.debug("Qdrant: delete_collection(%r) skipped: %s", name, e)
+                    err_str = str(e).lower()
+                    if "not found" in err_str or "does not exist" in err_str or "collection doesn't exist" in err_str or "status_code=404" in err_str:
+                        logger.debug("Qdrant: delete_collection(%r) skipped (not found)", name)
+                    else:
+                        raise
         finally:
             try:
                 client.close()
