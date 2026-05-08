@@ -54,8 +54,8 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - ✓ DB loaders — ChromaDB, Weaviate, and Qdrant loaders each accept a talk bundle and persist it correctly — Phase 21 (v4.0)
 - ✓ Benchmark runner — `benchmark/runner.py` CLI orchestrates full benchmark run and emits structured JSON reports; recall@k bug fixed (ChromaDB phantom collection + Weaviate UUID fallback); Weaviate and Qdrant recall@k10=1.0 confirmed on smoke test — Phases 22, 22.1 (v4.0)
 - ✓ Benchmark efficiency — `embed_batch()` batches all embed calls per talk (1 Ollama call vs N); `shared_transforms.py` collect-embed-distribute pattern; `WeaviateLoader` uses `insert_many`; `runner.py` upsert parallelized with ThreadPoolExecutor (thread-local loaders, `--workers` default 4); smoke test confirmed all 3 DBs exceed pre-22.2 rps baselines — Phase 22.2 (v4.0)
-- [ ] Full benchmark run — all 3 DBs loaded with 5,838 talks; upsert speed, p50/p95/p99 latency, concurrency, memory, recall@k comparison across DBs
-- [ ] Decision report — structured comparison, winner declared with rationale
+- ✓ Full benchmark run — 5,838 talks loaded into all 3 DBs; Weaviate wins: serial p50 42ms, filtered p50 51ms (4× faster than ChromaDB/Qdrant), cold-start 34ms, throughput 215 q/s, recall@k10=0.9875 — Phase 23 (v4.0)
+- ✓ Decision report — `benchmark/DECISION.md` names Weaviate as winner; full comparison table with real numbers; recall@k framed as ANN fidelity — Phase 23 (v4.0)
 - [ ] Production migration — replace ChromaDB in server.py, pipeline loader (phase6), and Docker stack
 - [ ] MCP server smoke test — `search` and `get_talk` tools verified end-to-end on new DB
 
@@ -137,4 +137,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-06 — after Phase 22.2 (benchmark efficiency: batch embed + parallel upsert)*
+*Last updated: 2026-05-08 — after Phase 23 (full benchmark run complete; Weaviate selected for Phase 24 production migration)*
