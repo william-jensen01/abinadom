@@ -1,0 +1,126 @@
+{
+  "db": "chroma",
+  "timestamp": "2026-05-08T08:26:33.788089+00:00",
+  "upsert": {
+    "total_records": 5838,
+    "elapsed_seconds": 5490.3459764,
+    "records_per_second": 1.0633209683131764
+  },
+  "memory_upsert": {
+    "baseline_mb": 151.984375,
+    "peak_mb": 268.03515625,
+    "delta_mb": 116.05078125
+  },
+  "cold_warm": {
+    "cold_ms": 63.80689999969036,
+    "warm_mean_ms": 51.34088888896966,
+    "query_text": "the Atonement of Jesus Christ brings healing and hope to all who repent"
+  },
+  "query_latency_serial": {
+    "p50_ms": 51.22710000068764,
+    "p95_ms": 220.01730000010866,
+    "p99_ms": 223.38549999949464,
+    "mean_ms": 72.0536315999816,
+    "min_ms": 42.25670000050741,
+    "max_ms": 238.97190000025148,
+    "query_count": 500,
+    "failed_queries": 0
+  },
+  "query_latency_unfiltered": {
+    "p50_ms": 50.96899999989546,
+    "p95_ms": 52.40869999943243,
+    "p99_ms": 52.40869999943243,
+    "mean_ms": 50.5269428569071,
+    "min_ms": 48.516599999857135,
+    "max_ms": 52.40869999943243,
+    "query_count": 7,
+    "failed_queries": 0
+  },
+  "query_latency_filtered": {
+    "p50_ms": 220.11879999990924,
+    "p95_ms": 220.11879999990924,
+    "p99_ms": 220.11879999990924,
+    "mean_ms": 220.11879999990924,
+    "min_ms": 220.11879999990924,
+    "max_ms": 220.11879999990924,
+    "query_count": 1,
+    "failed_queries": 0
+  },
+  "scalability_curve": [
+    {
+      "workers": 1,
+      "throughput_qps": 13.861085937684699,
+      "p50_ms": 51.36599999968894,
+      "p95_ms": 219.64780000052997,
+      "p99_ms": 225.28760000022885
+    },
+    {
+      "workers": 5,
+      "throughput_qps": 88.40223654122214,
+      "p50_ms": 34.31830000045011,
+      "p95_ms": 187.4454999997397,
+      "p99_ms": 254.63900000067952
+    },
+    {
+      "workers": 10,
+      "throughput_qps": 151.29189053074487,
+      "p50_ms": 38.89119999985269,
+      "p95_ms": 227.24829999970098,
+      "p99_ms": 286.05619999871124
+    },
+    {
+      "workers": 20,
+      "throughput_qps": 177.2425650997977,
+      "p50_ms": 67.79260000075737,
+      "p95_ms": 379.0296999995917,
+      "p99_ms": 418.63569999986794
+    }
+  ],
+  "memory_query": {
+    "baseline_mb": 274.015625,
+    "peak_mb": 308.23828125,
+    "delta_mb": 34.22265625
+  },
+  "concurrency": {
+    "workers": 20,
+    "total_queries": 500,
+    "elapsed_seconds": 2.820992799999658,
+    "throughput_qps": 177.2425650997977,
+    "latency_degradation_ratio": 1.3233737611507848
+  },
+  "determinism": [
+    {
+      "query_text": "the Atonement of Jesus Christ brings healing and hope to all who repent",
+      "stability_score": 1.0
+    },
+    {
+      "query_text": "faith in the resurrection of Jesus Christ overcomes death and despair",
+      "stability_score": 1.0
+    },
+    {
+      "query_text": "how the prophets applied the scriptures to teach eternal truths to the Saints",
+      "stability_score": 1.0
+    },
+    {
+      "query_text": "the restoration of the gospel through the Prophet Joseph Smith",
+      "stability_score": 1.0
+    },
+    {
+      "query_text": "family prayer and scripture study strengthen the home and bring the Spirit",
+      "stability_score": 1.0
+    },
+    {
+      "query_text": "temple worship and missionary service as expressions of faithful discipleship",
+      "stability_score": 1.0
+    },
+    {
+      "query_text": "light of the world",
+      "stability_score": 1.0
+    },
+    {
+      "query_text": "love one another as I have loved you",
+      "stability_score": 1.0
+    }
+  ],
+  "recall": null
+}
