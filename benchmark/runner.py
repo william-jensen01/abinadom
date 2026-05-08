@@ -668,6 +668,13 @@ def _collect_chroma_baseline(queries: list[dict[str, Any]]) -> "dict[str, list[s
                 except Exception as e:
                     logger.warning("ChromaDB baseline query failed for '%s': %s", q["query_text"][:40], e)
                     baseline[q["query_text"]] = []
+            total_ids = sum(len(ids) for ids in baseline.values())
+            if total_ids == 0:
+                logger.warning(
+                    "ChromaDB baseline returned 0 results across all queries — "
+                    "collection may be empty. Recall will be null."
+                )
+                return None
             return baseline
         finally:
             chroma.close()
