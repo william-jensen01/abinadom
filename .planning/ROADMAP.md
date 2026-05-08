@@ -164,7 +164,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 **Wave 1**
-- [ ] 23-01-PLAN.md — Wave 1: Add --reset flag + loader reset() classmethods + fix --upsert-limit default to None
+- [x] 23-01-PLAN.md — Wave 1: Add --reset flag + loader reset() classmethods + fix --upsert-limit default to None — completed 2026-05-08
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 23-02-PLAN.md — Wave 2: Execute full benchmark run + write benchmark/DECISION.md from real data
 **UI hint**: no

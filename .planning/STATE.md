@@ -4,12 +4,12 @@ milestone: v4.0
 milestone_name: Vector DB Migration
 status: executing
 last_updated: "2026-05-08T00:00:00.000Z"
-last_activity: 2026-05-08 -- Phase 23 planned — 2 plans (--reset flag + full benchmark run + DECISION.md)
+last_activity: 2026-05-08 -- Plan 23-01 complete — --reset flag, loader reset() classmethods, --upsert-limit default fixed
 progress:
   total_phases: 6
   completed_phases: 4
   total_plans: 21
-  completed_plans: 16
+  completed_plans: 17
   percent: 76
 ---
 
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 
 ## Current Position
 
-Phase: 23 (benchmark-execution-decision) — Ready to execute
-Plan: 0 of 2
-Status: Planned — 2 plans ready
-Last activity: 2026-05-08 -- Phase 23 planned — --reset flag + upsert-limit fix + full benchmark run + DECISION.md
+Phase: 23 (benchmark-execution-decision) — In progress
+Plan: 1 of 2
+Status: Executing — Wave 1 complete, Wave 2 pending (human-gated benchmark run)
+Last activity: 2026-05-08 -- Plan 23-01 complete — --reset flag, loader reset() classmethods, --upsert-limit default fixed
 
 Progress: [████████████████░░░░] 76% — 16/21 plans complete (v4.0 milestone, Phase 23 ready)
 
