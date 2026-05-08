@@ -154,14 +154,17 @@ Plans:
 
 #### Phase 23: Benchmark Execution & Decision
 **Goal**: All three DBs are fully loaded with 5,838 talks, benchmarks have run across all metric dimensions, recall@k is computed, and a written decision report names the winning DB with rationale
-**Depends on**: Phase 22
+**Depends on**: Phase 22.2
 **Requirements**: EVAL-02, EVAL-03, EVAL-04, EVAL-05
 **Success Criteria** (what must be TRUE):
   1. A single command triggers the full benchmark pipeline (upsert, latency, concurrency, memory) against all three DBs and completes without manual intervention
   2. All three DBs show 5,838 talks loaded before any query or concurrency benchmarks execute (load gate enforced in runner)
   3. recall@k10 and recall@k50 scores are present in the JSON report for Weaviate vs ChromaDB and Qdrant vs ChromaDB comparisons
-  4. A written decision report (`docs/benchmark/DECISION.md` or equivalent) identifies the winning DB, shows the structured comparison table, and states the rationale
-**Plans**: TBD
+  4. A written decision report (`benchmark/DECISION.md`) identifies the winning DB, shows the structured comparison table, and states the rationale
+**Plans**: 2 plans
+Plans:
+- [ ] 23-01-PLAN.md — Wave 1: Add --reset flag + loader reset() classmethods + fix --upsert-limit default to None
+- [ ] 23-02-PLAN.md — Wave 2: Execute full benchmark run + write benchmark/DECISION.md from real data
 **UI hint**: no
 
 #### Phase 24: Production Migration
@@ -185,5 +188,5 @@ Plans:
 | 22. Benchmark Runner | 3/3 | Complete | 2026-04-24 |
 | 22.1. Address Recall@k = 0.0 Bug | 3/3 | Complete | 2026-04-26 |
 | 22.2. Optimize Benchmark Loaders for Efficiency | 4/4 | Complete | 2026-05-06 |
-| 23. Benchmark Execution & Decision | 0/TBD | Not started | - |
+| 23. Benchmark Execution & Decision | 0/2 | Not started | - |
 | 24. Production Migration | 0/TBD | Not started | - |
