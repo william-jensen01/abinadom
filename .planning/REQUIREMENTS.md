@@ -15,10 +15,10 @@
 ### Evaluation
 
 - [ ] **EVAL-01**: User can start ChromaDB, Weaviate, and Qdrant locally via a single Docker Compose file
-- [ ] **EVAL-02**: User can run a full benchmark (upsert, query latency, concurrency, memory) against all three DBs in a single command
-- [ ] **EVAL-03**: Each DB is fully populated with all 5,838 talks before query and concurrency benchmarks run, ensuring comparable results
-- [ ] **EVAL-04**: User can see recall@k10 and recall@k50 comparing Weaviate vs ChromaDB and Qdrant vs ChromaDB
-- [ ] **EVAL-05**: User can read a written decision report identifying the winning DB with rationale
+- [x] **EVAL-02**: User can run a full benchmark (upsert, query latency, concurrency, memory) against all three DBs in a single command
+- [x] **EVAL-03**: Each DB is fully populated with all 5,838 talks before query and concurrency benchmarks run, ensuring comparable results
+- [x] **EVAL-04**: User can see recall@k10 and recall@k50 comparing Weaviate vs ChromaDB and Qdrant vs ChromaDB
+- [x] **EVAL-05**: User can read a written decision report identifying the winning DB with rationale
 
 ### Migration
 
