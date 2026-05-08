@@ -121,12 +121,16 @@ class ChromaDBLoader(BaseLoader):
                     client.delete_collection(name)
                     logger.info("ChromaDB: deleted collection %r", name)
                 except Exception as e:
-                    logger.debug("ChromaDB: delete_collection(%r) skipped: %s", name, e)
+                    err_str = str(e).lower()
+                    if "not found" in err_str or "does not exist" in err_str or "404" in err_str:
+                        logger.debug("ChromaDB: delete_collection(%r) skipped (not found)", name)
+                    else:
+                        raise
         finally:
             try:
                 client.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("ChromaDB reset: failed to close client: %s", e)
 
     def query(
         self,
