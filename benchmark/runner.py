@@ -711,8 +711,8 @@ def _build_argparser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--workers",
         type=int,
-        default=4,
-        help="Worker count for upsert parallelism and latency-under-load measurement. Default 4.",
+        default=10,
+        help="Worker count for upsert parallelism and latency-under-load measurement. Default 10.",
     )
     parser.add_argument(
         "--output",
