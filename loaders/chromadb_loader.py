@@ -107,6 +107,27 @@ class ChromaDBLoader(BaseLoader):
             logger.warning("ChromaDB: failed to close _admin_client._server._session (private API may have changed): %s", e)
         self._client.close()
 
+    @classmethod
+    def reset(cls, host: str, port: int) -> None:
+        """Delete all 4 benchmark collections from ChromaDB (per D-02).
+
+        Swallows NotFound — safe to call on a fresh stack.
+        Caller must instantiate a new ChromaDBLoader after this returns.
+        """
+        client = chromadb.HttpClient(host=host, port=port)
+        try:
+            for name in CHROMADB_COLLECTION_NAMES.values():
+                try:
+                    client.delete_collection(name)
+                    logger.info("ChromaDB: deleted collection %r", name)
+                except Exception as e:
+                    logger.debug("ChromaDB: delete_collection(%r) skipped: %s", name, e)
+        finally:
+            try:
+                client.close()
+            except Exception:
+                pass
+
     def query(
         self,
         collection: str,

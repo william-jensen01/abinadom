@@ -329,3 +329,24 @@ class WeaviateLoader(BaseLoader):
     def close(self) -> None:
         """Close the Weaviate client and release the gRPC connection (Pitfall 1)."""
         self._client.close()
+
+    @classmethod
+    def reset(cls, host: str, port: int, grpc_port: int = 50051) -> None:
+        """Delete all 4 Weaviate classes (Talk, Paragraph, Citation, Footnote) per D-02.
+
+        Swallows NotFound — safe to call on a fresh stack.
+        Caller must instantiate a new WeaviateLoader after this returns.
+        """
+        client = weaviate.connect_to_local(host=host, port=port, grpc_port=grpc_port)
+        try:
+            for class_name in cls.COLLECTIONS:
+                try:
+                    client.collections.delete(class_name)
+                    logger.info("Weaviate: deleted collection %r", class_name)
+                except Exception as e:
+                    logger.debug("Weaviate: delete(%r) skipped: %s", class_name, e)
+        finally:
+            try:
+                client.close()
+            except Exception:
+                pass
