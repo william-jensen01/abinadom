@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Vector DB Migration
 status: executing
-last_updated: "2026-05-06T00:00:00.000Z"
-last_activity: 2026-05-06 -- Phase 22.2 complete — parallel upsert (ThreadPoolExecutor) + embed_batch wiring + smoke test approved
+last_updated: "2026-05-08T00:00:00.000Z"
+last_activity: 2026-05-08 -- Phase 23 planned — 2 plans (--reset flag + full benchmark run + DECISION.md)
 progress:
   total_phases: 6
   completed_phases: 4
-  total_plans: 19
+  total_plans: 21
   completed_plans: 16
-  percent: 84
+  percent: 76
 ---
 
 # Project State
@@ -24,12 +24,12 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 
 ## Current Position
 
-Phase: 22.2 (optimize-benchmark-loaders) — Complete
-Plan: 4 of 4
-Status: All waves complete
-Last activity: 2026-05-06 -- Phase 22.2 complete — parallel upsert + embed_batch wiring + smoke test
+Phase: 23 (benchmark-execution-decision) — Ready to execute
+Plan: 0 of 2
+Status: Planned — 2 plans ready
+Last activity: 2026-05-08 -- Phase 23 planned — --reset flag + upsert-limit fix + full benchmark run + DECISION.md
 
-Progress: [█████████████████░░░] 84% — 16/19 plans complete (v4.0 milestone, Phase 22.2 done)
+Progress: [████████████████░░░░] 76% — 16/21 plans complete (v4.0 milestone, Phase 23 ready)
 
 ## Performance Metrics
 
