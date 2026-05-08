@@ -166,7 +166,7 @@ Plans:
 **Wave 1**
 - [x] 23-01-PLAN.md — Wave 1: Add --reset flag + loader reset() classmethods + fix --upsert-limit default to None — completed 2026-05-08
 **Wave 2** *(blocked on Wave 1 completion)*
-- [x] 23-02-PLAN.md — Wave 2: Execute full benchmark run + write benchmark/DECISION.md from real data
+- [x] 23-02-PLAN.md — Wave 2: Execute full benchmark run + write benchmark/DECISION.md from real data — completed 2026-05-08
 **UI hint**: no
 
 #### Phase 24: Production Migration
@@ -190,5 +190,5 @@ Plans:
 | 22. Benchmark Runner | 3/3 | Complete | 2026-04-24 |
 | 22.1. Address Recall@k = 0.0 Bug | 3/3 | Complete | 2026-04-26 |
 | 22.2. Optimize Benchmark Loaders for Efficiency | 4/4 | Complete | 2026-05-06 |
-| 23. Benchmark Execution & Decision | 0/2 | Not started | - |
+| 23. Benchmark Execution & Decision | 2/2 | Complete | 2026-05-08 |
 | 24. Production Migration | 0/TBD | Not started | - |
