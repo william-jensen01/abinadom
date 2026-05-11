@@ -189,3 +189,52 @@
 ## Deferred Ideas
 
 None — discussion stayed within phase scope.
+
+---
+
+# Update Session — 2026-05-11
+
+**Areas discussed:** Orchestrator tests (D-20), Benchmark deps fate (D-21), Docker image version (D-22)
+
+---
+
+## Orchestrator tests (D-20)
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Minimal patch | Replace 9 `get_chromadb_client` patches with `WeaviateLoader` mocks. Keep existing test structure. | ✓ |
+| Full rewrite | Full Weaviate-native rewrite alongside `test_phase6.py`. More work, consistent approach. | |
+| Skip/xfail | Mark 9 affected tests as `pytest.mark.skip`. Deferred indefinitely. | |
+
+**User's choice:** Minimal patch
+**Notes:** User initially leaned toward full rewrite but wanted help deciding. After tradeoff analysis (orchestration logic doesn't change, only mock target changes; full rewrite risk vs. SPEC boundary; deferred cleanup phases often don't ship), user selected minimal patch. Full rewrite deferred to optional Phase 24.1.
+
+---
+
+## Benchmark deps fate (D-21)
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Move to [dev-packages] | `chromadb` and `qdrant-client` move to dev section. Benchmark loaders stay importable. | ✓ |
+| Remove from Pipfile entirely | Benchmark is done. Fully remove both. Benchmark loaders become unimportable. | |
+
+**User's choice:** Move to [dev-packages]
+**Notes:** User wants benchmark infrastructure to remain importable in dev even though Phase 23 is complete. Supersedes prior note in CONTEXT.md that suggested chromadb might be removable from dev entirely.
+
+---
+
+## Docker image version (D-22)
+
+| Option | Description | Selected |
+|--------|-------------|----------|
+| Pin to 1.37.1 | Same version validated in Phase 23 benchmark against 5,838 talks. Reproducible deploys. | ✓ |
+| Use latest tag | Always pulls most recent stable release. Risk of breaking changes on `docker compose pull`. | |
+
+**User's choice:** Pin to 1.37.1
+**Notes:** No hesitation. Same version proven in benchmark.
+
+---
+
+## Deferred Ideas (update session)
+
+- **Phase 24.1 (optional):** Full Weaviate-native rewrite of `tests/test_phase6_orchestrator.py`. User expressed interest but agreed to defer after tradeoff analysis.

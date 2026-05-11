@@ -1,6 +1,6 @@
 # Phase 24: Production Migration - Context
 
-**Gathered:** 2026-05-08
+**Gathered:** 2026-05-08 (updated 2026-05-11)
 **Status:** Ready for planning
 
 <domain>
@@ -31,7 +31,7 @@ Downstream agents MUST read `24-SPEC.md` before planning or implementing. Requir
 - Replace `CHROMADB_COLLECTION_NAMES` with `WEAVIATE_COLLECTION_NAMES` in `config/pipeline_config.py`
 - Update `server.py` (swap ChromaDB client → Weaviate client, update startup validation and health check)
 - Delete `config/chromadb_client.py`
-- Remove `chromadb` from Pipfile `[packages]`
+- Remove `chromadb` and `qdrant-client` from Pipfile `[packages]` (both are benchmark-only; neither has a production caller)
 - Add `weaviate` service to `docker-compose.yml`
 - Update `.env.example` (WEAVIATE_* vars in, CHROMADB_* vars out)
 - Update CLAUDE.md project structure index (add new file, remove deleted file)
@@ -53,7 +53,7 @@ Downstream agents MUST read `24-SPEC.md` before planning or implementing. Requir
 
 ### server.py — Weaviate Client Architecture
 - **D-01:** `server.py` queries Weaviate **directly** via `weaviate.connect_to_local()`. `WeaviateLoader` is the write path (pipeline loader) and is **never imported by `server.py`**. This mirrors how `server.py` used `get_chromadb_client()` directly — not through any loader class.
-- **D-02:** `AppContext` holds **only** the weaviate client — no `collections` dict. `search` and `get_talk` call `app.client.collections.use("Paragraph")` inline. `client.collections.use()` is a free lightweight handle, not a connection.
+- **D-02:** `AppContext` holds **only** the weaviate client — no `collections` dict. `search` and `get_talk` call `app.client.collections.use("ConferenceTalkParagraphs")` (or the appropriate collection name per D-18) inline. `client.collections.use()` is a free lightweight handle, not a connection.
   ```python
   @dataclass
   class AppContext:
@@ -64,7 +64,7 @@ Downstream agents MUST read `24-SPEC.md` before planning or implementing. Requir
 ### server.py — Startup Validation
 - **D-04:** `_startup()` validates all 4 Weaviate collections are present and non-empty using `client.collections.exists(name)` + `collection.aggregate.over_all(total_count=True).total_count`. Fail-fast `SystemExit(1)` if any collection is missing or has 0 objects — same guard semantics as the ChromaDB version.
   ```python
-  for name in ["Talk", "Paragraph", "Citation", "Footnote"]:
+  for name in ["ConferenceTalks", "ConferenceTalkParagraphs", "ConferenceTalkCitations", "ConferenceTalkFootnotes"]:
       if not client.collections.exists(name):
           sys.exit(1)
       count = client.collections.use(name).aggregate.over_all(total_count=True).total_count
@@ -99,18 +99,18 @@ Downstream agents MUST read `24-SPEC.md` before planning or implementing. Requir
 - **D-07:** The pre-fetch-4× workaround (`fetch_n = min(limit * 4, 80) if speaker else limit`) is removed. Native Weaviate filter eliminates the need for over-fetching.
 
 ### server.py — get_talk Fetch Strategy
-- **D-08:** `get_talk` looks up talk and paragraphs via `collection.query.fetch_objects(filters=...)`:
-  - Talk lookup: `Filter.by_property("doc_id_str").equal(f"talk_{talk_num}")`, `limit=1`
-  - Paragraph fetch: `Filter.by_property("talk_id").equal(talk_num)` (integer), `limit=10000`
-  - The exact `.equal()` argument types (string vs int) must be verified against Weaviate v4 client docs at planning time.
+- **D-08:** `get_talk` looks up talk and paragraphs as follows:
+  - Talk lookup: `fetch_object_by_id(generate_uuid5(f"talk_{talk_num}"))` — same UUID-based O(1) pattern as `talk_exists()` (D-14). No property filter scan needed; returns `None` when the talk doesn't exist.
+  - Paragraph fetch: `Filter.by_property("talk_id").equal(talk_num)` via `fetch_objects(filters=..., limit=10000)` — still a property filter since we need all paragraphs for a talk, not one specific object.
+  - The exact `.equal()` argument type for `talk_id` (integer) must be verified against Weaviate v4 client docs at planning time.
 
 ### config/weaviate_client.py (new file)
 - **D-09:** Create `config/weaviate_client.py` with `get_weaviate_client()` reading `WEAVIATE_HOST` (default `localhost`), `WEAVIATE_PORT` (default `8080`), `WEAVIATE_GRPC_PORT` (default `50051`). Returns a connected `weaviate.WeaviateClient`. Used by `server.py` (`_startup()` and `health_handler`).
 
 ### extractors/phase6_weaviate_loader.py (new file)
-- **D-10:** `load_talk_bundles(bundles: list[TalkBundle], loader: WeaviateLoader) -> dict` — caller provides the `WeaviateLoader` instance. Mirrors how the original ChromaDB phase6 loader received `client: chromadb.ClientAPI` as a parameter. The function is stateless.
+- **D-10:** `load_talk_bundles(bundles: list[TalkBundle], loader: WeaviateLoader) -> dict` — caller provides the `WeaviateLoader` instance. Mirrors how the original ChromaDB phase6 loader received `client: chromadb.ClientAPI` as a parameter. The function is stateless. Uses production bulk loading (not per-talk `loader.load()` calls) — researcher/planner determines the exact Weaviate bulk API to use (e.g. `client.batch.dynamic()` or equivalent).
 - **D-11:** `TalkBundle` is re-exported from `loaders.shared_transforms` (same as ChromaDB loader). No new dataclass needed.
-- **D-12:** `generate_verification_report(loader: WeaviateLoader, load_summary: dict) -> dict` is included. Uses `aggregate.over_all(total_count=True).total_count` for collection counts. Useful for the human-gated Requirement 7 acceptance check. Not called by `run_pipeline.py` — manual use only.
+- **D-12:** `generate_verification_report(loader: WeaviateLoader, load_summary: dict) -> dict` is included. Uses `aggregate.over_all(total_count=True).total_count` for collection counts. Includes FK spot checks: paragraph→talk and citation→paragraph, using UUID lookup via `generate_uuid5` (mirrors the ChromaDB version's `.get(ids=[...])` semantics). FK checks catch partial-insert failures where one collection loaded but another didn't — a real failure mode since Weaviate logs per-collection errors rather than rolling back atomically. Useful for the human-gated Requirement 7 acceptance check. Not called by `run_pipeline.py` — manual use only.
 
 ### scripts/run_pipeline.py — Weaviate Integration
 - **D-13:** `run_pipeline.py` creates the `WeaviateLoader` as a context manager so `close()` is guaranteed:
@@ -123,8 +123,16 @@ Downstream agents MUST read `24-SPEC.md` before planning or implementing. Requir
       # all pipeline logic including load_talk_bundles calls
   ```
   `WeaviateLoader` already implements `__enter__`/`__exit__`.
-- **D-14:** Resume/skip check uses a new `loader.talk_exists(talk_id: int) -> bool` method added to `WeaviateLoader`. Queries by `doc_id_str` property equality. Replaces the ChromaDB `talks_col.get(ids=[f"talk_{talk_id}"])` pattern.
+- **D-14:** Resume/skip check uses a new `loader.talk_exists(talk_id: int) -> bool` method added to `WeaviateLoader`. Queries by UUID via `generate_uuid5(f"talk_{talk_id}")` → `fetch_object_by_id()`. UUID lookup is O(1) — faster than a property filter scan and exactly analogous to ChromaDB's direct ID lookup. Replaces the ChromaDB `talks_col.get(ids=[f"talk_{talk_id}"])` pattern.
   ```python
+  # In WeaviateLoader:
+  def talk_exists(self, talk_id: int) -> bool:
+      from weaviate.util import generate_uuid5
+      col = self._client.collections.use("ConferenceTalks")
+      obj = col.query.fetch_object_by_id(generate_uuid5(f"talk_{talk_id}"))
+      return obj is not None
+
+  # In run_pipeline.py:
   if not args.force and loader.talk_exists(talk_id):
       skipped_count += 1
       continue
@@ -141,10 +149,49 @@ Downstream agents MUST read `24-SPEC.md` before planning or implementing. Requir
   ```
 - **D-17:** First run of `weaviate-embedded` downloads the Weaviate binary (~100MB, cached in `~/.cache/weaviate-embedded`). Subsequent runs use the cache. Startup adds ~2–5s per test session. CI must have internet access on first run or pre-cache the binary.
 
+### tests/test_phase6_orchestrator.py — Minimal Patch
+- **D-20:** `test_phase6_orchestrator.py` receives a **minimal patch only** — not a full rewrite. The 9 tests that use `patch.object(run_pipeline, "get_chromadb_client", ...)` will fail with `AttributeError` after `run_pipeline.py` is migrated (the attribute no longer exists). Fix: replace those 9 patches with `WeaviateLoader` context manager mocks. Preserve all existing test logic (skip behavior, batch flush, failure recording — none of that changes). SPEC exception clause: "update minimally if blocking." A full Weaviate-native rewrite is deferred to an optional Phase 24.1.
+
+### Dependency Cleanup
+- **D-21:** `chromadb` and `qdrant-client` move from `[packages]` to `[dev-packages]` in Pipfile — they are NOT removed from Pipfile entirely. `loaders/chromadb_loader.py` and `loaders/qdrant_loader.py` stay untouched (benchmark infrastructure) and remain importable in dev. Production Docker image (`pipenv install --deploy`) installs only `[packages]`, so neither package lands in the production image. This supersedes the earlier `<specifics>` note that suggested `chromadb` might be removable from dev deps entirely.
+
+### Docker Stack — Image Version
+- **D-22:** Weaviate service in `docker-compose.yml` is pinned to `cr.weaviate.io/semitechnologies/weaviate:1.37.1` — the same version validated against 5,838 talks in Phase 23 benchmark. Do not use `latest` tag. Explicit pin ensures reproducible deploys and a deliberate upgrade path.
+
+### Weaviate Collection Names
+- **D-18:** Production collection names are PascalCase conversions of the original ChromaDB names. `WeaviateLoader.COLLECTIONS` and `_ensure_schema()` are updated to use these names. The benchmark names (`Talk`, `Paragraph`, `Citation`, `Footnote`) are replaced.
+
+  | ChromaDB (removed) | Weaviate (production) |
+  |---|---|
+  | `conference_talks` | `ConferenceTalks` |
+  | `conference_talk_paragraphs` | `ConferenceTalkParagraphs` |
+  | `conference_talk_citations` | `ConferenceTalkCitations` |
+  | `conference_talk_footnotes` | `ConferenceTalkFootnotes` |
+
+  `WEAVIATE_COLLECTION_NAMES` dict in `config/pipeline_config.py` mirrors the old `CHROMADB_COLLECTION_NAMES` structure:
+  ```python
+  WEAVIATE_COLLECTION_NAMES = {
+      "talks": "ConferenceTalks",
+      "paragraphs": "ConferenceTalkParagraphs",
+      "citations": "ConferenceTalkCitations",
+      "footnotes": "ConferenceTalkFootnotes",
+  }
+  ```
+
+### server.py — Health Handler
+- **D-19:** `health_handler` checks Weaviate via a direct HTTP GET to `http://{WEAVIATE_HOST}:{WEAVIATE_PORT}/v1/.well-known/ready` (2s timeout). No Weaviate client is created — avoids a gRPC connection per health poll. `/ready` is the correct endpoint: returns 200 only when Weaviate is fully initialized and serving requests (not just alive). Consistent with the Ollama check pattern — both are direct HTTP calls with no client lifecycle management. Response key changes from `"chromadb"` to `"weaviate"`.
+  ```python
+  import requests as http_requests
+  host = os.environ.get("WEAVIATE_HOST", "localhost")
+  port = os.environ.get("WEAVIATE_PORT", "8080")
+  resp = http_requests.get(f"http://{host}:{port}/v1/.well-known/ready", timeout=2)
+  if not resp.ok:
+      raise RuntimeError(f"HTTP {resp.status_code}")
+  ```
+
 ### Claude's Discretion
 - Exact Weaviate v4 API calls for `fetch_objects` — researcher verifies `.equal()` argument types (string vs int) against official docs
-- `generate_verification_report()` scope — whether to include FK spot checks (paragraph → talk, citation → paragraph) or just collection counts
-- `WEAVIATE_BATCH_SIZE` value — researcher recommends based on Weaviate batch performance characteristics vs. the ChromaDB SQLite-limit-driven value
+- `WEAVIATE_BATCH_SIZE` value — researcher recommends based on Weaviate batch performance characteristics vs. the ChromaDB SQLite-limit-driven value (1000 was an SQLite artifact; Weaviate has no such constraint)
 - Internal structure of the rewritten `test_phase6.py` — what test cases to carry over vs. drop vs. add for Weaviate
 
 </decisions>
@@ -183,7 +230,7 @@ Downstream agents MUST read `24-SPEC.md` before planning or implementing. Requir
 
 ### Reusable Assets
 - `WeaviateLoader.__enter__`/`__exit__` — Already implemented. `run_pipeline.py` uses `with WeaviateLoader(...) as loader:` with no new code needed.
-- `WeaviateLoader.COLLECTIONS = ["Talk", "Paragraph", "Citation", "Footnote"]` — Use this constant in `_startup()` validation loop and anywhere collection names are iterated.
+- `WeaviateLoader.COLLECTIONS` — Updated by Phase 24 to `["ConferenceTalks", "ConferenceTalkParagraphs", "ConferenceTalkCitations", "ConferenceTalkFootnotes"]` (D-18). Use `WEAVIATE_COLLECTION_NAMES` dict from `config/pipeline_config.py` when key-based access is needed.
 - `config/ollama.py` `resolve_ollama_url()` + `get_embedding_function()` — Already used in `server.py` and `run_pipeline.py`. Phase 6 loader embed_fn comes from here.
 - `loaders/shared_transforms.py` `TalkBundle` — Already the canonical type. Phase 6 loader re-exports it.
 
@@ -208,18 +255,18 @@ Downstream agents MUST read `24-SPEC.md` before planning or implementing. Requir
 - **`_build_weaviate_filters` preview** (from discussion): The user confirmed the exact combined-filter pattern using `&` chaining — see D-06.
 - **`load_talk_bundles` signature** (from discussion): Caller provides `WeaviateLoader` as second positional argument — exact analog to original `(bundles, client, embedding_fn)` but collapsed to `(bundles, loader)` since `WeaviateLoader` bundles both.
 - **Weaviate service image** (from SPEC.md): `cr.weaviate.io/semitechnologies/weaviate` — use latest stable tag at execution time (benchmark used 1.37.1 as reference).
-- **`chromadb` in Pipfile dev deps**: Per SPEC.md constraints, `chromadb` may remain in `[dev-packages]` if `tests/test_phase6.py` still requires it during the transition — but since `test_phase6.py` is being fully rewritten for Weaviate (D-16), `chromadb` should be removable from dev deps too. Researcher should verify whether any other test file imports `chromadb`.
+- **`chromadb` + `qdrant-client` Pipfile disposition** (from D-21): Both move to `[dev-packages]`, not removed entirely. `loaders/chromadb_loader.py` and `loaders/qdrant_loader.py` stay importable in dev. The prior note suggesting chromadb might be removable from dev deps is superseded by D-21.
 
 </specifics>
 
 <deferred>
 ## Deferred Ideas
 
-None — discussion stayed within phase scope.
+- **Phase 24.1 (optional):** Full Weaviate-native rewrite of `tests/test_phase6_orchestrator.py`. Phase 24 delivers a minimal patch only (D-20). If a proper rewrite is desired, a Phase 24.1 can do it cleanly after Phase 24 ships.
 
 </deferred>
 
 ---
 
 *Phase: 24-production-migration*
-*Context gathered: 2026-05-08*
+*Context gathered: 2026-05-08 (updated 2026-05-11)*
