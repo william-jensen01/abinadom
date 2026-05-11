@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Vector DB Migration
-status: ready-to-execute
+status: in-progress
 last_updated: "2026-05-11T00:00:00Z"
-last_activity: 2026-05-11 -- Phase 24 planned — 6 plans in 4 waves, review feedback incorporated
+last_activity: 2026-05-11 -- Phase 24 Wave 1 complete (plans 24-01, 24-04 done; waves 2-4 pending)
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 26
-  completed_plans: 21
-  percent: 86
+  completed_plans: 23
+  percent: 88
 ---
 
 # Project State
@@ -24,9 +24,9 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 
 ## Current Position
 
-Phase: 24 (production-migration) — Ready to execute (6 plans, 4 waves)
-Status: Phase 24 planned — review feedback incorporated, verification passed
-Last activity: 2026-05-11 -- Phase 24 planned — 6 plans in 4 waves, review feedback incorporated
+Phase: 24 (production-migration) — Wave 1 complete; waves 2–4 pending (4 plans remaining)
+Status: 2 of 6 plans done — Wave 1 delivered Weaviate foundation files + config/infra cleanup
+Last activity: 2026-05-11 -- Phase 24 Wave 1 complete (24-01, 24-04 committed and merged)
 
 Progress: [██████████] 100%
 
