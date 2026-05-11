@@ -178,7 +178,14 @@ Plans:
   2. `server.py` starts with the winning DB client, passes startup validation, and `GET /health` reports the winning DB as healthy
   3. `docker compose up` in the project root starts the MCP server with the winning DB service; `.env.example` reflects the updated variable contract
   4. `search` and `get_talk` MCP tools return correct results for at least three representative queries against the winning DB
-**Plans**: TBD
+**Plans**: 6 plans
+Plans:
+- [ ] 24-01-PLAN.md — Create config/weaviate_client.py + extractors/phase6_weaviate_loader.py + update WeaviateLoader (COLLECTIONS, _ensure_schema, talk_exists)
+- [ ] 24-02-PLAN.md — Update scripts/run_pipeline.py (Weaviate loader, context manager, talk_exists skip check)
+- [ ] 24-03-PLAN.md — Rewrite server.py (Weaviate client, startup validation, native filters, health check)
+- [ ] 24-04-PLAN.md — Config + infra cleanup (pipeline_config, delete chromadb_client, Pipfile, docker-compose, CLAUDE.md)
+- [ ] 24-05-PLAN.md — Rewrite test_phase6.py (Weaviate embedded) + minimal patch test_phase6_orchestrator.py
+- [ ] 24-06-PLAN.md — Human-gated verification (full pipeline run + MCP smoke test)
 **UI hint**: no
 
 ## Progress Table
@@ -191,4 +198,4 @@ Plans:
 | 22.1. Address Recall@k = 0.0 Bug | 3/3 | Complete | 2026-04-26 |
 | 22.2. Optimize Benchmark Loaders for Efficiency | 4/4 | Complete | 2026-05-06 |
 | 23. Benchmark Execution & Decision | 2/2 | Complete | 2026-05-08 |
-| 24. Production Migration | 0/TBD | Not started | - |
+| 24. Production Migration | 0/6 | Not started | - |
