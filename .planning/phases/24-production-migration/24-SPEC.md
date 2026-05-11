@@ -36,18 +36,18 @@ Current state of production code:
 
 3. **Collection Name Constants**: `config/pipeline_config.py` replaces `CHROMADB_COLLECTION_NAMES` with `WEAVIATE_COLLECTION_NAMES`.
    - Current: `CHROMADB_COLLECTION_NAMES = {"talks": "conference_talks", ...}` (snake_case ChromaDB names)
-   - Target: `WEAVIATE_COLLECTION_NAMES = {"talk": "Talk", "paragraph": "Paragraph", "citation": "Citation", "footnote": "Footnote"}` (PascalCase matching `WeaviateLoader.COLLECTIONS`)
+   - Target: `WEAVIATE_COLLECTION_NAMES = {"talks": "ConferenceTalks", "paragraphs": "ConferenceTalkParagraphs", "citations": "ConferenceTalkCitations", "footnotes": "ConferenceTalkFootnotes"}` — PascalCase conversions of the original ChromaDB names (D-18, decided post-SPEC). `WeaviateLoader.COLLECTIONS` is updated to match.
    - Acceptance: `python -c "from config.pipeline_config import WEAVIATE_COLLECTION_NAMES"` exits 0; `python -c "from config.pipeline_config import CHROMADB_COLLECTION_NAMES"` raises `ImportError`
 
 4. **server.py Weaviate Client**: `server.py` connects to Weaviate and validates its collections at startup.
    - Current: `import chromadb`; `from config.chromadb_client import get_chromadb_client`; startup validates 4 ChromaDB collections; `GET /health` reports ChromaDB status
-   - Target: Uses Weaviate client (via `WeaviateLoader` or direct `weaviate.connect_to_local`); startup validates Talk, Paragraph, Citation, Footnote collections are non-empty; `GET /health` reports Weaviate as healthy
+   - Target: Uses Weaviate client via `config/weaviate_client.py`; startup validates `ConferenceTalks`, `ConferenceTalkParagraphs`, `ConferenceTalkCitations`, `ConferenceTalkFootnotes` are non-empty (D-18, D-04); `GET /health` reports Weaviate as healthy
    - Acceptance: `grep -i "chromadb" server.py` → no matches; `GET /health` returns 200 with Weaviate status field
 
-5. **ChromaDB Production Code Removed**: All ChromaDB production files and dependencies deleted.
-   - Current: `config/chromadb_client.py` exists; `chromadb` in Pipfile; CHROMADB_HOST, CHROMADB_PORT referenced in `.env.example`
-   - Target: `config/chromadb_client.py` deleted; `chromadb` removed from Pipfile `[packages]`; no CHROMADB_* env vars in `.env.example`
-   - Acceptance: `ls config/chromadb_client.py` → file not found; `grep "chromadb" Pipfile` → no match in `[packages]` section
+5. **ChromaDB and Qdrant Production Dependencies Removed**: All benchmark vector DB files and dependencies removed from production.
+   - Current: `config/chromadb_client.py` exists; `chromadb` and `qdrant-client` in Pipfile `[packages]`; CHROMADB_HOST, CHROMADB_PORT referenced in `.env.example`
+   - Target: `config/chromadb_client.py` deleted; `chromadb` and `qdrant-client` removed from Pipfile `[packages]`; no CHROMADB_* env vars in `.env.example`. `qdrant-client` has no production callers — same rationale as `chromadb`.
+   - Acceptance: `ls config/chromadb_client.py` → file not found; `grep "chromadb" Pipfile` → no match in `[packages]` section; `grep "qdrant" Pipfile` → no match in `[packages]` section
 
 6. **Docker Stack — Weaviate Service**: `docker-compose.yml` adds Weaviate as a co-located service.
    - Current: `docker-compose.yml` has only `mcp-server` service (external image); no Weaviate service; `.env.example` has ChromaDB env vars
@@ -93,7 +93,7 @@ Current state of production code:
 - Weaviate service image: `cr.weaviate.io/semitechnologies/weaviate` (use latest stable tag at execution time; benchmark used 1.37.1 as reference)
 - Weaviate client requires both HTTP port (8080) and gRPC port (50051) — both must be present in `docker-compose.yml` and `WeaviateLoader.__init__` call
 - `extractors/phase6_weaviate_loader.py` must expose `load_talk_bundles()` and `TalkBundle` to match the interface `run_pipeline.py` expects (minimizes diff to pipeline orchestrator)
-- `WEAVIATE_COLLECTION_NAMES` PascalCase values must match `WeaviateLoader.COLLECTIONS = ["Talk", "Paragraph", "Citation", "Footnote"]` exactly
+- `WEAVIATE_COLLECTION_NAMES` values must match `WeaviateLoader.COLLECTIONS` exactly — both are updated to `["ConferenceTalks", "ConferenceTalkParagraphs", "ConferenceTalkCitations", "ConferenceTalkFootnotes"]` (D-18, decided post-SPEC; overrides original benchmark names)
 - `chromadb` may remain in Pipfile dev/test dependencies if `tests/test_phase6.py` requires it; it must be removed from `[packages]` (production)
 
 ## Acceptance Criteria
@@ -107,6 +107,7 @@ Current state of production code:
 - [ ] `GET /health` returns 200 with Weaviate status field
 - [ ] `ls config/chromadb_client.py` → file not found
 - [ ] `grep "chromadb" Pipfile` → no match in `[packages]` section
+- [ ] `grep "qdrant" Pipfile` → no match in `[packages]` section
 - [ ] `docker compose config` parses without error; `weaviate` service present in output
 - [ ] `.env.example` has `WEAVIATE_HOST`, `WEAVIATE_PORT`, `WEAVIATE_GRPC_PORT`; no `CHROMADB_*` lines
 - [ ] (Human-gated) Full pipeline run completes; Weaviate Paragraph collection count ≥ 5,838
