@@ -258,6 +258,12 @@ class WeaviateLoader(BaseLoader):
                 )
                 # continue to next collection — never crash a talk load (D-04)
 
+    def talk_exists(self, talk_id: int) -> bool:
+        from weaviate.util import generate_uuid5
+        col = self._client.collections.use("ConferenceTalks")
+        obj = col.query.fetch_object_by_id(generate_uuid5(f"talk_{talk_id}"))
+        return obj is not None
+
     def query(
         self,
         collection: str,
