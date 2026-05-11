@@ -99,10 +99,10 @@
 - `extractors/phase3_citation_extraction.py` — Phase 3: citation extraction
 - `extractors/phase4_footnote_extraction.py` — Phase 4: footnote extraction
 - `extractors/phase5_validation.py` — Phase 5: validation
-- `extractors/phase6_chromadb_loader.py` — Phase 6: ChromaDB loader
+- `extractors/phase6_weaviate_loader.py` — Phase 6: Weaviate loader (ProductionWeaviateLoader subclass)
 
 ### config/
-- `config/chromadb_client.py` — Shared ChromaDB HttpClient factory (CHROMADB_HOST/CHROMADB_PORT env vars)
+- `config/weaviate_client.py` — Shared Weaviate client factory (Phase 24)
 - `config/pipeline_config.py` — Processing constants for all pipeline phases
 - `config/schemas.py` — Config/validation schemas
 - `config/audit_sample.json` — Talk IDs for bug audit sample (user-curated; populate before running run_audit.py)
