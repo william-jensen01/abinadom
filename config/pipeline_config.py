@@ -41,11 +41,11 @@ MAX_VERSE_RANGE = 200
 MAX_FOOTNOTES_PER_PARAGRAPH_WARNING = 20
 # Footnotes share CONTEXT_BEFORE_CHARS, CONTEXT_AFTER_CHARS, CONTEXT_WINDOW_MODE
 
-# --- ChromaDB Loader (Phase 6) ---
-CHROMADB_BATCH_SIZE = 1000
-CHROMADB_COLLECTION_NAMES = {
-    "talks": "conference_talks",
-    "paragraphs": "conference_talk_paragraphs",
-    "citations": "conference_talk_citations",
-    "footnotes": "conference_talk_footnotes",
+# --- Weaviate Loader (Phase 6) ---
+WEAVIATE_BATCH_SIZE = 50
+WEAVIATE_COLLECTION_NAMES = {
+    "talks": "ConferenceTalks",
+    "paragraphs": "ConferenceTalkParagraphs",
+    "citations": "ConferenceTalkCitations",
+    "footnotes": "ConferenceTalkFootnotes",
 }
