@@ -220,11 +220,14 @@ class WeaviateLoader(BaseLoader):
         are preserved as native Python lists for Weaviate's TEXT_ARRAY / INT_ARRAY.
         """
         # Map from shared_transforms dict key -> Weaviate class name
+        # Uses self.COLLECTIONS so subclasses (e.g. ProductionWeaviateLoader) can
+        # override collection names without re-implementing load(). Order matches
+        # COLLECTIONS: [talks, paragraphs, citations, footnotes].
         collection_map = {
-            "talks": "Talk",
-            "paragraphs": "Paragraph",
-            "citations": "Citation",
-            "footnotes": "Footnote",
+            "talks": self.COLLECTIONS[0],
+            "paragraphs": self.COLLECTIONS[1],
+            "citations": self.COLLECTIONS[2],
+            "footnotes": self.COLLECTIONS[3],
         }
         records = prepare_talk_bundle_rich(*bundle, embed_fn=self.embed_fn)
 
