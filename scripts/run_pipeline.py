@@ -6,7 +6,7 @@ Runs all 6 extraction phases (Phases 1-5 via process_talk_pipeline, Phase 6
 via load_talk_bundles) over all General Conference talks in the database.
 
 Features:
-  - Resume from last successfully flushed talk (skip-if-processed via ChromaDB)
+  - Resume from last successfully flushed talk (skip-if-processed via Weaviate)
   - --force flag to re-process already-loaded talks
   - tqdm progress bar (no per-talk INFO log lines)
   - Incremental failed_talks.json writes after each failure
@@ -20,6 +20,7 @@ Usage:
 import argparse
 import json
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -32,15 +33,15 @@ from tqdm import tqdm
 
 from db import content_db, core_db
 from config.schemas import PARAGRAPH_CONFIG
-from config.pipeline_config import CHROMADB_BATCH_SIZE, CHROMADB_COLLECTION_NAMES
-from config.ollama import get_embedding_function
+from config.pipeline_config import WEAVIATE_BATCH_SIZE
+from config.ollama import get_embedding_function, resolve_ollama_url
 from extractors.pipeline import process_talk_pipeline
 from extractors.phase3_citation_extraction import fetch_all_books
 from extractors.phase5_validation import validate_talk
-from config.chromadb_client import get_chromadb_client
-from extractors.phase6_chromadb_loader import (
+from extractors.phase6_weaviate_loader import (
     load_talk_bundles,
     TalkBundle,
+    ProductionWeaviateLoader,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,98 +86,97 @@ def main() -> None:
     parser.add_argument(
         "--force",
         action="store_true",
-        help="Re-process already-loaded talks (skip the ChromaDB existence check)",
+        help="Re-process already-loaded talks (skip the Weaviate existence check)",
     )
     args = parser.parse_args()
 
     start_time = time.time()
 
-    # --- Initialization ---
     book_cache = fetch_all_books(core_db)
-    chroma_client = get_chromadb_client()
-    embedding_fn = get_embedding_function()
+    embedding_fn = get_embedding_function(url=resolve_ollama_url())
 
-    # Get the talks collection for the skip check
-    talks_col = chroma_client.get_or_create_collection(
-        name=CHROMADB_COLLECTION_NAMES["talks"],
-        embedding_function=embedding_fn,
-    )
+    weaviate_host = os.environ.get("WEAVIATE_HOST", "localhost")
+    weaviate_port = int(os.environ.get("WEAVIATE_PORT", "8080"))
+    weaviate_grpc_port = int(os.environ.get("WEAVIATE_GRPC_PORT", "50051"))
 
-    all_talk_ids = _get_all_gc_talk_ids()
+    with ProductionWeaviateLoader(
+        host=weaviate_host,
+        port=weaviate_port,
+        embed_fn=embedding_fn,
+        grpc_port=weaviate_grpc_port,
+    ) as loader:
+        all_talk_ids = _get_all_gc_talk_ids()
 
-    # --- Counters and buffers ---
-    pending_bundles: List[TalkBundle] = []
-    processed_since_flush: int = 0
-    skipped_count: int = 0
-    failed_count: int = 0
-    validation_failed_count: int = 0
-    processed_count: int = 0
-    failed_talks: List[Dict[str, Any]] = []
+        # --- Counters and buffers ---
+        pending_bundles: List[TalkBundle] = []
+        processed_since_flush: int = 0
+        skipped_count: int = 0
+        failed_count: int = 0
+        validation_failed_count: int = 0
+        processed_count: int = 0
+        failed_talks: List[Dict[str, Any]] = []
 
-    # --- Main per-talk loop ---
-    for talk_id in tqdm(all_talk_ids, unit="talk", desc="Pipeline"):
-        # Skip check: if talk already in ChromaDB and not forcing, skip it
-        if not args.force:
-            existing = talks_col.get(ids=[f"talk_{talk_id}"])
-            if existing["ids"]:
+        # --- Main per-talk loop ---
+        for talk_id in tqdm(all_talk_ids, unit="talk", desc="Pipeline"):
+            if not args.force and loader.talk_exists(talk_id):
                 skipped_count += 1
                 continue
 
-        try:
-            # Phases 1-4: extraction
-            result = process_talk_pipeline(
-                content_db, core_db, talk_id, book_cache, PARAGRAPH_CONFIG
-            )
-
-            if not result.success:
-                raise RuntimeError("; ".join(result.errors))
-
-            # Phase 5: validation
-            validation = validate_talk(
-                result.metadata,
-                result.paragraphs,
-                result.citations,
-                result.footnotes,
-                db=core_db,
-            )
-
-            if not validation.is_valid:
-                tqdm.write(f"[WARN] talk_id={talk_id} validation failed")
-                _record_failure(
-                    talk_id,
-                    f"validation: {validation.errors}",
-                    failed_talks,
+            try:
+                # Phases 1-4: extraction
+                result = process_talk_pipeline(
+                    content_db, core_db, talk_id, book_cache, PARAGRAPH_CONFIG
                 )
-                validation_failed_count += 1
-                continue
 
-            # Build bundle for Phase 6
-            bundle: TalkBundle = (
-                result.metadata,
-                result.paragraphs,
-                result.citations,
-                result.footnotes,
-                validation,
-            )
-            pending_bundles.append(bundle)
-            processed_since_flush += 1
-            processed_count += 1
+                if not result.success:
+                    raise RuntimeError("; ".join(result.errors))
 
-            # Batch flush: load when buffer reaches CHROMADB_BATCH_SIZE
-            if processed_since_flush >= CHROMADB_BATCH_SIZE:
-                load_talk_bundles(pending_bundles, chroma_client, embedding_fn)
-                pending_bundles.clear()
-                processed_since_flush = 0
+                # Phase 5: validation
+                validation = validate_talk(
+                    result.metadata,
+                    result.paragraphs,
+                    result.citations,
+                    result.footnotes,
+                    db=core_db,
+                )
 
-        except Exception as exc:
-            logger.error("talk_id=%d failed: %s", talk_id, exc)
-            tqdm.write(f"[ERROR] talk_id={talk_id}: {exc}")
-            _record_failure(talk_id, str(exc), failed_talks)
-            failed_count += 1
+                if not validation.is_valid:
+                    tqdm.write(f"[WARN] talk_id={talk_id} validation failed")
+                    _record_failure(
+                        talk_id,
+                        f"validation: {validation.errors}",
+                        failed_talks,
+                    )
+                    validation_failed_count += 1
+                    continue
 
-    # --- Final flush: load any remaining buffered talks ---
-    if pending_bundles:
-        load_talk_bundles(pending_bundles, chroma_client, embedding_fn)
+                # Build bundle for Phase 6
+                bundle: TalkBundle = (
+                    result.metadata,
+                    result.paragraphs,
+                    result.citations,
+                    result.footnotes,
+                    validation,
+                )
+                pending_bundles.append(bundle)
+                processed_since_flush += 1
+                processed_count += 1
+
+                # Batch flush: load when buffer reaches WEAVIATE_BATCH_SIZE
+                if processed_since_flush >= WEAVIATE_BATCH_SIZE:
+                    load_talk_bundles(pending_bundles, loader)
+                    pending_bundles.clear()
+                    processed_since_flush = 0
+
+            except Exception as exc:
+                logger.error("talk_id=%d failed: %s", talk_id, exc)
+                tqdm.write(f"[ERROR] talk_id={talk_id}: {exc}")
+                _record_failure(talk_id, str(exc), failed_talks)
+                failed_count += 1
+
+        # --- Final flush: load any remaining buffered talks ---
+        if pending_bundles:
+            load_talk_bundles(pending_bundles, loader)
 
     # --- Final summary ---
     elapsed = time.time() - start_time
