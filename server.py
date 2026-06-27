@@ -1,13 +1,14 @@
 """
 MCP Server — LDS Scripture Citation Index
 
-Exposes the ChromaDB vector collections via FastMCP with native MCP protocol handling and ScaleKit-based OAuth 2.1 authentication.
+Exposes the Weaviate vector collections via FastMCP with native MCP protocol handling and ScaleKit-based OAuth 2.1 authentication.
 
 Phase 9 builds startup validation; Phase 10 adds search and get_talk tools.
 Phase 13 swaps to HTTP transport with configurable host/port.
 Phase 16.1 adds OAuth 2.1 via JWT verification (Auth0 JWKS +PyJWT).
 Phase 16.2 replaces FastMCP + BaseHTTPMiddleware with a FastAPI app and per-method auth routing (eliminates anyio task group errors).
 Phase 19 replaces the FastAPI + manual JSON-RPC server with FastMCP and built-in ScaleKit authentication (ScalekitProvider).
+Phase 24 migrates the vector store to Weaviate.
 
 Architecture (Phase 19):
   - FastMCP is the canonical server framework (no FastAPI, no manual JSON-RPC).
@@ -17,11 +18,10 @@ Architecture (Phase 19):
   - No custom JWT verification or middleware is used.
 
 Startup sequence:
-  1. Connect to ChromaDB via HttpClient (CHROMADB_HOST/CHROMADB_PORT env vars) (CORE-01)
-  2. Validate all 4 collections are present and non-empty (CORE-01/CORE-03)
+  1. Connect to Weaviate via get_weaviate_client() (WEAVIATE_HOST/WEAVIATE_PORT env vars) (CORE-01)
+  2. Validate all 4 PascalCase collections are present and non-empty (CORE-01/CORE-03)
   3. Ollama reachability check via embedding call (non-fatal) (CORE-02)
-  4. Load all 4 collections into AppContext (CORE-03)
-  5. Yield AppContext via FastMCP lifespan context (ctx.lifespan_context["app"])
+  4. Yield AppContext (Weaviate client) via FastMCP lifespan context (ctx.lifespan_context["app"])
 
 MCP tools (Phase 10):
   - search: semantic search across 4 collections with optional speaker/year/season filters
@@ -40,7 +40,7 @@ Auth (Phase 19 — ScaleKit via FastMCP):
     - /.well-known/oauth-protected-resource
     - /.well-known/oauth-authorization-server
     are automatically served by FastMCP/ScalekitProvider.
-    
+
 Removed in Phase 19:
   - FastAPI app and routing layer
   - Manual JSON-RPC dispatcher
@@ -58,13 +58,15 @@ import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
-import chromadb
+import weaviate
+import requests as http_requests
 from fastmcp import FastMCP, Context
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+from weaviate.classes.query import Filter
+from weaviate.util import generate_uuid5
 
-from config.chromadb_client import get_chromadb_client
-from config.pipeline_config import CHROMADB_COLLECTION_NAMES
+from config.weaviate_client import get_weaviate_client
 from config.ollama import resolve_ollama_url, get_embedding_function
 
 # ---------------------------------------------------------------------------
@@ -85,28 +87,23 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class AppContext:
-    client: chromadb.ClientAPI
-    collections: dict  # str -> chromadb.Collection
+    client: weaviate.WeaviateClient
+
+
+# Per-collection property extractor: maps collection key -> text snippet from Weaviate properties.
+# Paragraphs have a 'text' field. Talks, citations, and footnotes use different property names.
+_SNIPPET_PROP = {
+    "talks": lambda p: (p.get("title", "") + ("\n\n" + p.get("talk_preview", "") if p.get("talk_preview") else "")),
+    "paragraphs": lambda p: p.get("text", ""),
+    "citations": lambda p: p.get("context_window", "") or p.get("citation_text_raw", ""),
+    "footnotes": lambda p: p.get("context_window", "") or p.get("footnote_text_raw", ""),
+}
 
 
 # ---------------------------------------------------------------------------
 # Startup helpers — each raises SystemExit(1) on failure
 # ---------------------------------------------------------------------------
 
-
-def _resolve_chromadb_client() -> chromadb.HttpClient:
-    """
-    Resolve the ChromaDB client via the get_chromadb_client function.
-    Will raise a SystemExit(1) if the ChromaDB client cannot be resolved.
-    Will return the ChromaDB client if it is resolved.
-    """
-    try:
-        client = get_chromadb_client()
-        client.heartbeat()
-    except Exception as exc:
-        logger.warning(f"ChromaDB unreachable - ensure the ChromaDB server is running. {exc}")
-        sys.exit(1)
-    return client
 
 def _check_ollama() -> None:
     """
@@ -127,37 +124,6 @@ def _check_ollama() -> None:
         )
 
 
-def _load_collections(client: chromadb.ClientAPI) -> dict:
-    """
-    Load all 4 ChromaDB collections using get_collection() (not get_or_create_collection).
-
-    Fails fast with SystemExit(1) if any collection is missing or empty.
-    Returns a dict mapping logical key -> chromadb.Collection.
-    """
-    collections = {}
-    for key, name in CHROMADB_COLLECTION_NAMES.items():
-        try:
-            col = client.get_collection(name=name)
-        except Exception:
-            print(
-                f"ERROR: ChromaDB collection '{name}' not found. "
-                "Run the pipeline (scripts/run_pipeline.py) first.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        count = col.count()
-        if count == 0:
-            print(
-                f"ERROR: Collection '{name}' exists but has 0 records. "
-                "Re-run the pipeline to populate it.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        logger.info("Loaded collection '%s' (%d records)", name, count)
-        collections[key] = col
-    return collections
-
-
 def _startup() -> AppContext:
     """
     Run all startup validation checks and return an initialized AppContext.
@@ -165,10 +131,33 @@ def _startup() -> AppContext:
     Called from lifespan before the first tool call is accepted.
     Any failure raises SystemExit(1) with a message to stderr.
     """
-    client = _resolve_chromadb_client()
+    client = get_weaviate_client()
+    try:
+        client.is_ready()
+    except Exception as exc:
+        logger.warning("Weaviate unreachable: %s", exc)
+        sys.exit(1)
+
     _check_ollama()
-    collections = _load_collections(client)
-    return AppContext(client=client, collections=collections)
+
+    for name in ["ConferenceTalks", "ConferenceTalkParagraphs",
+                 "ConferenceTalkCitations", "ConferenceTalkFootnotes"]:
+        if not client.collections.exists(name):
+            print(
+                f"ERROR: Weaviate collection '{name}' not found. Run the pipeline first.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        result = client.collections.use(name).aggregate.over_all(total_count=True)
+        if result.total_count == 0:
+            print(
+                f"ERROR: Collection '{name}' has 0 records. Re-run the pipeline.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        logger.info("Validated collection '%s' (%d records)", name, result.total_count)
+
+    return AppContext(client=client)
 
 
 # ---------------------------------------------------------------------------
@@ -176,44 +165,36 @@ def _startup() -> AppContext:
 # ---------------------------------------------------------------------------
 
 
-def _build_where_filter(year: int | None, season: str | None) -> dict | None:
+def _build_weaviate_filters(year, season, speaker):
     """
-    Build a ChromaDB `where` filter dict from optional year and season params.
+    Build a combined Weaviate Filter from optional year, season, and speaker params.
 
-    Returns None (not {}) when no filters are provided — ChromaDB rejects empty
-    where dicts (Pitfall 6). Speaker filtering is NOT included here; it is
-    applied as a Python post-filter after the query (Pitfall 1 / D-06).
+    Returns None when no filters are provided. All three filters use native
+    Weaviate property filters — no post-filter workaround needed.
     """
-    filters = []
-    if year is not None:
-        filters.append({"conference_year": {"$eq": year}})
-    if season is not None:
-        filters.append({"conference_month": {"$eq": season}})
-    if not filters:
+    conditions = []
+    if year:
+        conditions.append(Filter.by_property("conference_year").equal(year))
+    if season:
+        conditions.append(Filter.by_property("conference_month").equal(season))
+    if speaker:
+        conditions.append(Filter.by_property("speaker_name").like(f"*{speaker}*"))
+    if not conditions:
         return None
-    return filters[0] if len(filters) == 1 else {"$and": filters}
-
-
-def _matches_speaker(stored: str, query: str) -> bool:
-    """
-    Case-insensitive substring match on speaker name (D-06 / CORE-04).
-
-    Input "Holland" matches stored "Jeffrey R. Holland". Whitespace is stripped
-    from the query before comparison.
-    """
-    return query.strip().lower() in stored.lower()
+    result = conditions[0]
+    for c in conditions[1:]:
+        result = result & c
+    return result
 
 
 def _format_search_result(document: str, meta: dict) -> dict:
     """
-    Build the 6-field public result dict from a ChromaDB document + metadata.
+    Build the 6-field public result dict from a document snippet + Weaviate properties.
 
     D-01: exactly 6 fields — snippet, speaker_name, title, conference_year,
     conference_month, talk_id.
     D-04: NO pipeline-internal fields (paragraph_id, word_count, text, text_raw,
     source_type, speaker_id, conference_id, etc.).
-    Snippet comes from the document param (ChromaDB document text), NOT from
-    meta["text"] (Pitfall 3).
     """
     return {
         "snippet": document,
@@ -275,6 +256,7 @@ MCP_INSTRUCTIONS = (
 
 @asynccontextmanager
 async def _lifespan(server: FastMCP):
+    app_ctx: AppContext | None = None     # initialize before try — prevents NameError
     try:
         app_ctx = _startup()
     except SystemExit:
@@ -282,17 +264,21 @@ async def _lifespan(server: FastMCP):
     except Exception as e:
         print(f"ERROR: Unexpected startup failure: {e}", file=sys.stderr)
         sys.exit(1)
-    yield {"app": app_ctx}
+    try:
+        yield {"app": app_ctx}
+    finally:
+        if app_ctx is not None:           # guard — app_ctx may be None if startup failed
+            app_ctx.client.close()
 
 
 mcp = FastMCP("lds-scripture-index", instructions=MCP_INSTRUCTIONS, auth=_auth, lifespan=_lifespan)
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health_handler(request: Request) -> JSONResponse:
-    """Return server health with live Ollama and ChromaDB reachability checks."""
-    status = {"ollama": "reachable", "chromadb": "reachable"}
+    """Return server health with live Ollama and Weaviate reachability checks."""
+    status = {"ollama": "reachable", "weaviate": "reachable"}
     http_status = 200
-    
+
     # Ollama check: live embedding call (per D-09 — same approach as _check_ollama but without sys.exit on failure)
     try:
         ollama_url = resolve_ollama_url()
@@ -301,16 +287,20 @@ async def health_handler(request: Request) -> JSONResponse:
     except Exception:
         status["ollama"] = "unreachable"
         http_status = 503
-        
-    # ChromaDB check: connect and verify collections exist (per D-09 — reuses startup guard logic pattern without full count validation)
+
+    # Weaviate check: HTTP GET with 2s timeout (D-19 — no gRPC client per health poll)
     try:
-        client = get_chromadb_client()
-        for name in CHROMADB_COLLECTION_NAMES.values():
-            client.get_collection(name=name)
+        host = os.environ.get("WEAVIATE_HOST", "localhost")
+        port = os.environ.get("WEAVIATE_PORT", "8080")
+        resp = http_requests.get(
+            f"http://{host}:{port}/v1/.well-known/ready", timeout=2
+        )
+        if not resp.ok:
+            raise RuntimeError(f"HTTP {resp.status_code}")
     except Exception:
-        status["chromadb"] = "unreachable"
+        status["weaviate"] = "unreachable"
         http_status = 503
-    
+
     payload = {"status": "ok" if http_status == 200 else "degraded", **status}
     return JSONResponse(payload, status_code=http_status)
 
@@ -344,53 +334,42 @@ async def search(
     """
     app: AppContext = ctx.lifespan_context["app"]
 
-    # CORE-06: validate collection alias
-    col = app.collections.get(collection)
-    if col is None:
+    collection_map = {
+        "talks": "ConferenceTalks",
+        "paragraphs": "ConferenceTalkParagraphs",
+        "citations": "ConferenceTalkCitations",
+        "footnotes": "ConferenceTalkFootnotes",
+    }
+    col_name = collection_map.get(collection)
+    if col_name is None:
         return f"Unknown collection '{collection}'. Valid: talks, paragraphs, citations, footnotes."
 
-    # Clamp limit per TOOL-03
     limit = max(1, min(limit, 20))
+    weaviate_filter = _build_weaviate_filters(year, season, speaker)
 
-    # CORE-05: build where filter (year/season only; speaker is post-filtered)
-    where = _build_where_filter(year=year, season=season)
-
-    # CORE-04: fetch extra results when speaker filter active to compensate for post-filter reduction
-    fetch_n = min(limit * 4, 80) if speaker else limit
-
-    # TOOL-01: embed query via Ollama (separate service — fails gracefully if unreachable)
     try:
         ollama_url = resolve_ollama_url()
         ef = get_embedding_function(url=ollama_url)
-        query_vector = ef([query])
+        query_vector = ef([query])[0]
     except Exception as e:
         return f"Search unavailable: Ollama is unreachable ({e})."
 
-    # TOOL-01: semantic search via ChromaDB
-    result = col.query(
-        query_embeddings=query_vector,
-        n_results=fetch_n,
-        where=where,
-        include=["documents", "metadatas"],
+    col = app.client.collections.use(col_name)
+    result = col.query.near_vector(
+        near_vector=query_vector,
+        limit=limit,
+        filters=weaviate_filter,
+        target_vector="default",
     )
 
-    # Zip documents and metadatas (query returns nested lists — [0] for first query)
-    docs = result["documents"][0] if result["documents"] else []
-    metas = result["metadatas"][0] if result["metadatas"] else []
-    items = list(zip(docs, metas))
-
-    # CORE-04: post-filter by speaker (case-insensitive substring match, per D-06)
-    if speaker:
-        items = [(d, m) for d, m in items if _matches_speaker(m.get("speaker_name", ""), speaker)]
-
-    # Truncate to requested limit
-    items = items[:limit]
-
-    if not items:
+    if not result.objects:
         return "No results found."
 
-    # TOOL-03: format results — exactly 6 fields per D-01, no pipeline fields per D-04
-    results = [_format_search_result(d, m) for d, m in items]
+    snippet_fn = _SNIPPET_PROP.get(collection, lambda p: "")
+    results = []
+    for obj in result.objects:
+        props = obj.properties
+        results.append(_format_search_result(snippet_fn(props), props))
     return json.dumps(results, ensure_ascii=False, indent=2)
 
 
@@ -408,19 +387,16 @@ async def get_talk(
     """
     app: AppContext = ctx.lifespan_context["app"]
 
-    # TOOL-04: parse talk_id to integer
     talk_num = _parse_talk_id(talk_id)
     if talk_num is None:
         return f"Invalid talk_id format '{talk_id}'. Expected format: 'talk_8820' or '8820'."
 
-    # Get talk metadata for header (speaker, title, conference, session)
-    talks_col = app.collections["talks"]
-    talk_result = talks_col.get(ids=[f"talk_{talk_num}"], include=["metadatas"])
-
-    if not talk_result["metadatas"]:
+    talks_col = app.client.collections.use("ConferenceTalks")
+    talk_obj = talks_col.query.fetch_object_by_id(generate_uuid5(f"talk_{talk_num}"))
+    if talk_obj is None:
         return f"No talk found with ID '{talk_id}'."
 
-    tm = talk_result["metadatas"][0]
+    tm = talk_obj.properties
     header = (
         f"Speaker: {tm.get('speaker_name', '')}\n"
         f"Title: {tm.get('title', '')}\n"
@@ -428,24 +404,20 @@ async def get_talk(
         f"Session: {tm.get('session_description', '')}"
     )
 
-    # TOOL-05: get all paragraphs for this talk, sorted by paragraph_number
-    paras_col = app.collections["paragraphs"]
-    para_result = paras_col.get(
-        where={"talk_id": {"$eq": talk_num}},
-        include=["documents", "metadatas"],
+    paras_col = app.client.collections.use("ConferenceTalkParagraphs")
+    para_result = paras_col.query.fetch_objects(
+        filters=Filter.by_property("talk_id").equal(talk_num),
+        limit=10000,
     )
 
-    if not para_result["ids"]:
+    if not para_result.objects:
         return f"No paragraphs found for talk_id '{talk_id}'."
 
-    # Sort by paragraph_number (narrative order per D-15/TOOL-05)
     sorted_rows = sorted(
-        zip(para_result["documents"], para_result["metadatas"]),
-        key=lambda x: int(x[1].get("paragraph_number", 0)),
+        para_result.objects,
+        key=lambda obj: int(obj.properties.get("paragraph_number", 0)),
     )
-
-    # Build output: header + blank line + paragraphs separated by blank lines (per D-14)
-    body = "\n\n".join(doc for doc, _meta in sorted_rows)
+    body = "\n\n".join(obj.properties.get("text", "") for obj in sorted_rows)
     return f"{header}\n\n{body}"
 
 
