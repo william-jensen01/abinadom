@@ -5,7 +5,7 @@ milestone_name: Vector DB Migration
 status: executing
 stopped_at: Completed 24-03-PLAN.md
 last_updated: "2026-06-27T21:34:17.456Z"
-last_activity: 2026-06-27 -- Phase 24 execution started
+last_activity: 2026-06-27 -- Phase 24 Wave 2 complete (plans 24-02, 24-03 done; waves 3-4 pending)
 progress:
   total_phases: 7
   completed_phases: 6
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 
 ## Current Position
 
-Phase: 24 (production-migration) — EXECUTING
-Status: Executing Phase 24
-Last activity: 2026-06-27 -- Phase 24 execution started
+Phase: 24 (production-migration) — Wave 2 complete; waves 3–4 pending (2 plans remaining)
+Status: 4 of 6 plans done — Wave 2 delivered run_pipeline.py + server.py Weaviate migration
+Last activity: 2026-06-27 -- Phase 24 Wave 2 complete (24-02, 24-03 committed)
 
 Progress: [██████████] 100%
 
