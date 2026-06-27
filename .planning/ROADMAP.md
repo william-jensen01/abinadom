@@ -63,7 +63,7 @@ Full details: `.planning/milestones/v3.0-ROADMAP.md`
 | 21 | DB Loaders | 5/5 | Complete   | 2026-04-22 |
 | 22 | Benchmark Runner | 3/3 | Complete | 2026-04-25 |
 | 23 | Benchmark Execution & Decision | 2/2 | Complete   | 2026-05-08 |
-| 24 | Production Migration | 4/6 | In Progress|  |
+| 24 | Production Migration | 5/6 | In Progress|  |
 
 - [x] **Phase 20: Benchmark Infrastructure & Framework** — Docker Compose for all 3 DBs running locally; shared transform, metrics, and canonical query modules ready (completed 2026-04-20)
 - [x] **Phase 21: DB Loaders** — ChromaDB, Weaviate, and Qdrant loaders each accept a talk bundle and persist it correctly (completed 2026-04-22)
@@ -207,14 +207,14 @@ Plans:
   3. `docker compose up` in the project root starts the MCP server with the winning DB service; `.env.example` reflects the updated variable contract
   4. `search` and `get_talk` MCP tools return correct results for at least three representative queries against the winning DB
 
-**Plans**: 4/6 plans executed
+**Plans**: 5/6 plans executed
 Plans:
 
 - [x] 24-01-PLAN.md — Create config/weaviate_client.py + extractors/phase6_weaviate_loader.py + update WeaviateLoader (COLLECTIONS, _ensure_schema, talk_exists)
 - [x] 24-02-PLAN.md — Update scripts/run_pipeline.py (Weaviate loader, context manager, talk_exists skip check)
 - [x] 24-03-PLAN.md — Rewrite server.py (Weaviate client, startup validation, native filters, health check)
 - [x] 24-04-PLAN.md — Config + infra cleanup (pipeline_config, delete chromadb_client, Pipfile, docker-compose, CLAUDE.md)
-- [ ] 24-05-PLAN.md — Rewrite test_phase6.py (Weaviate embedded) + minimal patch test_phase6_orchestrator.py
+- [x] 24-05-PLAN.md — Rewrite test_phase6.py (Weaviate embedded) + minimal patch test_phase6_orchestrator.py
 - [ ] 24-06-PLAN.md — Human-gated verification (full pipeline run + MCP smoke test)
 
 **UI hint**: no

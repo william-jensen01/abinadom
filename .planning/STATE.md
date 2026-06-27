@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Vector DB Migration
 status: executing
-stopped_at: Completed 24-03-PLAN.md
-last_updated: "2026-06-27T21:34:17.456Z"
-last_activity: 2026-06-27 -- Phase 24 Wave 2 complete (plans 24-02, 24-03 done; waves 3-4 pending)
+stopped_at: Completed 24-05-PLAN.md
+last_updated: "2026-06-27T22:35:00.000Z"
+last_activity: 2026-06-27 -- Phase 24 execution started
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 26
-  completed_plans: 25
+  completed_plans: 26
   percent: 86
 ---
 
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 
 ## Current Position
 
-Phase: 24 (production-migration) — Wave 2 complete; waves 3–4 pending (2 plans remaining)
-Status: 4 of 6 plans done — Wave 2 delivered run_pipeline.py + server.py Weaviate migration
-Last activity: 2026-06-27 -- Phase 24 Wave 2 complete (24-02, 24-03 committed)
+Phase: 24 (production-migration) — EXECUTING
+Status: Executing Phase 24
+Last activity: 2026-06-27 -- Phase 24 execution started
 
 Progress: [██████████] 100%
 
@@ -54,6 +54,8 @@ Progress: [██████████] 100%
 Decisions are logged in PROJECT.md Key Decisions table.
 
 - [Phase ?]: AppContext holds only weaviate.WeaviateClient — collections.use() called inline per tool call (D-02)
+- [Phase 24-05]: WeaviateLoader.load() collection_map uses self.COLLECTIONS[i] — ProductionWeaviateLoader routes to production names without re-implementing load()
+- [Phase 24-05]: weaviate.connect_to_embedded() unsupported on Windows (gh#3315) — tests use platform-conditional fixture with MagicMock fallback
 
 ### Pending Todos
 
@@ -73,6 +75,6 @@ None yet.
 
 ## Session
 
-**Last session:** 2026-06-27T21:34:17.444Z
-**Stopped at:** Completed 24-03-PLAN.md
+**Last session:** 2026-06-27T22:35:00Z
+**Stopped at:** Completed 24-05-PLAN.md
 **Resume file:** None
