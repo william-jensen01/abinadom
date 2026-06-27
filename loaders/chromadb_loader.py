@@ -19,9 +19,19 @@ from typing import Callable
 sys.path.append(str(Path(__file__).parent.parent))
 
 import chromadb
-from config.pipeline_config import CHROMADB_COLLECTION_NAMES
 from loaders import BaseLoader
 from loaders.shared_transforms import TalkBundle, prepare_talk_bundle
+
+# Benchmark ChromaDB collection names (snake_case, matching prior production names).
+# Defined here because config.pipeline_config no longer exports this constant (Phase 24-04
+# replaced ChromaDB with Weaviate in production). The benchmark loader is independent and
+# keeps these names for backward compatibility with the benchmark Docker instance.
+CHROMADB_COLLECTION_NAMES = {
+    "talks": "conference_talks",
+    "paragraphs": "conference_talk_paragraphs",
+    "citations": "conference_talk_citations",
+    "footnotes": "conference_talk_footnotes",
+}
 
 logger = logging.getLogger(__name__)
 
