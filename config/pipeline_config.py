@@ -49,3 +49,13 @@ WEAVIATE_COLLECTION_NAMES = {
     "citations": "ConferenceTalkCitations",
     "footnotes": "ConferenceTalkFootnotes",
 }
+
+# --- ChromaDB backward-compatibility (verify_chromadb_pipeline.py) ---
+# Production now uses Weaviate (Phase 24). These names are kept for operators
+# who still run ChromaDB instances and use verify_chromadb_pipeline.py.
+CHROMADB_COLLECTION_NAMES = {
+    "talks": "conference_talks",
+    "paragraphs": "conference_talk_paragraphs",
+    "citations": "conference_talk_citations",
+    "footnotes": "conference_talk_footnotes",
+}

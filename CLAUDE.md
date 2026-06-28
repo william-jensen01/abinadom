@@ -121,7 +121,8 @@
 - `scripts/process_topics.py` — Topic data fetcher (topics.json → Church API → entries)
 - `scripts/run_audit.py` — Bug audit driver script (runs phases 1-5 per talk_id in config/audit_sample.json)
 - `scripts/run_pipeline.py` — Full pipeline orchestrator (Phases 1-6, per-talk streaming, resume, --force)
-- `scripts/verify_pipeline.py` — Post-pipeline verification script (VER-01 through VER-05, JSON report)
+- `scripts/verify_chromadb_pipeline.py` — Post-pipeline verification (ChromaDB instances, VER-01 through VER-06, JSON report)
+- `scripts/verify_weaviate_pipeline.py` — Post-pipeline verification (Weaviate instances, VER-01 through VER-05, JSON report)
 
 ### tests/
 - `tests/test_html_parsing_utils.py`

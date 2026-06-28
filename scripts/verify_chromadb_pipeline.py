@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Post-pipeline verification script.
+Post-pipeline verification script (ChromaDB).
 
 Runs all four VER checks (count verification, semantic search, metadata
-filtering, FK integrity) against the live ChromaDB collections and writes
+filtering, FK integrity) against ChromaDB collections and writes
 a structured JSON report.
+
+For Weaviate verification, use scripts/verify_weaviate_pipeline.py instead.
 
 Checks:
   VER-01: Record count verification (talk count must match SQLite INNER JOIN)
@@ -14,14 +16,15 @@ Checks:
   VER-05: Topics metadata verification (coverage vs SQLite baseline, document text)
 
 Usage:
-    pipenv run py scripts/verify_pipeline.py
-    pipenv run py scripts/verify_pipeline.py --output data/my_report.json
+    pipenv run py scripts/verify_chromadb_pipeline.py
+    pipenv run py scripts/verify_chromadb_pipeline.py --output data/my_report.json
 """
 
 import argparse
 import datetime
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -29,11 +32,35 @@ from typing import Any, Dict, List, Optional, Tuple
 # Ensure project root is on sys.path when running as a script
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import chromadb
 from tqdm import tqdm
 
 from db import core_db
 from config.pipeline_config import CHROMADB_COLLECTION_NAMES
-from extractors.phase6_chromadb_loader import get_chromadb_client, get_embedding_function
+
+
+def get_chromadb_client() -> chromadb.HttpClient:
+    """Return an HttpClient connected to the ChromaDB server via env vars."""
+    host = os.environ.get("CHROMADB_HOST", "localhost")
+    port = int(os.environ.get("CHROMADB_PORT", "8000"))
+    return chromadb.HttpClient(host=host, port=port)
+
+
+def get_embedding_function() -> Any:
+    """
+    Return an OllamaEmbeddingFunction for nomic-embed-text, or None if unavailable.
+
+    Ollama must be running locally with nomic-embed-text pulled for VER-02 to work.
+    VER-02 is skipped (not failed) when this returns None.
+    """
+    try:
+        from chromadb.utils.embedding_functions import OllamaEmbeddingFunction
+        return OllamaEmbeddingFunction(
+            model_name="nomic-embed-text",
+            url=os.environ.get("OLLAMA_URL", "http://localhost:11434") + "/api/embeddings",
+        )
+    except Exception:
+        return None
 
 logger = logging.getLogger(__name__)
 
