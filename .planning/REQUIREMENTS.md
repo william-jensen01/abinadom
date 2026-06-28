@@ -24,7 +24,7 @@
 
 - [x] **MIGR-01**: User can run the full pipeline against the winning DB via an updated `scripts/run_pipeline.py` (Phase 6 loader swapped)
 - [x] **MIGR-02**: MCP server uses the winning DB client at runtime (server.py startup validation updated)
-- [ ] **MIGR-03**: Production Docker Compose stack uses the winning DB service (docker-compose.yml updated, .env.example reflects new vars)
+- [x] **MIGR-03**: Production Docker Compose stack uses the winning DB service (docker-compose.yml updated, .env.example reflects new vars)
 - [ ] **MIGR-04**: Winning DB is populated with all 5,838 GC talks and MCP `search` + `get_talk` tools verified end-to-end
 
 ## Future Requirements
