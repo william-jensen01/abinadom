@@ -207,7 +207,7 @@ Plans:
   3. `docker compose up` in the project root starts the MCP server with the winning DB service; `.env.example` reflects the updated variable contract
   4. `search` and `get_talk` MCP tools return correct results for at least three representative queries against the winning DB
 
-**Plans**: 5/6 plans executed
+**Plans**: 5/9 plans executed
 Plans:
 
 - [x] 24-01-PLAN.md — Create config/weaviate_client.py + extractors/phase6_weaviate_loader.py + update WeaviateLoader (COLLECTIONS, _ensure_schema, talk_exists)
@@ -215,6 +215,9 @@ Plans:
 - [x] 24-03-PLAN.md — Rewrite server.py (Weaviate client, startup validation, native filters, health check)
 - [x] 24-04-PLAN.md — Config + infra cleanup (pipeline_config, delete chromadb_client, Pipfile, docker-compose, CLAUDE.md)
 - [x] 24-05-PLAN.md — Rewrite test_phase6.py (Weaviate embedded) + minimal patch test_phase6_orchestrator.py
+- [ ] 24-07-PLAN.md — Fix config/ollama.py (remove chromadb import); extract _validate_collections(); rename to_chromadb_format → to_db_record + _check_chromadb_readiness → _check_db_readiness
+- [ ] 24-08-PLAN.md — Full rewrite of tests/test_server.py for Weaviate (fixes 31 failing tests)
+- [ ] 24-09-PLAN.md — Rename verify_pipeline.py → verify_chromadb_pipeline.py; create verify_weaviate_pipeline.py
 - [ ] 24-06-PLAN.md — Human-gated verification (full pipeline run + MCP smoke test)
 
 **UI hint**: no
@@ -229,4 +232,4 @@ Plans:
 | 22.1. Address Recall@k = 0.0 Bug | 3/3 | Complete | 2026-04-26 |
 | 22.2. Optimize Benchmark Loaders for Efficiency | 4/4 | Complete | 2026-05-06 |
 | 23. Benchmark Execution & Decision | 2/2 | Complete | 2026-05-08 |
-| 24. Production Migration | 0/6 | Not started | - |
+| 24. Production Migration | 5/9 | Executing | - |
