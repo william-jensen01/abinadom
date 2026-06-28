@@ -356,16 +356,16 @@ class TestFootnoteData:
         assert d["footnote_text_raw"] == fn.footnote_text_raw
         assert d["context_before"] == "before"
 
-    def test_to_chromadb_format_uses_context_window(self):
+    def test_to_db_record_uses_context_window(self):
         fn = self._valid(context_window="ctx window text")
-        document, metadata, doc_id = fn.to_chromadb_format()
+        document, metadata, doc_id = fn.to_db_record()
         assert document == "ctx window text"
         assert doc_id == f"fn_{fn.footnote_id}"
         assert "context_window" not in metadata
 
-    def test_to_chromadb_format_falls_back_to_raw(self):
+    def test_to_db_record_falls_back_to_raw(self):
         fn = self._valid(context_window="")
-        document, metadata, doc_id = fn.to_chromadb_format()
+        document, metadata, doc_id = fn.to_db_record()
         assert document == fn.footnote_text_raw
 
 

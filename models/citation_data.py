@@ -72,9 +72,9 @@ class CitationData:
         result = asdict(self)
         return result
 
-    def to_chromadb_format(self) -> tuple[str, Dict[str, Any], str]:
+    def to_db_record(self) -> tuple[str, Dict[str, Any], str]:
         """
-        Convert to ChromaDB format.
+        Convert to DB record format.
 
         Returns:
             Tuple of (document, metadata, id)

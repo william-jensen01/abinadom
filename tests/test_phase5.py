@@ -20,7 +20,7 @@ from extractors.phase5_validation import (
     validate_talk,
     _check_cross_collection,
     _check_paragraphs,
-    _check_chromadb_readiness,
+    _check_db_readiness,
     _check_footnotes,
 )
 
@@ -386,45 +386,45 @@ class TestParagraphSanity:
 
 
 # =============================================================================
-# TestChromaDBReadiness
+# TestDBReadiness
 # =============================================================================
 
 
-class TestChromaDBReadiness:
+class TestDBReadiness:
     """Check 4: non-empty document text and unique IDs."""
 
     def test_empty_paragraph_text_is_error(self):
         metadata = make_metadata()
-        # Create a paragraph that would produce empty text via to_chromadb_format.
+        # Create a paragraph that would produce empty text via to_db_record.
         # ParagraphData enforces non-empty text, so we patch the method.
         para = make_paragraph(1)
-        original_format = para.to_chromadb_format
-        para.to_chromadb_format = lambda: ("", {}, "para_10001")
+        original_format = para.to_db_record
+        para.to_db_record = lambda: ("", {}, "para_10001")
         tp = make_paragraphs([para, make_paragraph(2), make_paragraph(3)])
         tc = make_citations([])
         tf = make_footnotes([])
         errors: List[str] = []
-        _check_chromadb_readiness(metadata, tp, tc, tf, errors)
+        _check_db_readiness(metadata, tp, tc, tf, errors)
         assert any("ParagraphData" in e and "empty" in e for e in errors)
 
     def test_duplicate_paragraph_ids_is_error(self):
         metadata = make_metadata()
         para1 = make_paragraph(1)
         para2 = make_paragraph(2)
-        # Make them share the same ChromaDB ID
-        para1.to_chromadb_format = lambda: ("text", {}, "para_SAME")
-        para2.to_chromadb_format = lambda: ("text", {}, "para_SAME")
+        # Make them share the same DB record ID
+        para1.to_db_record = lambda: ("text", {}, "para_SAME")
+        para2.to_db_record = lambda: ("text", {}, "para_SAME")
         tp = make_paragraphs([para1, para2, make_paragraph(3)])
         tc = make_citations([])
         tf = make_footnotes([])
         errors: List[str] = []
-        _check_chromadb_readiness(metadata, tp, tc, tf, errors)
+        _check_db_readiness(metadata, tp, tc, tf, errors)
         assert any("Duplicate ID" in e and "paragraphs" in e for e in errors)
 
     def test_valid_bundle_no_errors(self):
         metadata, tp, tc, tf = happy_path_bundle()
         errors: List[str] = []
-        _check_chromadb_readiness(metadata, tp, tc, tf, errors)
+        _check_db_readiness(metadata, tp, tc, tf, errors)
         assert errors == []
 
 

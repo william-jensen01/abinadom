@@ -1459,7 +1459,7 @@ def paragraphs_to_chromadb_format(
 
     for talk_paras in all_talk_paragraphs:
         for para in talk_paras.paragraphs:
-            doc, meta, doc_id = para.to_chromadb_format()
+            doc, meta, doc_id = para.to_db_record()
             documents.append(doc)
             metadatas.append(meta)
             ids.append(doc_id)

@@ -73,8 +73,8 @@ def validate_talk(
     # --- Check 3: Paragraph sanity ---
     _check_paragraphs(paragraphs, errors, warnings)
 
-    # --- Check 4: ChromaDB readiness ---
-    _check_chromadb_readiness(metadata, paragraphs, citations, footnotes, errors)
+    # --- Check 4: DB readiness ---
+    _check_db_readiness(metadata, paragraphs, citations, footnotes, errors)
 
     # --- Check 5: Footnote sanity ---
     _check_footnotes(footnotes, errors, warnings)
@@ -314,11 +314,11 @@ def _check_paragraphs(
 
 
 # =============================================================================
-# Check 4: ChromaDB readiness
+# Check 4: DB readiness
 # =============================================================================
 
 
-def _check_chromadb_readiness(
+def _check_db_readiness(
     metadata: TalkMetadata,
     paragraphs: TalkParagraphs,
     citations: TalkCitations,
@@ -327,14 +327,14 @@ def _check_chromadb_readiness(
 ):
     """Document text not empty; IDs unique within each collection."""
     # Metadata document
-    doc, _, meta_id = metadata.to_chromadb_format()
+    doc, _, meta_id = metadata.to_db_record()
     if not doc or not doc.strip():
         errors.append(f"TalkMetadata talk_id={metadata.talk_id}: empty document text")
 
     # Paragraph documents + ID uniqueness
     para_ids = []
     for para in paragraphs.paragraphs:
-        doc, _, doc_id = para.to_chromadb_format()
+        doc, _, doc_id = para.to_db_record()
         if not doc or not doc.strip():
             errors.append(
                 f"ParagraphData paragraph_id={para.paragraph_id}: empty document text"
@@ -345,7 +345,7 @@ def _check_chromadb_readiness(
     # Citation documents + ID uniqueness
     cite_ids = []
     for cite in citations.citations:
-        doc, _, doc_id = cite.to_chromadb_format()
+        doc, _, doc_id = cite.to_db_record()
         if not doc or not doc.strip():
             errors.append(
                 f"CitationData citation_id={cite.citation_id}: empty document text"
@@ -356,7 +356,7 @@ def _check_chromadb_readiness(
     # Footnote documents + ID uniqueness
     fn_ids = []
     for fn in footnotes.footnotes:
-        doc, _, doc_id = fn.to_chromadb_format()
+        doc, _, doc_id = fn.to_db_record()
         if not doc or not doc.strip():
             errors.append(
                 f"FootnoteData footnote_id={fn.footnote_id}: empty document text"

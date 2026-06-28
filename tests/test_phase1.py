@@ -264,11 +264,11 @@ class TestTalkMetadata(unittest.TestCase):
         self.assertEqual(result["talk_id"], 1)
         self.assertEqual(result["title"], "Test Talk")
 
-    def test_talk_metadata_to_chromadb_format(self):
-        """Should convert to ChromaDB format correctly."""
+    def test_talk_metadata_to_db_record(self):
+        """Should convert to DB record format correctly."""
         data = self.get_valid_metadata_dict()
         metadata = create_talk_metadata_from_db_row(data)
-        document, meta, doc_id = metadata.to_chromadb_format()
+        document, meta, doc_id = metadata.to_db_record()
 
         # Check document
         self.assertIsInstance(document, str)

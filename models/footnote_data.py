@@ -54,9 +54,9 @@ class FootnoteData:
         """Convert to dictionary."""
         return asdict(self)
 
-    def to_chromadb_format(self) -> tuple[str, Dict[str, Any], str]:
+    def to_db_record(self) -> tuple[str, Dict[str, Any], str]:
         """
-        Convert to ChromaDB format.
+        Convert to DB record format.
 
         Returns:
             Tuple of (document, metadata, id)

@@ -395,7 +395,7 @@ def prepare_for_chromadb(
     ids = []
 
     for metadata in metadata_list:
-        doc, meta, doc_id = metadata.to_chromadb_format()
+        doc, meta, doc_id = metadata.to_db_record()
         documents.append(doc)
         metadatas.append(meta)
         ids.append(doc_id)
