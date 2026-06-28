@@ -124,22 +124,8 @@ def _check_ollama() -> None:
         )
 
 
-def _startup() -> AppContext:
-    """
-    Run all startup validation checks and return an initialized AppContext.
-
-    Called from lifespan before the first tool call is accepted.
-    Any failure raises SystemExit(1) with a message to stderr.
-    """
-    client = get_weaviate_client()
-    try:
-        client.is_ready()
-    except Exception as exc:
-        logger.warning("Weaviate unreachable: %s", exc)
-        sys.exit(1)
-
-    _check_ollama()
-
+def _validate_collections(client: weaviate.WeaviateClient) -> None:
+    """Validate all 4 Weaviate collections are present and non-empty. Calls sys.exit(1) on any failure."""
     for name in ["ConferenceTalks", "ConferenceTalkParagraphs",
                  "ConferenceTalkCitations", "ConferenceTalkFootnotes"]:
         if not client.collections.exists(name):
@@ -157,6 +143,22 @@ def _startup() -> AppContext:
             sys.exit(1)
         logger.info("Validated collection '%s' (%d records)", name, result.total_count)
 
+
+def _startup() -> AppContext:
+    """
+    Run all startup validation checks and return an initialized AppContext.
+
+    Called from lifespan before the first tool call is accepted.
+    Any failure raises SystemExit(1) with a message to stderr.
+    """
+    client = get_weaviate_client()
+    try:
+        client.is_ready()
+    except Exception as exc:
+        logger.warning("Weaviate unreachable: %s", exc)
+        sys.exit(1)
+    _check_ollama()
+    _validate_collections(client)
     return AppContext(client=client)
 
 
