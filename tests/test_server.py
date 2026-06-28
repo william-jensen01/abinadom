@@ -566,7 +566,7 @@ def test_search_docstring_has_collection_hint():
     """search tool docstring contains collection hints for paragraphs, talks, citations."""
     from server import search
 
-    doc = search.__doc__
+    doc = search.__doc__ or ""
     assert "paragraphs" in doc
     assert "talks" in doc
     assert "citations" in doc
@@ -576,7 +576,7 @@ def test_get_talk_docstring_has_workflow_hint():
     """get_talk tool docstring contains guidance to search first."""
     from server import get_talk
 
-    doc = get_talk.__doc__
+    doc = get_talk.__doc__ or ""
     assert "search" in doc.lower()
 
 
