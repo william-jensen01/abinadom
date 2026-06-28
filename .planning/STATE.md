@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Vector DB Migration
 status: executing
-stopped_at: Completed 24-07-PLAN.md
-last_updated: "2026-06-28T00:36:01.001Z"
-last_activity: 2026-06-28 -- Phase 24 plan 07 completed
+stopped_at: Completed 24-09-PLAN.md
+last_updated: "2026-06-28T00:55:00.000Z"
+last_activity: 2026-06-28 -- Phase 24 plan 09 completed
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 29
-  completed_plans: 28
+  completed_plans: 29
   percent: 86
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 
 Phase: 24 (production-migration) — EXECUTING
 Status: Executing Phase 24
-Last activity: 2026-06-28 -- Phase 24 plan 07 completed
+Last activity: 2026-06-28 -- Phase 24 plan 09 completed
 
 Progress: [██████████] 100%
 
@@ -59,6 +59,9 @@ Decisions are logged in PROJECT.md Key Decisions table.
 - [Phase 24-07]: OllamaEmbedder uses one requests.post per text (Ollama /api/embeddings is single-text-per-call)
 - [Phase 24-07]: paragraphs_to_chromadb_format function name in phase2 preserved — only callee call site updated to to_db_record()
 - [Phase ?]: test_server.py rewrite uses AppContext(client=MagicMock()) no collections dict (D-02); near_vector mock interface for search; fetch_object_by_id for get_talk
+- [Phase 24-09]: verify_chromadb_pipeline.py imports fixed inline (get_chromadb_client/get_embedding_function) after phase6_chromadb_loader deletion
+- [Phase 24-09]: CHROMADB_COLLECTION_NAMES re-added to pipeline_config.py for backward compat with verify_chromadb_pipeline.py
+- [Phase 24-09]: VER-04 in verify_weaviate_pipeline.py uses spot-check (10 paragraphs, 5 citations) via generate_uuid5 + fetch_object_by_id
 
 ### Pending Todos
 
@@ -79,6 +82,6 @@ None yet.
 
 ## Session
 
-**Last session:** 2026-06-28T00:35:43.552Z
-**Stopped at:** Completed 24-07-PLAN.md
+**Last session:** 2026-06-28T00:55:00.000Z
+**Stopped at:** Completed 24-09-PLAN.md
 **Resume file:** None

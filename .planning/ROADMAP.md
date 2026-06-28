@@ -63,7 +63,7 @@ Full details: `.planning/milestones/v3.0-ROADMAP.md`
 | 21 | DB Loaders | 5/5 | Complete   | 2026-04-22 |
 | 22 | Benchmark Runner | 3/3 | Complete | 2026-04-25 |
 | 23 | Benchmark Execution & Decision | 2/2 | Complete   | 2026-05-08 |
-| 24 | Production Migration | 7/9 | In Progress|  |
+| 24 | Production Migration | 8/9 | In Progress|  |
 
 - [x] **Phase 20: Benchmark Infrastructure & Framework** — Docker Compose for all 3 DBs running locally; shared transform, metrics, and canonical query modules ready (completed 2026-04-20)
 - [x] **Phase 21: DB Loaders** — ChromaDB, Weaviate, and Qdrant loaders each accept a talk bundle and persist it correctly (completed 2026-04-22)
@@ -207,7 +207,7 @@ Plans:
   3. `docker compose up` in the project root starts the MCP server with the winning DB service; `.env.example` reflects the updated variable contract
   4. `search` and `get_talk` MCP tools return correct results for at least three representative queries against the winning DB
 
-**Plans**: 7/9 plans executed
+**Plans**: 8/9 plans executed
 Plans:
 **Wave 1**
 
@@ -224,7 +224,7 @@ Plans:
 - [x] 24-05-PLAN.md — Rewrite test_phase6.py (Weaviate embedded) + minimal patch test_phase6_orchestrator.py
 - [x] 24-07-PLAN.md — Fix config/ollama.py (remove chromadb import); extract _validate_collections(); rename to_chromadb_format → to_db_record + _check_chromadb_readiness → _check_db_readiness — completed 2026-06-28
 - [x] 24-08-PLAN.md — Full rewrite of tests/test_server.py for Weaviate (fixes 31 failing tests)
-- [ ] 24-09-PLAN.md — Rename verify_pipeline.py → verify_chromadb_pipeline.py; create verify_weaviate_pipeline.py
+- [x] 24-09-PLAN.md — Rename verify_pipeline.py → verify_chromadb_pipeline.py; create verify_weaviate_pipeline.py
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
