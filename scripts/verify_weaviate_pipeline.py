@@ -605,7 +605,7 @@ def main() -> None:
             resp.raise_for_status()
             embedding_data = resp.json()
 
-            def ef(texts: List[str]) -> List[List[float]]:  # type: ignore[misc]
+            def _ollama_ef(texts: List[str]) -> List[List[float]]:
                 results = []
                 for text in texts:
                     r = requests.post(
@@ -617,6 +617,7 @@ def main() -> None:
                     results.append(r.json()["embedding"])
                 return results
 
+            ef = _ollama_ef
             print("Ollama embedding function initialized (nomic-embed-text).")
         except Exception as exc:
             print(f"WARNING: --embedding requested but Ollama unavailable: {exc}")
