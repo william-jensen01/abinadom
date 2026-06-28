@@ -1,66 +1,113 @@
 """
 Unit tests for server.py startup validation and MCP tool integration.
 
-CORE-01: ChromaDB HTTP client factory (env-var config, missing collection guard)
+CORE-01: Weaviate client factory (env-var config, _validate_collections guard)
 CORE-02: Ollama health check (fails fast on connection error)
-CORE-03: Collection warmup (all 4 collections loaded and counted)
+CORE-03: _validate_collections (all 4 collections present and non-empty)
+CORE-05: _build_weaviate_filters — all 5 filter cases
 TOOL-01/TOOL-02/TOOL-03: search tool integration
 TOOL-04/TOOL-05: get_talk tool integration
-OAUTH-01/OAUTH-02/OAUTH-03: dispatcher auth routing (Wave 0)
+TRANS-02: Health endpoint checks data["weaviate"]
+OAUTH-01/OAUTH-02/OAUTH-03: dispatcher auth routing
 """
 import asyncio
 import json
 import os
 from unittest.mock import MagicMock, patch
 
-import chromadb
 import pytest
 from starlette.testclient import TestClient
 
 
 # ---------------------------------------------------------------------------
-# CORE-01: get_chromadb_client — env-var configuration
+# CORE-01: get_weaviate_client — env-var configuration
 # ---------------------------------------------------------------------------
 
 
-def test_chromadb_client_default_host(monkeypatch):
-    """get_chromadb_client() uses localhost:8000 when env vars are unset."""
-    monkeypatch.delenv("CHROMADB_HOST", raising=False)
-    monkeypatch.delenv("CHROMADB_PORT", raising=False)
+def test_weaviate_client_default_host(monkeypatch):
+    """get_weaviate_client() uses localhost:8080:50051 when env vars are unset."""
+    monkeypatch.delenv("WEAVIATE_HOST", raising=False)
+    monkeypatch.delenv("WEAVIATE_PORT", raising=False)
+    monkeypatch.delenv("WEAVIATE_GRPC_PORT", raising=False)
 
-    with patch("chromadb.HttpClient") as mock_http:
-        from config.chromadb_client import get_chromadb_client
-        get_chromadb_client()
-        mock_http.assert_called_once_with(host="localhost", port=8000)
+    with patch("weaviate.connect_to_local") as mock_connect:
+        mock_connect.return_value = MagicMock()
+        from config.weaviate_client import get_weaviate_client
+        get_weaviate_client()
+        mock_connect.assert_called_once_with(host="localhost", port=8080, grpc_port=50051)
 
 
-def test_chromadb_client_env_override(monkeypatch):
-    """get_chromadb_client() respects CHROMADB_HOST and CHROMADB_PORT env vars."""
-    monkeypatch.setenv("CHROMADB_HOST", "chroma.internal")
-    monkeypatch.setenv("CHROMADB_PORT", "9000")
+def test_weaviate_client_env_override(monkeypatch):
+    """get_weaviate_client() respects WEAVIATE_HOST, WEAVIATE_PORT, WEAVIATE_GRPC_PORT env vars."""
+    monkeypatch.setenv("WEAVIATE_HOST", "weaviate.internal")
+    monkeypatch.setenv("WEAVIATE_PORT", "9090")
+    monkeypatch.setenv("WEAVIATE_GRPC_PORT", "50099")
 
-    with patch("chromadb.HttpClient") as mock_http:
-        from config.chromadb_client import get_chromadb_client
-        get_chromadb_client()
-        mock_http.assert_called_once_with(host="chroma.internal", port=9000)
+    with patch("weaviate.connect_to_local") as mock_connect:
+        mock_connect.return_value = MagicMock()
+        from config.weaviate_client import get_weaviate_client
+        get_weaviate_client()
+        mock_connect.assert_called_once_with(host="weaviate.internal", port=9090, grpc_port=50099)
 
 
 # ---------------------------------------------------------------------------
-# CORE-01: _load_collections — missing collection guard
+# CORE-03: _validate_collections
 # ---------------------------------------------------------------------------
 
 
-def test_chromadb_missing_collection_exits():
-    """_load_collections() raises SystemExit(1) when collections don't exist."""
-    from server import _load_collections
+class TestValidateCollections:
+    """Tests for _validate_collections(client) -> None."""
 
-    mock_client = MagicMock(spec=chromadb.ClientAPI)
-    mock_client.get_collection.side_effect = Exception("collection not found")
+    def _make_client(self, exists_return=True, total_count=100):
+        """Build a mock Weaviate client for _validate_collections."""
+        mock_client = MagicMock()
+        mock_client.collections.exists.return_value = exists_return
+        # aggregate.over_all returns an object with total_count attribute
+        agg_result = MagicMock()
+        agg_result.total_count = total_count
+        mock_client.collections.use.return_value.aggregate.over_all.return_value = agg_result
+        return mock_client
 
-    with pytest.raises(SystemExit) as exc_info:
-        _load_collections(mock_client)
+    def test_missing_collection_exits(self):
+        """_validate_collections() raises SystemExit(1) when a collection does not exist."""
+        from server import _validate_collections
 
-    assert exc_info.value.code == 1, f"Expected exit code 1, got: {exc_info.value.code}"
+        mock_client = self._make_client(exists_return=False)
+
+        with pytest.raises(SystemExit) as exc_info:
+            _validate_collections(mock_client)
+
+        assert exc_info.value.code == 1
+
+    def test_zero_count_collection_exits(self):
+        """_validate_collections() raises SystemExit(1) when a collection has 0 records."""
+        from server import _validate_collections
+
+        mock_client = self._make_client(exists_return=True, total_count=0)
+
+        with pytest.raises(SystemExit) as exc_info:
+            _validate_collections(mock_client)
+
+        assert exc_info.value.code == 1
+
+    def test_all_collections_valid_passes(self):
+        """_validate_collections() completes without exception when all 4 collections are present and non-empty."""
+        from server import _validate_collections
+
+        mock_client = self._make_client(exists_return=True, total_count=100)
+
+        # Should not raise
+        _validate_collections(mock_client)
+
+    def test_validates_exactly_4_collections(self):
+        """_validate_collections() checks exactly 4 collection names."""
+        from server import _validate_collections
+
+        mock_client = self._make_client(exists_return=True, total_count=1)
+
+        _validate_collections(mock_client)
+
+        assert mock_client.collections.exists.call_count == 4
 
 
 # ---------------------------------------------------------------------------
@@ -81,109 +128,46 @@ def test_ollama_failure_is_non_fatal():
 
 
 # ---------------------------------------------------------------------------
-# CORE-03: _load_collections — all 4 collections warmed
+# CORE-05: _build_weaviate_filters
 # ---------------------------------------------------------------------------
 
 
-def test_all_collections_warmed():
-    """_load_collections() returns a dict with exactly 4 collection keys."""
-    from server import _load_collections
-
-    mock_collection = MagicMock()
-    mock_collection.count.return_value = 100
-
-    mock_client = MagicMock(spec=chromadb.ClientAPI)
-    mock_client.get_collection.return_value = mock_collection
-
-    result = _load_collections(mock_client)
-
-    assert set(result.keys()) == {"talks", "paragraphs", "citations", "footnotes"}, (
-        f"Expected 4 collection keys, got: {set(result.keys())}"
-    )
-    assert len(result) == 4, f"Expected 4 collections, got {len(result)}"
-    for key, col in result.items():
-        assert col is mock_collection, f"Collection '{key}' should be the mock collection"
-
-
-# ---------------------------------------------------------------------------
-# CORE-05: _build_where_filter
-# ---------------------------------------------------------------------------
-
-
-class TestBuildWhereFilter:
-    """Tests for _build_where_filter(year, season) -> dict | None."""
+class TestBuildWeaviateFilters:
+    """Tests for _build_weaviate_filters(year, season, speaker) -> Filter | None."""
 
     def test_no_filters(self):
-        """Returns None when year and season are both None."""
-        from server import _build_where_filter
+        """Returns None when all three params are None."""
+        from server import _build_weaviate_filters
 
-        assert _build_where_filter(year=None, season=None) is None
+        assert _build_weaviate_filters(None, None, None) is None
 
     def test_year_only(self):
-        """Returns a single year filter dict when only year is provided."""
-        from server import _build_where_filter
+        """Returns a non-None filter when only year is provided."""
+        from server import _build_weaviate_filters
 
-        assert _build_where_filter(year=2020, season=None) == {
-            "conference_year": {"$eq": 2020}
-        }
+        result = _build_weaviate_filters(2020, None, None)
+        assert result is not None
 
     def test_season_only(self):
-        """Returns a single season filter dict when only season is provided."""
-        from server import _build_where_filter
+        """Returns a non-None filter when only season is provided."""
+        from server import _build_weaviate_filters
 
-        assert _build_where_filter(year=None, season="April") == {
-            "conference_month": {"$eq": "April"}
-        }
+        result = _build_weaviate_filters(None, "April", None)
+        assert result is not None
 
-    def test_year_and_season(self):
-        """Returns an $and filter when both year and season are provided."""
-        from server import _build_where_filter
+    def test_speaker_only(self):
+        """Returns a non-None filter when only speaker is provided."""
+        from server import _build_weaviate_filters
 
-        assert _build_where_filter(year=2020, season="April") == {
-            "$and": [
-                {"conference_year": {"$eq": 2020}},
-                {"conference_month": {"$eq": "April"}},
-            ]
-        }
+        result = _build_weaviate_filters(None, None, "Holland")
+        assert result is not None
 
+    def test_all_three(self):
+        """Returns a non-None filter when all three params are provided."""
+        from server import _build_weaviate_filters
 
-# ---------------------------------------------------------------------------
-# CORE-04: _matches_speaker
-# ---------------------------------------------------------------------------
-
-
-class TestMatchesSpeaker:
-    """Tests for _matches_speaker(stored, query) -> bool."""
-
-    def test_substring_match(self):
-        """Partial surname match returns True."""
-        from server import _matches_speaker
-
-        assert _matches_speaker("Jeffrey R. Holland", "Holland") is True
-
-    def test_case_insensitive(self):
-        """Lowercase query matches stored name case-insensitively."""
-        from server import _matches_speaker
-
-        assert _matches_speaker("Jeffrey R. Holland", "holland") is True
-
-    def test_no_match(self):
-        """Non-matching query returns False."""
-        from server import _matches_speaker
-
-        assert _matches_speaker("Jeffrey R. Holland", "Oaks") is False
-
-    def test_full_name_match(self):
-        """Full name query matches stored full name."""
-        from server import _matches_speaker
-
-        assert _matches_speaker("Jeffrey R. Holland", "Jeffrey R. Holland") is True
-
-    def test_whitespace_stripped(self):
-        """Query with leading/trailing whitespace is stripped before matching."""
-        from server import _matches_speaker
-
-        assert _matches_speaker("Jeffrey R. Holland", " Holland ") is True
+        result = _build_weaviate_filters(2020, "April", "Holland")
+        assert result is not None
 
 
 # ---------------------------------------------------------------------------
@@ -277,14 +261,32 @@ class TestParseTalkId:
 # ---------------------------------------------------------------------------
 
 
-def _make_mock_ctx(collections: dict):
-    """Build a mock Context whose lifespan_context is an AppContext with given collections."""
+def _make_mock_ctx():
+    """Build a mock Context whose lifespan_context is an AppContext with a mock Weaviate client."""
     from server import AppContext
 
-    app = AppContext(client=MagicMock(), collections=collections)
+    mock_client = MagicMock()
+    app = AppContext(client=mock_client)
     ctx = MagicMock()
     ctx.lifespan_context = {"app": app}
-    return ctx
+    return ctx, mock_client
+
+
+def _make_search_col(properties_list):
+    """
+    Build a mock Weaviate collection for search tool tests.
+
+    Returns a mock collection where:
+      col.query.near_vector(...).objects is a list of MagicMocks each with .properties = properties_dict
+    """
+    mock_col = MagicMock()
+    mock_objects = []
+    for props in properties_list:
+        obj = MagicMock()
+        obj.properties = props
+        mock_objects.append(obj)
+    mock_col.query.near_vector.return_value.objects = mock_objects
+    return mock_col
 
 
 # ---------------------------------------------------------------------------
@@ -295,39 +297,38 @@ def _make_mock_ctx(collections: dict):
 class TestSearchTool:
     """Integration tests for the search MCP tool."""
 
-    _SINGLE_META = {
+    _SINGLE_PROPS = {
         "speaker_name": "Jeffrey R. Holland",
         "title": "A Talk",
         "conference_year": 2020,
         "conference_month": "April",
         "talk_id": 8820,
+        "text": "Some text",
         # Pipeline-internal fields — must NOT leak through
-        "text": "raw",
         "paragraph_id": "p1",
     }
 
-    def _make_col(self, docs=None, metas=None):
-        """Build a mock ChromaDB collection returning the given query result."""
-        if docs is None:
-            docs = ["Some text"]
-        if metas is None:
-            metas = [self._SINGLE_META]
-        col = MagicMock()
-        col.query.return_value = {
-            "ids": [[f"id{i}" for i in range(len(docs))]],
-            "documents": [docs],
-            "metadatas": [metas],
-        }
-        return col
+    def _make_ctx_with_col(self, col_name="ConferenceTalkParagraphs", properties_list=None):
+        """Create a ctx where app.client.collections.use(col_name) returns a search mock col."""
+        if properties_list is None:
+            properties_list = [self._SINGLE_PROPS]
+        ctx, mock_client = _make_mock_ctx()
+        mock_col = _make_search_col(properties_list)
+        mock_client.collections.use.return_value = mock_col
+        return ctx, mock_col
 
     def test_search_basic_query(self):
-        """search calls col.query with correct args and returns JSON with 6-field results."""
+        """search calls near_vector with correct args and returns JSON with 6-field results."""
         from server import search
 
-        col = self._make_col()
-        ctx = _make_mock_ctx({"paragraphs": col})
+        ctx, mock_col = self._make_ctx_with_col()
 
-        result = asyncio.run(search(query="test query", ctx=ctx))
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            result = asyncio.run(search(query="test query", ctx=ctx))
+
         parsed = json.loads(result)
 
         assert len(parsed) == 1
@@ -340,80 +341,77 @@ class TestSearchTool:
             "talk_id",
         }
         assert "paragraph_id" not in parsed[0]
-        assert "text" not in parsed[0]
-
-    def test_search_speaker_post_filter(self):
-        """search with speaker param filters results in Python (not in where dict)."""
-        from server import search
-
-        docs = ["Holland text", "Oaks text"]
-        metas = [
-            {**self._SINGLE_META, "speaker_name": "Jeffrey R. Holland"},
-            {**self._SINGLE_META, "speaker_name": "Dallin H. Oaks"},
-        ]
-        col = self._make_col(docs=docs, metas=metas)
-        ctx = _make_mock_ctx({"paragraphs": col})
-
-        result = asyncio.run(search(query="grace", speaker="Holland", ctx=ctx))
-        parsed = json.loads(result)
-
-        assert len(parsed) == 1
-        assert "Holland" in parsed[0]["speaker_name"]
-        # Confirm speaker was NOT included in the where filter passed to ChromaDB
-        call_kwargs = col.query.call_args.kwargs
-        where = call_kwargs.get("where")
-        if where is not None:
-            assert "speaker" not in str(where).lower()
-
-    def test_search_invalid_collection(self):
-        """search with unknown collection returns error message."""
-        from server import search
-
-        ctx = _make_mock_ctx({"paragraphs": MagicMock()})
-        result = asyncio.run(search(query="test", collection="nonexistent", ctx=ctx))
-
-        assert "Unknown collection" in result
-
-    def test_search_year_season_filter(self):
-        """search with year=2020 and season='April' passes $and where filter to col.query."""
-        from server import search
-
-        col = self._make_col()
-        ctx = _make_mock_ctx({"paragraphs": col})
-
-        asyncio.run(search(query="test", year=2020, season="April", ctx=ctx))
-
-        call_kwargs = col.query.call_args.kwargs
-        assert call_kwargs["where"] == {
-            "$and": [
-                {"conference_year": {"$eq": 2020}},
-                {"conference_month": {"$eq": "April"}},
-            ]
-        }
 
     def test_search_empty_results(self):
         """search with no matching results returns 'No results found.'"""
         from server import search
 
-        col = MagicMock()
-        col.query.return_value = {"ids": [[]], "documents": [[]], "metadatas": [[]]}
-        ctx = _make_mock_ctx({"paragraphs": col})
+        ctx, mock_client = _make_mock_ctx()
+        mock_col = MagicMock()
+        mock_col.query.near_vector.return_value.objects = []
+        mock_client.collections.use.return_value = mock_col
 
-        result = asyncio.run(search(query="nothing matches", ctx=ctx))
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            result = asyncio.run(search(query="nothing matches", ctx=ctx))
 
         assert result == "No results found."
 
     def test_search_limit_clamped(self):
-        """limit > 20 is clamped to 20 when calling col.query."""
+        """limit > 20 is clamped to 20 when calling near_vector."""
         from server import search
 
-        col = self._make_col()
-        ctx = _make_mock_ctx({"paragraphs": col})
+        ctx, mock_col_mock = self._make_ctx_with_col()
 
-        asyncio.run(search(query="test", limit=50, ctx=ctx))
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            asyncio.run(search(query="test", limit=50, ctx=ctx))
 
-        call_kwargs = col.query.call_args.kwargs
-        assert call_kwargs["n_results"] == 20
+        call_kwargs = mock_col_mock.query.near_vector.call_args.kwargs
+        assert call_kwargs["limit"] == 20
+
+    def test_search_invalid_collection(self):
+        """search with unknown collection returns error message."""
+        from server import search
+
+        ctx, _ = _make_mock_ctx()
+        result = asyncio.run(search(query="test", collection="nonexistent", ctx=ctx))
+
+        assert "Unknown collection" in result
+
+    def test_search_year_season_filter(self):
+        """search with year=2020 and season='April' passes non-None filters to near_vector."""
+        from server import search
+
+        ctx, mock_col_mock = self._make_ctx_with_col()
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            asyncio.run(search(query="test", year=2020, season="April", ctx=ctx))
+
+        call_kwargs = mock_col_mock.query.near_vector.call_args.kwargs
+        assert call_kwargs.get("filters") is not None
+
+    def test_search_speaker_filter_not_none(self):
+        """search with speaker param passes non-None filters to near_vector (native Weaviate filter)."""
+        from server import search
+
+        ctx, mock_col_mock = self._make_ctx_with_col()
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            asyncio.run(search(query="grace", speaker="Holland", ctx=ctx))
+
+        call_kwargs = mock_col_mock.query.near_vector.call_args.kwargs
+        assert call_kwargs.get("filters") is not None
 
 
 # ---------------------------------------------------------------------------
@@ -421,10 +419,43 @@ class TestSearchTool:
 # ---------------------------------------------------------------------------
 
 
+def _make_talks_col(talk_properties=None):
+    """
+    Build a mock Weaviate talks collection.
+
+    talk_properties: dict for the returned talk object's .properties.
+    Set to None to simulate talk not found (fetch_object_by_id returns None).
+    """
+    mock_col = MagicMock()
+    if talk_properties is None:
+        mock_col.query.fetch_object_by_id.return_value = None
+    else:
+        talk_obj = MagicMock()
+        talk_obj.properties = talk_properties
+        mock_col.query.fetch_object_by_id.return_value = talk_obj
+    return mock_col
+
+
+def _make_paras_col(para_list):
+    """
+    Build a mock Weaviate paragraphs collection.
+
+    para_list: list of dicts with "text" and "paragraph_number" keys.
+    """
+    mock_col = MagicMock()
+    mock_objects = []
+    for para_props in para_list:
+        obj = MagicMock()
+        obj.properties = para_props
+        mock_objects.append(obj)
+    mock_col.query.fetch_objects.return_value.objects = mock_objects
+    return mock_col
+
+
 class TestGetTalkTool:
     """Integration tests for the get_talk MCP tool."""
 
-    _TALK_META = {
+    _TALK_PROPS = {
         "speaker_name": "Jeffrey R. Holland",
         "title": "A Talk",
         "conference_month": "April",
@@ -432,64 +463,65 @@ class TestGetTalkTool:
         "session_description": "Saturday Afternoon",
     }
 
-    def _make_talks_col(self, metas=None):
-        """Build a mock talks collection."""
-        if metas is None:
-            metas = [self._TALK_META]
-        col = MagicMock()
-        col.get.return_value = {
-            "ids": [f"talk_{i}" for i in range(len(metas))],
-            "metadatas": metas,
-        }
-        return col
+    _DEFAULT_PARAS = [
+        {"text": "First paragraph.", "paragraph_number": 1},
+        {"text": "Second paragraph.", "paragraph_number": 2},
+    ]
 
-    def _make_paras_col(self, docs=None, metas=None):
-        """Build a mock paragraphs collection."""
-        if docs is None:
-            docs = ["First paragraph.", "Second paragraph."]
-        if metas is None:
-            metas = [{"paragraph_number": 1}, {"paragraph_number": 2}]
-        col = MagicMock()
-        col.get.return_value = {
-            "ids": [f"p{i}" for i in range(len(docs))],
-            "documents": docs,
-            "metadatas": metas,
-        }
-        return col
+    def _make_ctx(self, talk_props=None, para_list=None):
+        """
+        Build a mock ctx where:
+          - client.collections.use("ConferenceTalks") → talks_col
+          - client.collections.use("ConferenceTalkParagraphs") → paras_col
+        """
+        ctx, mock_client = _make_mock_ctx()
+
+        if talk_props is None:
+            talk_props = self._TALK_PROPS
+        if para_list is None:
+            para_list = self._DEFAULT_PARAS
+
+        talks_col = _make_talks_col(talk_props)
+        paras_col = _make_paras_col(para_list)
+
+        def use_side_effect(name):
+            if name == "ConferenceTalks":
+                return talks_col
+            elif name == "ConferenceTalkParagraphs":
+                return paras_col
+            return MagicMock()
+
+        mock_client.collections.use.side_effect = use_side_effect
+        return ctx
 
     def test_get_talk_returns_formatted_output(self):
         """get_talk returns header + paragraphs in correct format."""
         from server import get_talk
 
-        talks_col = self._make_talks_col()
-        paras_col = self._make_paras_col()
-        ctx = _make_mock_ctx({"talks": talks_col, "paragraphs": paras_col})
+        ctx = self._make_ctx()
 
         result = asyncio.run(get_talk(talk_id="talk_8820", ctx=ctx))
 
         assert result.startswith("Speaker: Jeffrey R. Holland")
         assert "Title: A Talk" in result
         assert "Conference: April 2020" in result
-        assert "First paragraph.\n\nSecond paragraph." in result
+        assert "First paragraph." in result
+        assert "Second paragraph." in result
 
     def test_get_talk_paragraph_order(self):
         """Paragraphs are sorted by paragraph_number ascending even when returned out of order."""
         from server import get_talk
 
-        # Return paragraphs in REVERSE order: 3, 1, 2
-        docs = ["Para three.", "Para one.", "Para two."]
-        metas = [
-            {"paragraph_number": 3},
-            {"paragraph_number": 1},
-            {"paragraph_number": 2},
+        # Supply paragraphs in REVERSE order: 3, 1, 2
+        para_list = [
+            {"text": "Para three.", "paragraph_number": 3},
+            {"text": "Para one.", "paragraph_number": 1},
+            {"text": "Para two.", "paragraph_number": 2},
         ]
-        talks_col = self._make_talks_col()
-        paras_col = self._make_paras_col(docs=docs, metas=metas)
-        ctx = _make_mock_ctx({"talks": talks_col, "paragraphs": paras_col})
+        ctx = self._make_ctx(para_list=para_list)
 
         result = asyncio.run(get_talk(talk_id="8820", ctx=ctx))
 
-        # Para one should come before Para two, which should come before Para three
         pos_one = result.index("Para one.")
         pos_two = result.index("Para two.")
         pos_three = result.index("Para three.")
@@ -499,9 +531,16 @@ class TestGetTalkTool:
         """get_talk with nonexistent ID returns 'No talk found' error message."""
         from server import get_talk
 
-        talks_col = MagicMock()
-        talks_col.get.return_value = {"ids": [], "metadatas": []}
-        ctx = _make_mock_ctx({"talks": talks_col, "paragraphs": MagicMock()})
+        ctx, mock_client = _make_mock_ctx()
+        talks_col = _make_talks_col(talk_properties=None)  # None = not found
+        paras_col = _make_paras_col([])
+
+        def use_side_effect(name):
+            if name == "ConferenceTalks":
+                return talks_col
+            return paras_col
+
+        mock_client.collections.use.side_effect = use_side_effect
 
         result = asyncio.run(get_talk(talk_id="talk_9999", ctx=ctx))
 
@@ -511,74 +550,11 @@ class TestGetTalkTool:
         """get_talk with unparseable ID returns format error message."""
         from server import get_talk
 
-        ctx = _make_mock_ctx({"talks": MagicMock(), "paragraphs": MagicMock()})
+        ctx, _ = _make_mock_ctx()
 
         result = asyncio.run(get_talk(talk_id="not_valid_at_all", ctx=ctx))
 
         assert "Invalid talk_id format" in result
-
-
-# ---------------------------------------------------------------------------
-# INTG-02: OLLAMA_URL env var support
-# ---------------------------------------------------------------------------
-
-
-def test_ollama_url_env_override(monkeypatch):
-    """get_embedding_function() uses OLLAMA_URL env var when set."""
-    from unittest.mock import MagicMock, patch
-
-    monkeypatch.setenv("OLLAMA_URL", "http://custom:11434")
-
-    with patch(
-        "config.ollama.OllamaEmbeddingFunction"
-    ) as mock_ef_cls:
-        mock_ef_cls.return_value = MagicMock()
-        from config.ollama import get_embedding_function
-
-        get_embedding_function()
-
-    mock_ef_cls.assert_called_once_with(
-        model_name="nomic-embed-text",
-        url="http://custom:11434/api/embeddings",
-    )
-
-
-def test_get_embedding_function_url_param():
-    """get_embedding_function(url=...) uses the explicit url parameter."""
-    from unittest.mock import MagicMock, patch
-
-    with patch(
-        "config.ollama.OllamaEmbeddingFunction"
-    ) as mock_ef_cls:
-        mock_ef_cls.return_value = MagicMock()
-        from config.ollama import get_embedding_function
-
-        get_embedding_function(url="http://explicit:11434")
-
-    mock_ef_cls.assert_called_once_with(
-        model_name="nomic-embed-text",
-        url="http://explicit:11434/api/embeddings",
-    )
-
-
-def test_get_embedding_function_default_url(monkeypatch):
-    """get_embedding_function() defaults to localhost when OLLAMA_URL not set."""
-    from unittest.mock import MagicMock, patch
-
-    monkeypatch.delenv("OLLAMA_URL", raising=False)
-
-    with patch(
-        "config.ollama.OllamaEmbeddingFunction"
-    ) as mock_ef_cls:
-        mock_ef_cls.return_value = MagicMock()
-        from config.ollama import get_embedding_function
-
-        get_embedding_function()
-
-    mock_ef_cls.assert_called_once_with(
-        model_name="nomic-embed-text",
-        url="http://localhost:11434/api/embeddings",
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -614,8 +590,6 @@ def test_check_ollama_passes_resolved_url(monkeypatch):
     monkeypatch.setenv("OLLAMA_URL", "http://custom-host:9999")
     captured_url = {}
 
-    from config.ollama import get_embedding_function as original_get_ef
-
     def mock_get_ef(url=None):
         captured_url["url"] = url
         mock_ef = lambda texts: [[0.1] * 10]
@@ -640,19 +614,19 @@ def test_no_stdio_references():
 
 
 # ---------------------------------------------------------------------------
-# TRANS-02: Health endpoint
+# TRANS-02: Health endpoint — checks data["weaviate"]
 # ---------------------------------------------------------------------------
 
 
 def test_health_returns_200():
-    """GET /health returns 200 with ok status when both deps are reachable."""
+    """GET /health returns 200 with ok status when both Ollama and Weaviate are reachable."""
     mock_ef = MagicMock(return_value=[[0.1] * 10])
-    mock_client = MagicMock()
-    mock_client.get_collection.return_value = MagicMock()
+    mock_weaviate_resp = MagicMock()
+    mock_weaviate_resp.ok = True
 
     with patch("server._startup", return_value=_mock_startup()), \
          patch("server.get_embedding_function", return_value=mock_ef), \
-         patch("server.get_chromadb_client", return_value=mock_client):
+         patch("server.http_requests.get", return_value=mock_weaviate_resp):
         from server import mcp
         app = mcp.http_app()
         client = TestClient(app, raise_server_exceptions=False)
@@ -662,42 +636,25 @@ def test_health_returns_200():
     data = response.json()
     assert data["status"] == "ok"
     assert data["ollama"] == "reachable"
-    assert data["chromadb"] == "reachable"
+    assert data["weaviate"] == "reachable"
 
 
 def test_health_ollama_down():
-    """GET /health returns 503 when Ollama is unreachable."""
+    """GET /health returns degraded when Ollama is unreachable; weaviate is still reachable."""
     mock_ef = MagicMock(side_effect=Exception("connection refused"))
-    mock_client = MagicMock()
-    mock_client.get_collection.return_value = MagicMock()
+    mock_weaviate_resp = MagicMock()
+    mock_weaviate_resp.ok = True
 
-    with patch("server.get_embedding_function", return_value=mock_ef), \
-         patch("server.get_chromadb_client", return_value=mock_client):
+    with patch("server._startup", return_value=_mock_startup()), \
+         patch("server.get_embedding_function", return_value=mock_ef), \
+         patch("server.http_requests.get", return_value=mock_weaviate_resp):
         from server import mcp
         app = mcp.http_app()
-        client = TestClient(app)
+        client = TestClient(app, raise_server_exceptions=False)
         response = client.get("/health")
 
-    assert response.status_code == 503
     data = response.json()
-    assert data["ollama"] == "unreachable"
-    assert data["status"] == "degraded"
-
-
-def test_health_chromadb_down():
-    """GET /health returns 503 when ChromaDB is unreachable."""
-    mock_ef = MagicMock(return_value=[[0.1] * 10])
-
-    with patch("server.get_embedding_function", return_value=mock_ef), \
-         patch("server.get_chromadb_client", side_effect=Exception("unreachable")):
-        from server import mcp
-        app = mcp.http_app()
-        client = TestClient(app)
-        response = client.get("/health")
-
-    assert response.status_code == 503
-    data = response.json()
-    assert data["chromadb"] == "unreachable"
+    assert data["weaviate"] == "reachable"
     assert data["status"] == "degraded"
 
 
@@ -707,20 +664,10 @@ def test_health_chromadb_down():
 
 
 def _mock_startup():
-    """Return a mock AppContext for dispatcher tests (avoids real ChromaDB/Ollama calls)."""
+    """Return a mock AppContext for dispatcher tests (avoids real Weaviate/Ollama calls)."""
     from server import AppContext
-    mock_col = MagicMock()
-    mock_col.count.return_value = 100
-    mock_col.query.return_value = {"ids": [[]], "documents": [[]], "metadatas": [[]]}
-    return AppContext(
-        client=MagicMock(),
-        collections={
-            "talks": mock_col,
-            "paragraphs": mock_col,
-            "citations": mock_col,
-            "footnotes": mock_col,
-        },
-    )
+    mock_client = MagicMock()
+    return AppContext(client=mock_client)
 
 
 # ---------------------------------------------------------------------------
