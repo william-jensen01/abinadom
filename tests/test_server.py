@@ -821,3 +821,191 @@ def test_fastapi_import_absent():
     import inspect, server
     source = inspect.getsource(server)
     assert "from fastapi" not in source, "FastAPI imports should be removed per D-09"
+
+
+# ---------------------------------------------------------------------------
+# Wave 2 Agent C: find_by_scripture tool
+# ---------------------------------------------------------------------------
+
+
+def _make_citation_col(citation_props_list):
+    """
+    Build a mock Weaviate citations collection for find_by_scripture tests.
+
+    citation_props_list: list of property dicts for citation objects.
+    """
+    mock_col = MagicMock()
+    mock_objects = []
+    for props in citation_props_list:
+        obj = MagicMock()
+        obj.properties = props
+        mock_objects.append(obj)
+    mock_col.query.fetch_objects.return_value.objects = mock_objects
+    return mock_col
+
+
+def _make_talks_fetch_col(talk_props_list):
+    """
+    Build a mock talks collection whose fetch_objects returns the given talks list.
+
+    Used by find_by_scripture's batched talk join (not fetch_object_by_id).
+    """
+    mock_col = MagicMock()
+    mock_objects = []
+    for props in talk_props_list:
+        obj = MagicMock()
+        obj.properties = props
+        mock_objects.append(obj)
+    mock_col.query.fetch_objects.return_value.objects = mock_objects
+    return mock_col
+
+
+class TestFindByScripture:
+    """Integration tests for the find_by_scripture MCP tool."""
+
+    _CITATION_PROPS = {
+        "talk_id": 8820,
+        "paragraph_number": 3,
+        "scripture_ref": "Romans 8:16",
+        "book": "Romans",
+        "book_abbr": "Rom.",
+        "chapter": 8,
+        "verses": "16",
+        "verse_start": 16,
+        "verse_end": 16,
+        "context_window": "The Spirit itself beareth witness...",
+    }
+
+    _TALK_PROPS = {
+        "talk_id": 8820,
+        "speaker_name": "Jeffrey R. Holland",
+        "title": "A Sure Foundation",
+        "conference_year": 2020,
+        "conference_month": "April",
+    }
+
+    def _make_ctx(self, citation_props_list, talk_props_list):
+        """
+        Build a mock ctx where:
+          - client.collections.use("ConferenceTalkCitations") -> citations_col
+          - client.collections.use("ConferenceTalks") -> talks_col
+        Uses side_effect keyed on collection name (same pattern as TestGetTalkTool).
+        """
+        ctx, mock_client = _make_mock_ctx()
+        citations_col = _make_citation_col(citation_props_list)
+        talks_col = _make_talks_fetch_col(talk_props_list)
+
+        def use_side_effect(name):
+            if name == "ConferenceTalkCitations":
+                return citations_col
+            elif name == "ConferenceTalks":
+                return talks_col
+            return MagicMock()
+
+        mock_client.collections.use.side_effect = use_side_effect
+        return ctx, citations_col, talks_col
+
+    def test_book_only_returns_joined_metadata(self):
+        """Book-only query returns JSON with joined speaker/title/year from talks collection."""
+        from server import find_by_scripture
+
+        ctx, _, _ = self._make_ctx(
+            citation_props_list=[self._CITATION_PROPS],
+            talk_props_list=[self._TALK_PROPS],
+        )
+
+        result = asyncio.run(find_by_scripture(book="romans", ctx=ctx))
+
+        parsed = json.loads(result)
+        assert len(parsed) == 1
+        item = parsed[0]
+        assert item["speaker_name"] == "Jeffrey R. Holland"
+        assert item["title"] == "A Sure Foundation"
+        assert item["conference_year"] == 2020
+        assert item["talk_id"] == "talk_8820"
+        assert item["scripture_ref"] == "Romans 8:16"
+        assert item["context_window"] == "The Spirit itself beareth witness..."
+
+    def test_book_and_chapter_filter_applied(self):
+        """book+chapter: fetch_objects is called with a non-None filter object."""
+        from server import find_by_scripture
+
+        ctx, citations_col, _ = self._make_ctx(
+            citation_props_list=[self._CITATION_PROPS],
+            talk_props_list=[self._TALK_PROPS],
+        )
+
+        asyncio.run(find_by_scripture(book="Romans", chapter=8, ctx=ctx))
+
+        call_kwargs = citations_col.query.fetch_objects.call_args.kwargs
+        assert call_kwargs.get("filters") is not None
+
+    def test_verse_overlap_filter_applied(self):
+        """verse_start + verse_end: fetch_objects receives a filter (overlap conditions ANDed)."""
+        from server import find_by_scripture
+
+        ctx, citations_col, _ = self._make_ctx(
+            citation_props_list=[self._CITATION_PROPS],
+            talk_props_list=[self._TALK_PROPS],
+        )
+
+        asyncio.run(
+            find_by_scripture(book="Romans", chapter=8, verse_start=14, verse_end=18, ctx=ctx)
+        )
+
+        call_kwargs = citations_col.query.fetch_objects.call_args.kwargs
+        assert call_kwargs.get("filters") is not None
+
+    def test_empty_result_returns_no_match_string(self):
+        """When no citations match, returns the canonical no-match string."""
+        from server import find_by_scripture
+
+        ctx, _, _ = self._make_ctx(
+            citation_props_list=[],   # empty — no hits
+            talk_props_list=[],
+        )
+
+        result = asyncio.run(find_by_scripture(book="Obadiah", ctx=ctx))
+
+        assert result == "No talks found citing that scripture."
+
+    def test_embedding_never_called(self):
+        """find_by_scripture must not call get_embedding_function (no Ollama dependency)."""
+        from server import find_by_scripture
+
+        ctx, _, _ = self._make_ctx(
+            citation_props_list=[self._CITATION_PROPS],
+            talk_props_list=[self._TALK_PROPS],
+        )
+
+        with patch("server.get_embedding_function") as mock_gef:
+            asyncio.run(find_by_scripture(book="Romans", ctx=ctx))
+            mock_gef.assert_not_called()
+
+    def test_book_normalization(self):
+        """Lowercase input is normalized to title-case before filtering."""
+        from server import _normalize_book
+
+        assert _normalize_book("romans") == "Romans"
+        assert _normalize_book("1 nephi") == "1 Nephi"
+        assert _normalize_book("  john  ") == "John"
+
+    def test_result_has_exactly_six_fields(self):
+        """Each result item has exactly the 6 expected public fields."""
+        from server import find_by_scripture
+
+        ctx, _, _ = self._make_ctx(
+            citation_props_list=[self._CITATION_PROPS],
+            talk_props_list=[self._TALK_PROPS],
+        )
+
+        result = asyncio.run(find_by_scripture(book="Romans", ctx=ctx))
+        parsed = json.loads(result)
+        assert set(parsed[0].keys()) == {
+            "speaker_name",
+            "title",
+            "conference_year",
+            "talk_id",
+            "scripture_ref",
+            "context_window",
+        }

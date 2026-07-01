@@ -428,6 +428,129 @@ async def get_talk(
     return f"{header}\n\n{body}"
 
 
+# ---------------------------------------------------------------------------
+# Pure helpers and MCP tool for find_by_scripture (Wave 2 Agent C)
+# ---------------------------------------------------------------------------
+
+
+def _normalize_book(book: str) -> str:
+    """
+    Title-case each word in book, preserving leading digits.
+
+    "romans" -> "Romans", "1 nephi" -> "1 Nephi".
+    str.capitalize() leaves digits unchanged, so "1" stays "1".
+    """
+    return " ".join(w.capitalize() for w in book.strip().split())
+
+
+def _build_scripture_filter(
+    book: str,
+    chapter: int | None,
+    verse_start: int | None,
+    verse_end: int | None,
+):
+    """
+    Build a combined Weaviate Filter for scripture citation lookup.
+
+    Stored `book` values are assumed title-case (best-effort; casing must match
+    what the pipeline loader writes — e.g. "Romans", "1 Nephi").
+    chapter and verse range are ANDed when provided.
+    Verse overlap: citation [vs, ve] overlaps query [qs, qe] when vs <= qe AND ve >= qs.
+    """
+    # book always required; normalize input to title-case to match stored values
+    normalized_book = _normalize_book(book)
+    f = Filter.by_property("book").equal(normalized_book)
+
+    if chapter is not None:
+        f = f & Filter.by_property("chapter").equal(chapter)
+
+    if verse_start is not None:
+        q_end = verse_end if verse_end is not None else verse_start
+        # citation.verse_start <= query_end  (citation begins before our range ends)
+        f = f & Filter.by_property("verse_start").less_or_equal(q_end)
+        # citation.verse_end >= query_start  (citation ends after our range begins)
+        f = f & Filter.by_property("verse_end").greater_or_equal(verse_start)
+
+    return f
+
+
+@mcp.tool()
+async def find_by_scripture(
+    book: str,
+    chapter: int | None = None,
+    verse_start: int | None = None,
+    verse_end: int | None = None,
+    limit: int = 10,
+    ctx: Context = None,
+) -> str:
+    """Find which General Conference talks cite a given scripture.
+
+    Searches the citations collection by scripture reference using a pure property
+    filter — no embedding or Ollama required, so this works even when Ollama is
+    unavailable or down.
+
+    Args:
+        book: Scripture book name (required). Case-insensitive; e.g. "romans",
+            "1 nephi", "D&C". Stored values are assumed title-case.
+        chapter: Optional chapter number to narrow results.
+        verse_start: Optional starting verse. When combined with verse_end, finds
+            citations whose verse range overlaps [verse_start, verse_end].
+        verse_end: Optional ending verse (inclusive). Defaults to verse_start when
+            verse_start is provided but verse_end is omitted (single-verse lookup).
+        limit: Maximum number of citation hits to return (default 10).
+    """
+    app: AppContext = ctx.lifespan_context["app"]
+
+    citations_col = app.client.collections.use(WEAVIATE_COLLECTION_NAMES["citations"])
+    talks_col = app.client.collections.use(WEAVIATE_COLLECTION_NAMES["talks"])
+
+    scripture_filter = _build_scripture_filter(book, chapter, verse_start, verse_end)
+
+    # Pure filter query — no vector / no Ollama call
+    citation_result = citations_col.query.fetch_objects(
+        filters=scripture_filter,
+        limit=limit,
+    )
+
+    if not citation_result.objects:
+        return "No talks found citing that scripture."
+
+    # Collect distinct talk_id ints for a single batched join (avoids N+1 queries)
+    distinct_ids = list(
+        {int(obj.properties.get("talk_id", 0)) for obj in citation_result.objects}
+    )
+
+    # One bulk fetch for all related talks
+    talk_result = talks_col.query.fetch_objects(
+        filters=Filter.any_of(
+            [Filter.by_property("talk_id").equal(t) for t in distinct_ids]
+        ),
+        limit=len(distinct_ids),
+    )
+    talk_map = {
+        int(obj.properties.get("talk_id", 0)): obj.properties
+        for obj in talk_result.objects
+    }
+
+    results = []
+    for obj in citation_result.objects:
+        props = obj.properties
+        talk_id_int = int(props.get("talk_id", 0))
+        talk = talk_map.get(talk_id_int, {})
+        results.append(
+            {
+                "speaker_name": talk.get("speaker_name", ""),
+                "title": talk.get("title", ""),
+                "conference_year": int(talk.get("conference_year", 0)),
+                "talk_id": f"talk_{talk_id_int}",
+                "scripture_ref": props.get("scripture_ref", ""),
+                "context_window": props.get("context_window", ""),
+            }
+        )
+
+    return json.dumps(results, ensure_ascii=False, indent=2)
+
+
 if __name__ == "__main__":
     import asyncio
     asyncio.run(mcp.run_http_async(
