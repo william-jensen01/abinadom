@@ -509,14 +509,14 @@ class TestGetTalkTool:
         assert "Second paragraph." in result
 
     def test_get_talk_paragraph_order(self):
-        """Paragraphs are sorted by paragraph_number ascending even when returned out of order."""
+        """Paragraphs are returned in Weaviate's ascending order — get_talk must NOT re-sort client-side."""
         from server import get_talk
 
-        # Supply paragraphs in REVERSE order: 3, 1, 2
+        # Weaviate is responsible for ordering; mock returns paragraphs already in ascending order.
         para_list = [
-            {"text": "Para three.", "paragraph_number": 3},
             {"text": "Para one.", "paragraph_number": 1},
             {"text": "Para two.", "paragraph_number": 2},
+            {"text": "Para three.", "paragraph_number": 3},
         ]
         ctx = self._make_ctx(para_list=para_list)
 
@@ -526,6 +526,11 @@ class TestGetTalkTool:
         pos_two = result.index("Para two.")
         pos_three = result.index("Para three.")
         assert pos_one < pos_two < pos_three
+
+        # Assert fetch_objects was called with sort= kwarg (ordering delegated to Weaviate)
+        paras_col = ctx.lifespan_context["app"].client.collections.use("ConferenceTalkParagraphs")
+        call_kwargs = paras_col.query.fetch_objects.call_args.kwargs
+        assert "sort" in call_kwargs
 
     def test_get_talk_not_found(self):
         """get_talk with nonexistent ID returns 'No talk found' error message."""
