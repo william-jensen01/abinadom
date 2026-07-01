@@ -168,11 +168,12 @@ def _startup() -> AppContext:
 # ---------------------------------------------------------------------------
 
 
-def _build_weaviate_filters(year, season, speaker):
+def _build_weaviate_filters(year, season, speaker, *, session=None, cites_scripture=None, year_from=None, year_to=None):
     """
-    Build a combined Weaviate Filter from optional year, season, and speaker params.
+    Build a combined Weaviate Filter from optional year, season, speaker, session,
+    cites_scripture, year_from, and year_to params.
 
-    Returns None when no filters are provided. All three filters use native
+    Returns None when no filters are provided. All filters use native
     Weaviate property filters — no post-filter workaround needed.
     """
     conditions = []
@@ -182,6 +183,14 @@ def _build_weaviate_filters(year, season, speaker):
         conditions.append(Filter.by_property("conference_month").equal(season))
     if speaker:
         conditions.append(Filter.by_property("speaker_name").like(f"*{speaker}*"))
+    if session:
+        conditions.append(Filter.by_property("session_abbr").equal(session))
+    if cites_scripture is not None:
+        conditions.append(Filter.by_property("has_scripture_citation").equal(cites_scripture))
+    if year_from:
+        conditions.append(Filter.by_property("conference_year").greater_or_equal(year_from))
+    if year_to:
+        conditions.append(Filter.by_property("conference_year").less_or_equal(year_to))
     if not conditions:
         return None
     result = conditions[0]
@@ -204,12 +213,16 @@ def _format_search_result(
     Base fields (always present): snippet, speaker_name, title, conference_year,
     conference_month, talk_id.
     Optional fields (present only when passed): relevance, score_type, distance.
+    Conditional metadata: topics (non-empty list), citation_count (non-None int).
+
+    Snippet fallback: if document is empty/whitespace, falls back to meta title.
 
     D-04: NO pipeline-internal fields (paragraph_id, word_count, text, text_raw,
     source_type, speaker_id, conference_id, etc.).
     """
+    snippet = document if (document and document.strip()) else meta.get("title", "")
     result = {
-        "snippet": document,
+        "snippet": snippet,
         "speaker_name": meta.get("speaker_name", ""),
         "title": meta.get("title", ""),
         "conference_year": int(meta.get("conference_year", 0)),
@@ -222,6 +235,11 @@ def _format_search_result(
         result["score_type"] = score_type
     if distance is not None:
         result["distance"] = distance
+    # Optional metadata — only when present and non-empty
+    if meta.get("topics") and isinstance(meta["topics"], list):
+        result["topics"] = list(meta["topics"])
+    if "citation_count" in meta and meta["citation_count"] is not None:
+        result["citation_count"] = int(meta["citation_count"])
     return result
 
 
@@ -367,6 +385,14 @@ async def search(
     limit: int = 5,
     alpha: float = 0.7,
     group_by_talk: bool = False,
+    session: str | None = None,
+    cites_scripture: bool | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
+    query_properties: list[str] | None = None,
+    offset: int = 0,
+    sort_by: str | None = None,
+    results_per_talk: int = 3,
     ctx: Context = None,
 ) -> str:
     """Search LDS General Conference content by meaning.
@@ -383,6 +409,14 @@ async def search(
         limit: Number of results to return (default 5, max 20).
         alpha: Blend of vector (1.0) and keyword/BM25 (0.0). Default 0.7 (hybrid).
         group_by_talk: If True (paragraphs only), cluster results by talk_id.
+        session: Optional session abbreviation filter (exact match, e.g. "Sun AM").
+        cites_scripture: Optional bool; True/False keeps only passages that do/don't cite scripture.
+        year_from: Optional inclusive lower bound on conference_year.
+        year_to: Optional inclusive upper bound on conference_year.
+        query_properties: Optional list of property names to restrict BM25/hybrid keyword matching.
+        offset: Number of results to skip for pagination (default 0).
+        sort_by: Sort order for browse path only — 'date_desc' (newest first) or 'date_asc' (oldest first).
+        results_per_talk: Max passages per talk when group_by_talk=True (default 3, max 10).
     """
     app: AppContext = ctx.lifespan_context["app"]
 
@@ -395,23 +429,51 @@ async def search(
 
     alpha = max(0.0, min(1.0, alpha))
     limit = max(1, min(limit, 20))
-    weaviate_filter = _build_weaviate_filters(year, season, speaker)
+    offset = max(0, offset)
+    results_per_talk = max(1, min(results_per_talk, 10))
+    weaviate_filter = _build_weaviate_filters(
+        year, season, speaker,
+        session=session,
+        cites_scripture=cites_scripture,
+        year_from=year_from,
+        year_to=year_to,
+    )
     col = app.client.collections.use(col_name)
     snippet_fn = _SNIPPET_PROP.get(collection, lambda p: "")
 
+    # Compute total count for pagination envelope (best-effort; None on failure)
+    total = None
+    try:
+        tc = col.aggregate.over_all(filters=weaviate_filter, total_count=True).total_count
+        if tc is not None:
+            total = int(tc)
+    except Exception:
+        pass
+
+    # Validate sort_by — only recognised values are honoured; treat others as None
+    if sort_by not in ("date_desc", "date_asc"):
+        sort_by = None
+
     # Empty/whitespace query — browse or error
     if not query.strip():
-        if weaviate_filter is None:
-            return "Provide a query or at least one filter (speaker, year, or season)."
-        result = col.query.fetch_objects(filters=weaviate_filter, limit=limit)
+        if weaviate_filter is None and sort_by is None:
+            return "Provide a query, at least one filter (speaker, year, year_from/to, season, session, cites_scripture), or sort_by."
+        sort_arg = None
+        if sort_by is not None:
+            sort_arg = Sort.by_property("talk_date", ascending=(sort_by == "date_asc"))
+        fetch_kwargs: dict = dict(filters=weaviate_filter, limit=limit, offset=offset)
+        if sort_arg is not None:
+            fetch_kwargs["sort"] = sort_arg
+        result = col.query.fetch_objects(**fetch_kwargs)
         if not result.objects:
             return "No results found."
         results = [
             _format_search_result(snippet_fn(obj.properties), obj.properties)
             for obj in result.objects
         ]
+        has_more = bool(total is not None and (offset + len(results)) < total)
         return json.dumps(
-            {"search_mode": "browse_filtered", "results": results},
+            {"search_mode": "browse_filtered", "results": results, "total": total, "has_more": has_more},
             ensure_ascii=False,
             indent=2,
         )
@@ -447,13 +509,14 @@ async def search(
     # GroupBy — only for ranked (vector/hybrid) paths
     group_by_arg = None
     if group_by_talk and effective_alpha != 0.0:
-        group_by_arg = GroupBy(prop="talk_id", number_of_groups=limit, objects_per_group=3)
+        group_by_arg = GroupBy(prop="talk_id", number_of_groups=limit, objects_per_group=results_per_talk)
 
     # Execute the appropriate Weaviate query
     if effective_alpha == 1.0:
         kwargs: dict = dict(
             near_vector=query_vector,
             limit=limit,
+            offset=offset,
             filters=weaviate_filter,
             target_vector="default",
             return_metadata=MetadataQuery(distance=True, certainty=True),
@@ -462,24 +525,31 @@ async def search(
             kwargs["group_by"] = group_by_arg
         result = col.query.near_vector(**kwargs)
     elif effective_alpha == 0.0:
-        result = col.query.bm25(
+        bm25_kwargs: dict = dict(
             query=query,
             limit=limit,
+            offset=offset,
             filters=weaviate_filter,
             return_metadata=MetadataQuery(score=True),
         )
+        if query_properties:
+            bm25_kwargs["query_properties"] = query_properties
+        result = col.query.bm25(**bm25_kwargs)
     else:
         kwargs = dict(
             query=query,
             vector=query_vector,
             alpha=effective_alpha,
             limit=limit,
+            offset=offset,
             filters=weaviate_filter,
             target_vector="default",
             return_metadata=MetadataQuery(score=True),
         )
         if group_by_arg is not None:
             kwargs["group_by"] = group_by_arg
+        if query_properties:
+            kwargs["query_properties"] = query_properties
         result = col.query.hybrid(**kwargs)
 
     # Grouped output (near_vector or hybrid with group_by_talk)
@@ -513,8 +583,9 @@ async def search(
                     )
                 paragraphs.append(row)
             groups_out.append({"talk_id": talk_id_str, "paragraphs": paragraphs})
+        has_more = bool(total is not None and (offset + len(groups_out)) < total)
         return json.dumps(
-            {"search_mode": search_mode, "groups": groups_out},
+            {"search_mode": search_mode, "groups": groups_out, "total": total, "has_more": has_more},
             ensure_ascii=False,
             indent=2,
         )
@@ -548,8 +619,9 @@ async def search(
             )
         results.append(row)
 
+    has_more = bool(total is not None and (offset + len(results)) < total)
     return json.dumps(
-        {"search_mode": search_mode, "results": results},
+        {"search_mode": search_mode, "results": results, "total": total, "has_more": has_more},
         ensure_ascii=False,
         indent=2,
     )
