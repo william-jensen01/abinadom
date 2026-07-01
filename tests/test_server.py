@@ -700,15 +700,18 @@ class TestSearchTool:
             "text": "Para text",
         }
         mock_para.metadata = MagicMock()
-        mock_para.metadata.score = 0.85
+        mock_para.metadata.certainty = 0.85
+        mock_para.metadata.distance = 0.15
 
         mock_group = MagicMock()
-        mock_group.belongs_to_group = 1234
+        mock_group.name = 1234
         mock_group.objects = [mock_para]
 
-        # Weaviate grouped results come from .groups (a list); .objects is empty
-        mock_col.query.hybrid.return_value.groups = [mock_group]
-        mock_col.query.hybrid.return_value.objects = []
+        # Grouping is routed through near_vector; weaviate returns .groups as a
+        # dict {group_value: GroupObject}, and the group value is read from .name.
+        mock_col.query.near_vector.return_value.groups = {"1234": mock_group}
+        mock_col.query.near_vector.return_value.objects = []
+        mock_col.aggregate.over_all.return_value.total_count = 1
         mock_client.collections.use.return_value = mock_col
 
         with patch("server.get_embedding_function") as mock_gef, \
@@ -718,6 +721,7 @@ class TestSearchTool:
             result = asyncio.run(search(query="test", group_by_talk=True, ctx=ctx))
 
         parsed = json.loads(result)
+        assert parsed["search_mode"] == "vector_grouped"
         assert "groups" in parsed
         assert len(parsed["groups"]) == 1
         assert parsed["groups"][0]["talk_id"] == "talk_1234"
@@ -812,6 +816,34 @@ class TestSearchTool:
 
         assert "Provide a query" in result
 
+    def test_sort_by_unsupported_collection_returns_message(self):
+        """sort_by on a collection with no chronological field (citations) is rejected clearly, not crashed."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col(col_name="ConferenceTalkCitations")
+
+        result = asyncio.run(
+            search(query="", collection="citations", sort_by="date_desc", ctx=ctx)
+        )
+
+        assert "not supported for the 'citations' collection" in result
+        # Must NOT have attempted a sorted fetch against a field the collection lacks
+        mock_col.query.fetch_objects.assert_not_called()
+
+    def test_sort_by_paragraphs_uses_conference_year(self):
+        """sort_by on paragraphs sorts by conference_year (paragraphs have no talk_date)."""
+        import server
+
+        ctx, mock_col = self._make_ctx_with_col()  # default: paragraphs
+
+        with patch("server.Sort.by_property", wraps=server.Sort.by_property) as spy:
+            asyncio.run(server.search(query="", sort_by="date_desc", ctx=ctx))
+
+        # sort_by on paragraphs must target conference_year, not talk_date
+        assert spy.call_args is not None
+        assert spy.call_args.args[0] == "conference_year"
+        assert "sort" in mock_col.query.fetch_objects.call_args.kwargs
+
     def test_query_properties_passed_to_hybrid(self):
         """query_properties is forwarded to hybrid query call."""
         from server import search
@@ -860,9 +892,9 @@ class TestSearchTool:
 
         ctx, mock_client = _make_mock_ctx()
         mock_col = MagicMock()
-        # Return empty groups so the function proceeds past the query
-        mock_col.query.hybrid.return_value.groups = []
-        mock_col.query.hybrid.return_value.objects = []
+        # Grouping routes through near_vector; empty groups so we just inspect the call
+        mock_col.query.near_vector.return_value.groups = {}
+        mock_col.query.near_vector.return_value.objects = []
         mock_col.aggregate.over_all.return_value.total_count = 0
         mock_client.collections.use.return_value = mock_col
 
@@ -872,10 +904,26 @@ class TestSearchTool:
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             asyncio.run(search(query="test", group_by_talk=True, results_per_talk=5, ctx=ctx))
 
-        call_kwargs = mock_col.query.hybrid.call_args.kwargs
+        call_kwargs = mock_col.query.near_vector.call_args.kwargs
         group_by = call_kwargs.get("group_by")
         assert group_by is not None
         assert group_by.objects_per_group == 5
+
+    def test_group_by_talk_without_embedding_returns_message(self):
+        """group_by_talk requires a vector; when Ollama is down it returns a clear message."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        # Ollama unavailable -> no query vector -> grouping cannot run
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.side_effect = RuntimeError("ollama down")
+            result = asyncio.run(search(query="test", group_by_talk=True, ctx=ctx))
+
+        assert "group_by_talk requires semantic search" in result
+        mock_col.query.near_vector.assert_not_called()
 
     def test_offset_passed_to_hybrid(self):
         """offset is forwarded to hybrid query call."""

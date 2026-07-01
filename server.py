@@ -101,6 +101,15 @@ _SNIPPET_PROP = {
     "footnotes": lambda p: p.get("context_window", "") or p.get("footnote_text_raw", ""),
 }
 
+# Per-collection chronological sort property for the browse path (sort_by).
+# talks carry a fine-grained ISO talk_date; paragraphs only carry conference_year
+# (year granularity). citations and footnotes have no chronological field, so
+# sort_by is unsupported there (search returns a clear message rather than erroring).
+_SORT_PROP = {
+    "talks": "talk_date",
+    "paragraphs": "conference_year",
+}
+
 
 # ---------------------------------------------------------------------------
 # Startup helpers — each raises SystemExit(1) on failure
@@ -303,7 +312,9 @@ MCP_INSTRUCTIONS = (
     "Browse without a query by omitting it and supplying filters and/or "
     "sort_by ('date_desc'/'date_asc', newest/oldest first). "
     "Set group_by_talk=true (paragraphs only) to cluster hits per talk; "
-    "results_per_talk sets how many passages per talk. "
+    "results_per_talk sets how many passages per talk. Grouped results are always "
+    "vector-ranked (search_mode 'vector_grouped') regardless of alpha and need the "
+    "embedding service; alpha applies only to the flat, non-grouped path. "
     "Use search to find a talk_id, then get_talk for full text. "
     "(2) get_talk — retrieve the full ordered text of a talk by ID. "
     "(3) get_talk_citations — ordered scripture citations for one talk_id "
@@ -409,6 +420,9 @@ async def search(
         limit: Number of results to return (default 5, max 20).
         alpha: Blend of vector (1.0) and keyword/BM25 (0.0). Default 0.7 (hybrid).
         group_by_talk: If True (paragraphs only), cluster results by talk_id.
+            Grouped results are always vector-ranked (search_mode "vector_grouped")
+            regardless of alpha, and require the embedding service; alpha applies
+            only to the flat, non-grouped path.
         session: Optional session abbreviation filter (exact match, e.g. "Sun AM").
         cites_scripture: Optional bool; True/False keeps only passages that do/don't cite scripture.
         year_from: Optional inclusive lower bound on conference_year.
@@ -456,11 +470,17 @@ async def search(
 
     # Empty/whitespace query — browse or error
     if not query.strip():
-        if weaviate_filter is None and sort_by is None:
+        # sort_by is honoured per-collection: talks sort by ISO talk_date,
+        # paragraphs by conference_year (year granularity). citations/footnotes
+        # have no chronological field, so a sort request there is rejected clearly.
+        sort_prop = _SORT_PROP.get(collection) if sort_by is not None else None
+        if sort_by is not None and sort_prop is None:
+            return f"sort_by is not supported for the '{collection}' collection (no chronological field). Use 'talks' or 'paragraphs'."
+        if weaviate_filter is None and sort_prop is None:
             return "Provide a query, at least one filter (speaker, year, year_from/to, season, session, cites_scripture), or sort_by."
         sort_arg = None
-        if sort_by is not None:
-            sort_arg = Sort.by_property("talk_date", ascending=(sort_by == "date_asc"))
+        if sort_prop is not None:
+            sort_arg = Sort.by_property(sort_prop, ascending=(sort_by == "date_asc"))
         fetch_kwargs: dict = dict(filters=weaviate_filter, limit=limit, offset=offset)
         if sort_arg is not None:
             fetch_kwargs["sort"] = sort_arg
@@ -478,8 +498,9 @@ async def search(
             indent=2,
         )
 
-    # Embedding — only needed when alpha > 0
-    need_vector = alpha != 0.0
+    # Embedding — needed when alpha > 0, and always when grouping (group_by_talk
+    # is routed through near_vector, which requires a query vector).
+    need_vector = alpha != 0.0 or group_by_talk
     query_vector = None
     ollama_failed = False
 
@@ -506,14 +527,60 @@ async def search(
         effective_alpha = alpha
         search_mode = "hybrid"
 
-    # GroupBy — only for ranked (vector/hybrid) paths
-    group_by_arg = None
-    if group_by_talk and effective_alpha != 0.0:
+    # Grouped path — routed through near_vector regardless of alpha. On this
+    # Weaviate version hybrid+group_by returns zero groups, so grouping only works
+    # via the vector path; it requires a query vector. When none is available
+    # (Ollama down), grouping cannot run — say so plainly instead of returning empty.
+    if group_by_talk:
+        if query_vector is None:
+            return (
+                "group_by_talk requires semantic search (a query embedding), which is "
+                "currently unavailable. Retry without group_by_talk, or once the "
+                "embedding service is reachable."
+            )
         group_by_arg = GroupBy(prop="talk_id", number_of_groups=limit, objects_per_group=results_per_talk)
+        result = col.query.near_vector(
+            near_vector=query_vector,
+            limit=limit,
+            offset=offset,
+            filters=weaviate_filter,
+            target_vector="default",
+            group_by=group_by_arg,
+            return_metadata=MetadataQuery(distance=True, certainty=True),
+        )
+        # weaviate-client returns groups as a dict {group_value: GroupObject};
+        # iterate its values and read the group value from .name.
+        groups_raw = getattr(result, "groups", None)
+        if not groups_raw:
+            return "No results found."
+        groups_out = []
+        for group in groups_raw.values():
+            group_val = getattr(group, "name", None)
+            try:
+                talk_id_str = f"talk_{int(group_val)}"
+            except (ValueError, TypeError):
+                talk_id_str = str(group_val)
+            paragraphs = []
+            for obj in group.objects:
+                props = obj.properties
+                meta = obj.metadata
+                relevance = getattr(meta, "certainty", None)
+                dist = getattr(meta, "distance", None)
+                paragraphs.append(_format_search_result(
+                    snippet_fn(props), props,
+                    relevance=relevance, score_type="vector_certainty", distance=dist,
+                ))
+            groups_out.append({"talk_id": talk_id_str, "paragraphs": paragraphs})
+        has_more = bool(total is not None and (offset + len(groups_out)) < total)
+        return json.dumps(
+            {"search_mode": "vector_grouped", "groups": groups_out, "total": total, "has_more": has_more},
+            ensure_ascii=False,
+            indent=2,
+        )
 
-    # Execute the appropriate Weaviate query
+    # Execute the appropriate Weaviate query (non-grouped)
     if effective_alpha == 1.0:
-        kwargs: dict = dict(
+        result = col.query.near_vector(
             near_vector=query_vector,
             limit=limit,
             offset=offset,
@@ -521,9 +588,6 @@ async def search(
             target_vector="default",
             return_metadata=MetadataQuery(distance=True, certainty=True),
         )
-        if group_by_arg is not None:
-            kwargs["group_by"] = group_by_arg
-        result = col.query.near_vector(**kwargs)
     elif effective_alpha == 0.0:
         bm25_kwargs: dict = dict(
             query=query,
@@ -536,7 +600,7 @@ async def search(
             bm25_kwargs["query_properties"] = query_properties
         result = col.query.bm25(**bm25_kwargs)
     else:
-        kwargs = dict(
+        kwargs: dict = dict(
             query=query,
             vector=query_vector,
             alpha=effective_alpha,
@@ -546,49 +610,9 @@ async def search(
             target_vector="default",
             return_metadata=MetadataQuery(score=True),
         )
-        if group_by_arg is not None:
-            kwargs["group_by"] = group_by_arg
         if query_properties:
             kwargs["query_properties"] = query_properties
         result = col.query.hybrid(**kwargs)
-
-    # Grouped output (near_vector or hybrid with group_by_talk)
-    if group_by_arg is not None:
-        groups_raw = getattr(result, "groups", None)
-        if not groups_raw:
-            return "No results found."
-        groups_out = []
-        for group in groups_raw:
-            group_val = group.belongs_to_group
-            try:
-                talk_id_str = f"talk_{int(group_val)}"
-            except (ValueError, TypeError):
-                talk_id_str = str(group_val)
-            paragraphs = []
-            for obj in group.objects:
-                props = obj.properties
-                meta = obj.metadata
-                if effective_alpha == 1.0:
-                    relevance = getattr(meta, "certainty", None)
-                    dist = getattr(meta, "distance", None)
-                    row = _format_search_result(
-                        snippet_fn(props), props,
-                        relevance=relevance, score_type="vector_certainty", distance=dist,
-                    )
-                else:
-                    relevance = getattr(meta, "score", None)
-                    row = _format_search_result(
-                        snippet_fn(props), props,
-                        relevance=relevance, score_type="hybrid_fusion",
-                    )
-                paragraphs.append(row)
-            groups_out.append({"talk_id": talk_id_str, "paragraphs": paragraphs})
-        has_more = bool(total is not None and (offset + len(groups_out)) < total)
-        return json.dumps(
-            {"search_mode": search_mode, "groups": groups_out, "total": total, "has_more": has_more},
-            ensure_ascii=False,
-            indent=2,
-        )
 
     # Non-grouped output
     if not result.objects:
