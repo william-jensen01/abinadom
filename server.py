@@ -101,6 +101,15 @@ _SNIPPET_PROP = {
     "footnotes": lambda p: p.get("context_window", "") or p.get("footnote_text_raw", ""),
 }
 
+# Per-collection chronological sort property for the browse path (sort_by).
+# talks carry a fine-grained ISO talk_date; paragraphs only carry conference_year
+# (year granularity). citations and footnotes have no chronological field, so
+# sort_by is unsupported there (search returns a clear message rather than erroring).
+_SORT_PROP = {
+    "talks": "talk_date",
+    "paragraphs": "conference_year",
+}
+
 
 # ---------------------------------------------------------------------------
 # Startup helpers — each raises SystemExit(1) on failure
@@ -168,11 +177,12 @@ def _startup() -> AppContext:
 # ---------------------------------------------------------------------------
 
 
-def _build_weaviate_filters(year, season, speaker):
+def _build_weaviate_filters(year, season, speaker, *, session=None, cites_scripture=None, year_from=None, year_to=None):
     """
-    Build a combined Weaviate Filter from optional year, season, and speaker params.
+    Build a combined Weaviate Filter from optional year, season, speaker, session,
+    cites_scripture, year_from, and year_to params.
 
-    Returns None when no filters are provided. All three filters use native
+    Returns None when no filters are provided. All filters use native
     Weaviate property filters — no post-filter workaround needed.
     """
     conditions = []
@@ -182,6 +192,14 @@ def _build_weaviate_filters(year, season, speaker):
         conditions.append(Filter.by_property("conference_month").equal(season))
     if speaker:
         conditions.append(Filter.by_property("speaker_name").like(f"*{speaker}*"))
+    if session:
+        conditions.append(Filter.by_property("session_abbr").equal(session))
+    if cites_scripture is not None:
+        conditions.append(Filter.by_property("has_scripture_citation").equal(cites_scripture))
+    if year_from:
+        conditions.append(Filter.by_property("conference_year").greater_or_equal(year_from))
+    if year_to:
+        conditions.append(Filter.by_property("conference_year").less_or_equal(year_to))
     if not conditions:
         return None
     result = conditions[0]
@@ -204,12 +222,16 @@ def _format_search_result(
     Base fields (always present): snippet, speaker_name, title, conference_year,
     conference_month, talk_id.
     Optional fields (present only when passed): relevance, score_type, distance.
+    Conditional metadata: topics (non-empty list), citation_count (non-None int).
+
+    Snippet fallback: if document is empty/whitespace, falls back to meta title.
 
     D-04: NO pipeline-internal fields (paragraph_id, word_count, text, text_raw,
     source_type, speaker_id, conference_id, etc.).
     """
+    snippet = document if (document and document.strip()) else meta.get("title", "")
     result = {
-        "snippet": document,
+        "snippet": snippet,
         "speaker_name": meta.get("speaker_name", ""),
         "title": meta.get("title", ""),
         "conference_year": int(meta.get("conference_year", 0)),
@@ -222,6 +244,11 @@ def _format_search_result(
         result["score_type"] = score_type
     if distance is not None:
         result["distance"] = distance
+    # Optional metadata — only when present and non-empty
+    if meta.get("topics") and isinstance(meta["topics"], list):
+        result["topics"] = list(meta["topics"])
+    if "citation_count" in meta and meta["citation_count"] is not None:
+        result["citation_count"] = int(meta["citation_count"])
     return result
 
 
@@ -270,16 +297,38 @@ MCP_INSTRUCTIONS = (
     "the database has insufficient information. "
     "Tools: "
     "(1) search — hybrid semantic+keyword search. Use collection='paragraphs' for "
-    "passage text, 'talks' for talk discovery, 'citations' for scripture references. "
-    "alpha parameter controls blend: 0.0=pure keyword/BM25, 1.0=pure semantic/vector, "
-    "default 0.7. Results include a relevance score and score_type field. "
-    "Set group_by_talk=true (paragraphs only) to cluster results per talk. "
-    "Use search to find a talk_id, then get_talk to retrieve full text. "
+    "passage text, 'talks' for talk discovery, 'citations' for scripture references, "
+    "'footnotes' for footnote content. "
+    "alpha controls the blend: 0.0=pure keyword/BM25 (exact terms, names, phrases), "
+    "1.0=pure semantic/vector (meaning, paraphrase), default 0.7 (hybrid). "
+    "Each result carries a relevance score and a score_type "
+    "(bm25 | vector_certainty | hybrid_fusion) telling you how it was ranked. "
+    "Filters: speaker (substring), year (exact) or year_from/year_to (inclusive range), "
+    "season ('April'/'October'), session (session-abbr exact match), "
+    "cites_scripture=true/false (paragraphs — keep only passages that do/don't quote "
+    "scripture). Restrict keyword matching to specific fields with query_properties "
+    "(e.g. ['title']). "
+    "Paging: limit (max 20) + offset; the envelope reports total and has_more. "
+    "Browse without a query by omitting it and supplying filters and/or "
+    "sort_by ('date_desc'/'date_asc', newest/oldest first). "
+    "Set group_by_talk=true (paragraphs only) to cluster hits per talk; "
+    "results_per_talk sets how many passages per talk. Grouped results are always "
+    "vector-ranked (search_mode 'vector_grouped') regardless of alpha and need the "
+    "embedding service; alpha applies only to the flat, non-grouped path. "
+    "Use search to find a talk_id, then get_talk for full text. "
     "(2) get_talk — retrieve the full ordered text of a talk by ID. "
-    "(3) find_by_scripture — look up which talks cite a scripture by book (required), "
+    "(3) get_talk_citations — ordered scripture citations for one talk_id "
+    "(scripture_ref, book/chapter/verses, context_window, paragraph_number); "
+    "no embedding needed. "
+    "(4) find_by_scripture — look up which talks cite a scripture by book (required), "
     "with optional chapter, verse_start, and verse_end filters; no embedding needed. "
-    "(4) corpus_stats — aggregate counts across a collection, optionally grouped by "
-    "a field (e.g. speaker_name, conference_year)."
+    "(5) corpus_stats — aggregate counts across a collection, optionally grouped by "
+    "a field (e.g. speaker_name, conference_year). "
+    "Coverage note: pipeline-derived fields (session, conference year/date, "
+    "scripture-citation flags) are complete for the whole corpus, but "
+    "API-enrichment fields (topics, talk_preview, speaker_role) are absent before "
+    "~1971 — filter on them only for modern talks; treat them as metadata/boosts, "
+    "not hard filters, when searching the full range."
 )
 
 @asynccontextmanager
@@ -347,6 +396,14 @@ async def search(
     limit: int = 5,
     alpha: float = 0.7,
     group_by_talk: bool = False,
+    session: str | None = None,
+    cites_scripture: bool | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
+    query_properties: list[str] | None = None,
+    offset: int = 0,
+    sort_by: str | None = None,
+    results_per_talk: int = 3,
     ctx: Context = None,
 ) -> str:
     """Search LDS General Conference content by meaning.
@@ -363,6 +420,17 @@ async def search(
         limit: Number of results to return (default 5, max 20).
         alpha: Blend of vector (1.0) and keyword/BM25 (0.0). Default 0.7 (hybrid).
         group_by_talk: If True (paragraphs only), cluster results by talk_id.
+            Grouped results are always vector-ranked (search_mode "vector_grouped")
+            regardless of alpha, and require the embedding service; alpha applies
+            only to the flat, non-grouped path.
+        session: Optional session abbreviation filter (exact match, e.g. "Sun AM").
+        cites_scripture: Optional bool; True/False keeps only passages that do/don't cite scripture.
+        year_from: Optional inclusive lower bound on conference_year.
+        year_to: Optional inclusive upper bound on conference_year.
+        query_properties: Optional list of property names to restrict BM25/hybrid keyword matching.
+        offset: Number of results to skip for pagination (default 0).
+        sort_by: Sort order for browse path only — 'date_desc' (newest first) or 'date_asc' (oldest first).
+        results_per_talk: Max passages per talk when group_by_talk=True (default 3, max 10).
     """
     app: AppContext = ctx.lifespan_context["app"]
 
@@ -375,29 +443,64 @@ async def search(
 
     alpha = max(0.0, min(1.0, alpha))
     limit = max(1, min(limit, 20))
-    weaviate_filter = _build_weaviate_filters(year, season, speaker)
+    offset = max(0, offset)
+    results_per_talk = max(1, min(results_per_talk, 10))
+    weaviate_filter = _build_weaviate_filters(
+        year, season, speaker,
+        session=session,
+        cites_scripture=cites_scripture,
+        year_from=year_from,
+        year_to=year_to,
+    )
     col = app.client.collections.use(col_name)
     snippet_fn = _SNIPPET_PROP.get(collection, lambda p: "")
 
+    # Compute total count for pagination envelope (best-effort; None on failure)
+    total = None
+    try:
+        tc = col.aggregate.over_all(filters=weaviate_filter, total_count=True).total_count
+        if tc is not None:
+            total = int(tc)
+    except Exception:
+        pass
+
+    # Validate sort_by — only recognised values are honoured; treat others as None
+    if sort_by not in ("date_desc", "date_asc"):
+        sort_by = None
+
     # Empty/whitespace query — browse or error
     if not query.strip():
-        if weaviate_filter is None:
-            return "Provide a query or at least one filter (speaker, year, or season)."
-        result = col.query.fetch_objects(filters=weaviate_filter, limit=limit)
+        # sort_by is honoured per-collection: talks sort by ISO talk_date,
+        # paragraphs by conference_year (year granularity). citations/footnotes
+        # have no chronological field, so a sort request there is rejected clearly.
+        sort_prop = _SORT_PROP.get(collection) if sort_by is not None else None
+        if sort_by is not None and sort_prop is None:
+            return f"sort_by is not supported for the '{collection}' collection (no chronological field). Use 'talks' or 'paragraphs'."
+        if weaviate_filter is None and sort_prop is None:
+            return "Provide a query, at least one filter (speaker, year, year_from/to, season, session, cites_scripture), or sort_by."
+        sort_arg = None
+        if sort_prop is not None:
+            sort_arg = Sort.by_property(sort_prop, ascending=(sort_by == "date_asc"))
+        fetch_kwargs: dict = dict(filters=weaviate_filter, limit=limit, offset=offset)
+        if sort_arg is not None:
+            fetch_kwargs["sort"] = sort_arg
+        result = col.query.fetch_objects(**fetch_kwargs)
         if not result.objects:
             return "No results found."
         results = [
             _format_search_result(snippet_fn(obj.properties), obj.properties)
             for obj in result.objects
         ]
+        has_more = bool(total is not None and (offset + len(results)) < total)
         return json.dumps(
-            {"search_mode": "browse_filtered", "results": results},
+            {"search_mode": "browse_filtered", "results": results, "total": total, "has_more": has_more},
             ensure_ascii=False,
             indent=2,
         )
 
-    # Embedding — only needed when alpha > 0
-    need_vector = alpha != 0.0
+    # Embedding — needed when alpha > 0, and always when grouping (group_by_talk
+    # is routed through near_vector, which requires a query vector).
+    need_vector = alpha != 0.0 or group_by_talk
     query_vector = None
     ollama_failed = False
 
@@ -424,52 +527,35 @@ async def search(
         effective_alpha = alpha
         search_mode = "hybrid"
 
-    # GroupBy — only for ranked (vector/hybrid) paths
-    group_by_arg = None
-    if group_by_talk and effective_alpha != 0.0:
-        group_by_arg = GroupBy(prop="talk_id", number_of_groups=limit, objects_per_group=3)
-
-    # Execute the appropriate Weaviate query
-    if effective_alpha == 1.0:
-        kwargs: dict = dict(
+    # Grouped path — routed through near_vector regardless of alpha. On this
+    # Weaviate version hybrid+group_by returns zero groups, so grouping only works
+    # via the vector path; it requires a query vector. When none is available
+    # (Ollama down), grouping cannot run — say so plainly instead of returning empty.
+    if group_by_talk:
+        if query_vector is None:
+            return (
+                "group_by_talk requires semantic search (a query embedding), which is "
+                "currently unavailable. Retry without group_by_talk, or once the "
+                "embedding service is reachable."
+            )
+        group_by_arg = GroupBy(prop="talk_id", number_of_groups=limit, objects_per_group=results_per_talk)
+        result = col.query.near_vector(
             near_vector=query_vector,
             limit=limit,
+            offset=offset,
             filters=weaviate_filter,
             target_vector="default",
+            group_by=group_by_arg,
             return_metadata=MetadataQuery(distance=True, certainty=True),
         )
-        if group_by_arg is not None:
-            kwargs["group_by"] = group_by_arg
-        result = col.query.near_vector(**kwargs)
-    elif effective_alpha == 0.0:
-        result = col.query.bm25(
-            query=query,
-            limit=limit,
-            filters=weaviate_filter,
-            return_metadata=MetadataQuery(score=True),
-        )
-    else:
-        kwargs = dict(
-            query=query,
-            vector=query_vector,
-            alpha=effective_alpha,
-            limit=limit,
-            filters=weaviate_filter,
-            target_vector="default",
-            return_metadata=MetadataQuery(score=True),
-        )
-        if group_by_arg is not None:
-            kwargs["group_by"] = group_by_arg
-        result = col.query.hybrid(**kwargs)
-
-    # Grouped output (near_vector or hybrid with group_by_talk)
-    if group_by_arg is not None:
+        # weaviate-client returns groups as a dict {group_value: GroupObject};
+        # iterate its values and read the group value from .name.
         groups_raw = getattr(result, "groups", None)
         if not groups_raw:
             return "No results found."
         groups_out = []
-        for group in groups_raw:
-            group_val = group.belongs_to_group
+        for group in groups_raw.values():
+            group_val = getattr(group, "name", None)
             try:
                 talk_id_str = f"talk_{int(group_val)}"
             except (ValueError, TypeError):
@@ -478,26 +564,55 @@ async def search(
             for obj in group.objects:
                 props = obj.properties
                 meta = obj.metadata
-                if effective_alpha == 1.0:
-                    relevance = getattr(meta, "certainty", None)
-                    dist = getattr(meta, "distance", None)
-                    row = _format_search_result(
-                        snippet_fn(props), props,
-                        relevance=relevance, score_type="vector_certainty", distance=dist,
-                    )
-                else:
-                    relevance = getattr(meta, "score", None)
-                    row = _format_search_result(
-                        snippet_fn(props), props,
-                        relevance=relevance, score_type="hybrid_fusion",
-                    )
-                paragraphs.append(row)
+                relevance = getattr(meta, "certainty", None)
+                dist = getattr(meta, "distance", None)
+                paragraphs.append(_format_search_result(
+                    snippet_fn(props), props,
+                    relevance=relevance, score_type="vector_certainty", distance=dist,
+                ))
             groups_out.append({"talk_id": talk_id_str, "paragraphs": paragraphs})
+        has_more = bool(total is not None and (offset + len(groups_out)) < total)
         return json.dumps(
-            {"search_mode": search_mode, "groups": groups_out},
+            {"search_mode": "vector_grouped", "groups": groups_out, "total": total, "has_more": has_more},
             ensure_ascii=False,
             indent=2,
         )
+
+    # Execute the appropriate Weaviate query (non-grouped)
+    if effective_alpha == 1.0:
+        result = col.query.near_vector(
+            near_vector=query_vector,
+            limit=limit,
+            offset=offset,
+            filters=weaviate_filter,
+            target_vector="default",
+            return_metadata=MetadataQuery(distance=True, certainty=True),
+        )
+    elif effective_alpha == 0.0:
+        bm25_kwargs: dict = dict(
+            query=query,
+            limit=limit,
+            offset=offset,
+            filters=weaviate_filter,
+            return_metadata=MetadataQuery(score=True),
+        )
+        if query_properties:
+            bm25_kwargs["query_properties"] = query_properties
+        result = col.query.bm25(**bm25_kwargs)
+    else:
+        kwargs: dict = dict(
+            query=query,
+            vector=query_vector,
+            alpha=effective_alpha,
+            limit=limit,
+            offset=offset,
+            filters=weaviate_filter,
+            target_vector="default",
+            return_metadata=MetadataQuery(score=True),
+        )
+        if query_properties:
+            kwargs["query_properties"] = query_properties
+        result = col.query.hybrid(**kwargs)
 
     # Non-grouped output
     if not result.objects:
@@ -528,8 +643,9 @@ async def search(
             )
         results.append(row)
 
+    has_more = bool(total is not None and (offset + len(results)) < total)
     return json.dumps(
-        {"search_mode": search_mode, "results": results},
+        {"search_mode": search_mode, "results": results, "total": total, "has_more": has_more},
         ensure_ascii=False,
         indent=2,
     )
@@ -736,6 +852,63 @@ async def corpus_stats(
     groups.sort(key=lambda g: g["count"], reverse=True)
     groups = groups[:limit]
     return json.dumps({"collection": collection, "group_by": group_by, "groups": groups}, ensure_ascii=False)
+
+
+@mcp.tool()
+async def get_talk_citations(
+    talk_id: str,
+    limit: int = 100,
+    ctx: Context = None,
+) -> str:
+    """Return the ordered scripture citations for a single talk. No embedding needed.
+
+    Args:
+        talk_id: Talk identifier (e.g. "talk_8820" or "8820").
+        limit: Maximum number of citations to return (default 100, capped at 500).
+    """
+    app: AppContext = ctx.lifespan_context["app"]
+
+    talk_num = _parse_talk_id(talk_id)
+    if talk_num is None:
+        return f"Invalid talk_id format '{talk_id}'. Expected format: 'talk_8820' or '8820'."
+
+    limit = max(1, min(limit, 500))
+
+    citations_col = app.client.collections.use(WEAVIATE_COLLECTION_NAMES["citations"])
+    result = citations_col.query.fetch_objects(
+        filters=Filter.by_property("talk_id").equal(talk_num),
+        limit=limit,
+        sort=Sort.by_property("paragraph_number", ascending=True),
+    )
+
+    if not result.objects:
+        return f"No citations found for talk_id '{talk_id}'."
+
+    # Secondary sort by char_position within each paragraph for stable ordering.
+    # Weaviate's single-key sort handles paragraph_number; Python handles char_position.
+    sorted_objects = sorted(
+        result.objects,
+        key=lambda o: (
+            o.properties.get("paragraph_number") or 0,
+            o.properties.get("char_position") or 0,
+        ),
+    )
+
+    results = []
+    for o in sorted_objects:
+        props = o.properties
+        results.append({
+            "scripture_ref": props.get("scripture_ref", ""),
+            "book": props.get("book", ""),
+            "chapter": props.get("chapter"),
+            "verses": props.get("verses", ""),
+            "verse_start": props.get("verse_start"),
+            "verse_end": props.get("verse_end"),
+            "context_window": props.get("context_window", ""),
+            "paragraph_number": props.get("paragraph_number"),
+        })
+
+    return json.dumps(results, ensure_ascii=False, indent=2)
 
 
 if __name__ == "__main__":

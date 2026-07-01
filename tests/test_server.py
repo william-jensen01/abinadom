@@ -169,6 +169,75 @@ class TestBuildWeaviateFilters:
         result = _build_weaviate_filters(2020, "April", "Holland")
         assert result is not None
 
+    # --- new keyword-only params ---
+
+    def test_session_only(self):
+        """Returns a non-None filter when only session is provided."""
+        from server import _build_weaviate_filters
+
+        result = _build_weaviate_filters(None, None, None, session="Sun AM")
+        assert result is not None
+
+    def test_cites_scripture_true(self):
+        """Returns a non-None filter when cites_scripture=True."""
+        from server import _build_weaviate_filters
+
+        result = _build_weaviate_filters(None, None, None, cites_scripture=True)
+        assert result is not None
+
+    def test_cites_scripture_false(self):
+        """Returns a non-None filter when cites_scripture=False (must use 'is not None' check)."""
+        from server import _build_weaviate_filters
+
+        result = _build_weaviate_filters(None, None, None, cites_scripture=False)
+        assert result is not None
+
+    def test_year_from_only(self):
+        """Returns a non-None filter when only year_from is provided."""
+        from server import _build_weaviate_filters
+
+        result = _build_weaviate_filters(None, None, None, year_from=2010)
+        assert result is not None
+
+    def test_year_to_only(self):
+        """Returns a non-None filter when only year_to is provided."""
+        from server import _build_weaviate_filters
+
+        result = _build_weaviate_filters(None, None, None, year_to=2020)
+        assert result is not None
+
+    def test_year_range(self):
+        """Returns a non-None filter when both year_from and year_to are provided."""
+        from server import _build_weaviate_filters
+
+        result = _build_weaviate_filters(None, None, None, year_from=2010, year_to=2020)
+        assert result is not None
+
+    def test_all_new_params_combined(self):
+        """Returns a non-None filter when all new keyword-only params are provided."""
+        from server import _build_weaviate_filters
+
+        result = _build_weaviate_filters(
+            2020, "April", "Holland",
+            session="Sun AM",
+            cites_scripture=True,
+            year_from=2015,
+            year_to=2022,
+        )
+        assert result is not None
+
+    def test_backward_compat_positional(self):
+        """Positional 3-arg call with all None still returns None (backward compat)."""
+        from server import _build_weaviate_filters
+
+        assert _build_weaviate_filters(None, None, None) is None
+
+    def test_no_new_params_defaults_to_none(self):
+        """Calling with only old params and no new keyword args returns None when no conditions."""
+        from server import _build_weaviate_filters
+
+        assert _build_weaviate_filters(None, None, None) is None
+
 
 # ---------------------------------------------------------------------------
 # TOOL-03: _format_search_result
@@ -251,6 +320,81 @@ class TestFormatSearchResult:
         assert "score_type" not in result
         assert "distance" not in result
 
+    # --- snippet fallback ---
+
+    def test_snippet_fallback_empty_document(self):
+        """Empty string document falls back to meta title as snippet."""
+        from server import _format_search_result
+
+        result = _format_search_result("", self._FULL_META)
+        assert result["snippet"] == self._FULL_META["title"]
+
+    def test_snippet_fallback_whitespace_document(self):
+        """Whitespace-only document falls back to meta title as snippet."""
+        from server import _format_search_result
+
+        result = _format_search_result("   ", self._FULL_META)
+        assert result["snippet"] == self._FULL_META["title"]
+
+    def test_snippet_not_overridden_when_document_present(self):
+        """Non-empty document is used as snippet (title is NOT substituted)."""
+        from server import _format_search_result
+
+        result = _format_search_result("Some paragraph text", self._FULL_META)
+        assert result["snippet"] == "Some paragraph text"
+
+    # --- topics field ---
+
+    def test_topics_included_when_present(self):
+        """topics list is included in result when meta contains a non-empty list."""
+        from server import _format_search_result
+
+        meta = {**self._FULL_META, "topics": ["Grace", "Atonement"]}
+        result = _format_search_result("text", meta)
+        assert "topics" in result
+        assert result["topics"] == ["Grace", "Atonement"]
+
+    def test_topics_absent_when_missing_from_meta(self):
+        """topics key is absent when meta does not contain 'topics'."""
+        from server import _format_search_result
+
+        result = _format_search_result("text", self._FULL_META)
+        assert "topics" not in result
+
+    def test_topics_absent_when_empty_list(self):
+        """topics key is absent when meta['topics'] is an empty list."""
+        from server import _format_search_result
+
+        meta = {**self._FULL_META, "topics": []}
+        result = _format_search_result("text", meta)
+        assert "topics" not in result
+
+    # --- citation_count field ---
+
+    def test_citation_count_included_when_present(self):
+        """citation_count is included as int when meta contains a non-None value."""
+        from server import _format_search_result
+
+        meta = {**self._FULL_META, "citation_count": 7}
+        result = _format_search_result("text", meta)
+        assert "citation_count" in result
+        assert result["citation_count"] == 7
+
+    def test_citation_count_absent_when_key_missing(self):
+        """citation_count is absent when 'citation_count' key is not in meta."""
+        from server import _format_search_result
+
+        result = _format_search_result("text", self._FULL_META)
+        assert "citation_count" not in result
+
+    def test_citation_count_absent_when_none(self):
+        """citation_count is absent when meta['citation_count'] is None."""
+        from server import _format_search_result
+
+        meta = {**self._FULL_META, "citation_count": None}
+        result = _format_search_result("text", meta)
+        assert "citation_count" not in result
+
 
 # ---------------------------------------------------------------------------
 # TOOL-04: _parse_talk_id
@@ -308,6 +452,9 @@ def _make_search_col(properties_list):
     Returns a mock collection where query.hybrid/bm25/near_vector/fetch_objects all
     return objects from properties_list, each with a .metadata stub carrying
     score=0.9, distance=0.1, and certainty=0.9 attributes.
+
+    aggregate.over_all.return_value.total_count is set to len(properties_list) so
+    total/has_more in the result envelope work correctly.
     """
     mock_col = MagicMock()
     mock_objects = []
@@ -323,6 +470,7 @@ def _make_search_col(properties_list):
     mock_col.query.bm25.return_value.objects = mock_objects
     mock_col.query.near_vector.return_value.objects = mock_objects
     mock_col.query.fetch_objects.return_value.objects = mock_objects
+    mock_col.aggregate.over_all.return_value.total_count = len(properties_list)
     return mock_col
 
 
@@ -552,15 +700,18 @@ class TestSearchTool:
             "text": "Para text",
         }
         mock_para.metadata = MagicMock()
-        mock_para.metadata.score = 0.85
+        mock_para.metadata.certainty = 0.85
+        mock_para.metadata.distance = 0.15
 
         mock_group = MagicMock()
-        mock_group.belongs_to_group = 1234
+        mock_group.name = 1234
         mock_group.objects = [mock_para]
 
-        # Weaviate grouped results come from .groups (a list); .objects is empty
-        mock_col.query.hybrid.return_value.groups = [mock_group]
-        mock_col.query.hybrid.return_value.objects = []
+        # Grouping is routed through near_vector; weaviate returns .groups as a
+        # dict {group_value: GroupObject}, and the group value is read from .name.
+        mock_col.query.near_vector.return_value.groups = {"1234": mock_group}
+        mock_col.query.near_vector.return_value.objects = []
+        mock_col.aggregate.over_all.return_value.total_count = 1
         mock_client.collections.use.return_value = mock_col
 
         with patch("server.get_embedding_function") as mock_gef, \
@@ -570,6 +721,7 @@ class TestSearchTool:
             result = asyncio.run(search(query="test", group_by_talk=True, ctx=ctx))
 
         parsed = json.loads(result)
+        assert parsed["search_mode"] == "vector_grouped"
         assert "groups" in parsed
         assert len(parsed["groups"]) == 1
         assert parsed["groups"][0]["talk_id"] == "talk_1234"
@@ -585,6 +737,230 @@ class TestSearchTool:
         result = asyncio.run(search(query="test", collection="talks", group_by_talk=True, ctx=ctx))
 
         assert "group_by_talk is only supported for the paragraphs collection" in result
+
+    # ------------------------------------------------------------------
+    # New tests — total/has_more, sort_by, query_properties, results_per_talk
+    # ------------------------------------------------------------------
+
+    def test_search_returns_total_and_has_more(self):
+        """Result envelope contains 'total' and 'has_more' fields."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+        # _make_search_col sets total_count = 1 and returns 1 object,
+        # so has_more should be False (0 + 1 < 1 is False)
+        mock_col.aggregate.over_all.return_value.total_count = 10
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            result = asyncio.run(search(query="test query", ctx=ctx))
+
+        parsed = json.loads(result)
+        assert "total" in parsed
+        assert "has_more" in parsed
+        assert isinstance(parsed["total"], int)
+        assert isinstance(parsed["has_more"], bool)
+
+    def test_search_has_more_true_when_more_results_exist(self):
+        """has_more is True when total > offset + len(results)."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+        # 1 result returned but total is 100 → has_more = True
+        mock_col.aggregate.over_all.return_value.total_count = 100
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            result = asyncio.run(search(query="test query", ctx=ctx))
+
+        parsed = json.loads(result)
+        assert parsed["has_more"] is True
+        assert parsed["total"] == 100
+
+    def test_sort_by_date_desc_passes_sort_to_fetch_objects(self):
+        """sort_by='date_desc' on empty query passes a sort argument to fetch_objects."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        result = asyncio.run(search(query="", sort_by="date_desc", ctx=ctx))
+
+        parsed = json.loads(result)
+        assert parsed["search_mode"] == "browse_filtered"
+        call_kwargs = mock_col.query.fetch_objects.call_args.kwargs
+        assert "sort" in call_kwargs
+
+    def test_sort_by_allows_browse_without_filter(self):
+        """sort_by alone (no filter) is enough to allow browse path without error."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        result = asyncio.run(search(query="", sort_by="date_asc", ctx=ctx))
+
+        # Should return JSON, not the guard error string
+        parsed = json.loads(result)
+        assert parsed["search_mode"] == "browse_filtered"
+
+    def test_sort_by_invalid_value_ignored(self):
+        """Invalid sort_by value without a filter still returns the guard error."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        result = asyncio.run(search(query="", sort_by="invalid_value", ctx=ctx))
+
+        assert "Provide a query" in result
+
+    def test_sort_by_unsupported_collection_returns_message(self):
+        """sort_by on a collection with no chronological field (citations) is rejected clearly, not crashed."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col(col_name="ConferenceTalkCitations")
+
+        result = asyncio.run(
+            search(query="", collection="citations", sort_by="date_desc", ctx=ctx)
+        )
+
+        assert "not supported for the 'citations' collection" in result
+        # Must NOT have attempted a sorted fetch against a field the collection lacks
+        mock_col.query.fetch_objects.assert_not_called()
+
+    def test_sort_by_paragraphs_uses_conference_year(self):
+        """sort_by on paragraphs sorts by conference_year (paragraphs have no talk_date)."""
+        import server
+
+        ctx, mock_col = self._make_ctx_with_col()  # default: paragraphs
+
+        with patch("server.Sort.by_property", wraps=server.Sort.by_property) as spy:
+            asyncio.run(server.search(query="", sort_by="date_desc", ctx=ctx))
+
+        # sort_by on paragraphs must target conference_year, not talk_date
+        assert spy.call_args is not None
+        assert spy.call_args.args[0] == "conference_year"
+        assert "sort" in mock_col.query.fetch_objects.call_args.kwargs
+
+    def test_query_properties_passed_to_hybrid(self):
+        """query_properties is forwarded to hybrid query call."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            asyncio.run(search(query="test", query_properties=["title", "text"], ctx=ctx))
+
+        call_kwargs = mock_col.query.hybrid.call_args.kwargs
+        assert call_kwargs.get("query_properties") == ["title", "text"]
+
+    def test_query_properties_passed_to_bm25(self):
+        """query_properties is forwarded to bm25 query call (alpha=0.0)."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        # alpha=0.0 forces bm25 path, no embedding needed
+        asyncio.run(search(query="test", alpha=0.0, query_properties=["title"], ctx=ctx))
+
+        call_kwargs = mock_col.query.bm25.call_args.kwargs
+        assert call_kwargs.get("query_properties") == ["title"]
+
+    def test_query_properties_not_passed_to_near_vector(self):
+        """query_properties is NOT forwarded to near_vector query (pure vector path)."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            asyncio.run(search(query="test", alpha=1.0, query_properties=["title"], ctx=ctx))
+
+        call_kwargs = mock_col.query.near_vector.call_args.kwargs
+        assert "query_properties" not in call_kwargs
+
+    def test_results_per_talk_flows_into_group_by(self):
+        """results_per_talk value flows into GroupBy.objects_per_group."""
+        from server import search
+
+        ctx, mock_client = _make_mock_ctx()
+        mock_col = MagicMock()
+        # Grouping routes through near_vector; empty groups so we just inspect the call
+        mock_col.query.near_vector.return_value.groups = {}
+        mock_col.query.near_vector.return_value.objects = []
+        mock_col.aggregate.over_all.return_value.total_count = 0
+        mock_client.collections.use.return_value = mock_col
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            asyncio.run(search(query="test", group_by_talk=True, results_per_talk=5, ctx=ctx))
+
+        call_kwargs = mock_col.query.near_vector.call_args.kwargs
+        group_by = call_kwargs.get("group_by")
+        assert group_by is not None
+        assert group_by.objects_per_group == 5
+
+    def test_group_by_talk_without_embedding_returns_message(self):
+        """group_by_talk requires a vector; when Ollama is down it returns a clear message."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        # Ollama unavailable -> no query vector -> grouping cannot run
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.side_effect = RuntimeError("ollama down")
+            result = asyncio.run(search(query="test", group_by_talk=True, ctx=ctx))
+
+        assert "group_by_talk requires semantic search" in result
+        mock_col.query.near_vector.assert_not_called()
+
+    def test_offset_passed_to_hybrid(self):
+        """offset is forwarded to hybrid query call."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            asyncio.run(search(query="test", offset=10, ctx=ctx))
+
+        call_kwargs = mock_col.query.hybrid.call_args.kwargs
+        assert call_kwargs.get("offset") == 10
+
+    def test_new_filter_params_produce_non_none_filter(self):
+        """session, cites_scripture, year_from/year_to all produce a non-None filter for hybrid."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            asyncio.run(search(
+                query="test",
+                session="Sun AM",
+                cites_scripture=True,
+                year_from=2000,
+                year_to=2020,
+                ctx=ctx,
+            ))
+
+        call_kwargs = mock_col.query.hybrid.call_args.kwargs
+        assert call_kwargs.get("filters") is not None
 
 
 # ---------------------------------------------------------------------------
@@ -1296,4 +1672,225 @@ class TestCorpusStats:
 
         with patch("server.get_embedding_function") as mock_gef:
             asyncio.run(corpus_stats(collection="paragraphs", ctx=ctx))
+            mock_gef.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# get_talk_citations tool tests
+# ---------------------------------------------------------------------------
+
+
+class TestGetTalkCitations:
+    """Integration tests for the get_talk_citations MCP tool."""
+
+    def _make_ctx(self, citation_props_list):
+        """Build a mock ctx where collections.use returns a citations mock col."""
+        ctx, mock_client = _make_mock_ctx()
+        mock_col = MagicMock()
+        mock_objects = []
+        for props in citation_props_list:
+            obj = MagicMock()
+            obj.properties = props
+            mock_objects.append(obj)
+        mock_col.query.fetch_objects.return_value.objects = mock_objects
+        mock_client.collections.use.return_value = mock_col
+        return ctx, mock_client, mock_col
+
+    def test_invalid_talk_id_returns_error(self):
+        """An unparseable talk_id returns the canonical error string."""
+        from server import get_talk_citations
+
+        ctx, _, _ = self._make_ctx([])
+
+        result = asyncio.run(get_talk_citations(talk_id="not_a_number", ctx=ctx))
+
+        assert "Invalid talk_id format" in result
+        assert "not_a_number" in result
+
+    def test_no_citations_returns_not_found_string(self):
+        """When no citations exist for a talk_id, returns 'No citations found' string."""
+        from server import get_talk_citations
+
+        ctx, _, _ = self._make_ctx([])
+
+        result = asyncio.run(get_talk_citations(talk_id="talk_9999", ctx=ctx))
+
+        assert result == "No citations found for talk_id 'talk_9999'."
+
+    def test_happy_path_returns_ordered_citations(self):
+        """3 citation objects given out of order are returned sorted by (paragraph_number, char_position)."""
+        from server import get_talk_citations
+
+        # Deliberately out of order to verify sorting
+        citation_props_list = [
+            {
+                "talk_id": 8820,
+                "paragraph_number": 5,
+                "char_position": 10,
+                "scripture_ref": "John 3:16",
+                "book": "John",
+                "chapter": 3,
+                "verses": "16",
+                "verse_start": 16,
+                "verse_end": 16,
+                "context_window": "For God so loved the world...",
+            },
+            {
+                "talk_id": 8820,
+                "paragraph_number": 2,
+                "char_position": 50,
+                "scripture_ref": "Moroni 10:4",
+                "book": "Moroni",
+                "chapter": 10,
+                "verses": "4",
+                "verse_start": 4,
+                "verse_end": 4,
+                "context_window": "...ask with a sincere heart...",
+            },
+            {
+                "talk_id": 8820,
+                "paragraph_number": 2,
+                "char_position": 10,
+                "scripture_ref": "1 Nephi 3:7",
+                "book": "1 Nephi",
+                "chapter": 3,
+                "verses": "7",
+                "verse_start": 7,
+                "verse_end": 7,
+                "context_window": "...I will go and do...",
+            },
+        ]
+
+        ctx, _, _ = self._make_ctx(citation_props_list)
+
+        result = asyncio.run(get_talk_citations(talk_id="8820", ctx=ctx))
+
+        parsed = json.loads(result)
+        assert len(parsed) == 3
+
+        # Sorted by (paragraph_number, char_position): (2,10), (2,50), (5,10)
+        assert parsed[0]["scripture_ref"] == "1 Nephi 3:7"
+        assert parsed[1]["scripture_ref"] == "Moroni 10:4"
+        assert parsed[2]["scripture_ref"] == "John 3:16"
+
+    def test_output_fields_are_correct(self):
+        """Each result has exactly the expected public fields; no pipeline-internal fields leak out."""
+        from server import get_talk_citations
+
+        citation_props_list = [
+            {
+                "talk_id": 8820,
+                "paragraph_number": 1,
+                "char_position": 0,
+                "scripture_ref": "Alma 32:21",
+                "book": "Alma",
+                "chapter": 32,
+                "verses": "21",
+                "verse_start": 21,
+                "verse_end": 21,
+                "context_window": "...faith is not a perfect knowledge...",
+            },
+        ]
+
+        ctx, _, _ = self._make_ctx(citation_props_list)
+
+        result = asyncio.run(get_talk_citations(talk_id="talk_8820", ctx=ctx))
+
+        parsed = json.loads(result)
+        assert len(parsed) == 1
+        item = parsed[0]
+
+        expected_keys = {
+            "scripture_ref",
+            "book",
+            "chapter",
+            "verses",
+            "verse_start",
+            "verse_end",
+            "context_window",
+            "paragraph_number",
+        }
+        assert set(item.keys()) == expected_keys
+
+        # Internal pipeline fields must NOT appear
+        assert "talk_id" not in item
+        assert "char_position" not in item
+        assert "citation_id" not in item
+        assert "paragraph_id" not in item
+
+    def test_limit_is_clamped_to_min_1(self):
+        """limit=0 is clamped up to 1 before the Weaviate call."""
+        from server import get_talk_citations
+
+        citation_props_list = [
+            {
+                "talk_id": 1234,
+                "paragraph_number": 1,
+                "char_position": 0,
+                "scripture_ref": "Romans 8:16",
+                "book": "Romans",
+                "chapter": 8,
+                "verses": "16",
+                "verse_start": 16,
+                "verse_end": 16,
+                "context_window": "...",
+            },
+        ]
+
+        ctx, _, mock_col = self._make_ctx(citation_props_list)
+
+        asyncio.run(get_talk_citations(talk_id="1234", limit=0, ctx=ctx))
+
+        call_kwargs = mock_col.query.fetch_objects.call_args.kwargs
+        assert call_kwargs["limit"] == 1
+
+    def test_limit_is_clamped_to_max_500(self):
+        """limit=1000 is clamped down to 500 before the Weaviate call."""
+        from server import get_talk_citations
+
+        citation_props_list = [
+            {
+                "talk_id": 1234,
+                "paragraph_number": 1,
+                "char_position": 0,
+                "scripture_ref": "Romans 8:16",
+                "book": "Romans",
+                "chapter": 8,
+                "verses": "16",
+                "verse_start": 16,
+                "verse_end": 16,
+                "context_window": "...",
+            },
+        ]
+
+        ctx, _, mock_col = self._make_ctx(citation_props_list)
+
+        asyncio.run(get_talk_citations(talk_id="1234", limit=1000, ctx=ctx))
+
+        call_kwargs = mock_col.query.fetch_objects.call_args.kwargs
+        assert call_kwargs["limit"] == 500
+
+    def test_embedding_never_called(self):
+        """get_talk_citations must not call get_embedding_function (no embedding needed)."""
+        from server import get_talk_citations
+
+        citation_props_list = [
+            {
+                "talk_id": 8820,
+                "paragraph_number": 1,
+                "char_position": 0,
+                "scripture_ref": "Romans 8:16",
+                "book": "Romans",
+                "chapter": 8,
+                "verses": "16",
+                "verse_start": 16,
+                "verse_end": 16,
+                "context_window": "...",
+            },
+        ]
+
+        ctx, _, _ = self._make_ctx(citation_props_list)
+
+        with patch("server.get_embedding_function") as mock_gef:
+            asyncio.run(get_talk_citations(talk_id="talk_8820", ctx=ctx))
             mock_gef.assert_not_called()

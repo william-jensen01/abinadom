@@ -4,6 +4,35 @@ Deferred work with enough context to pick up cold. Newest/most-actionable first.
 
 ---
 
+## Revisit `group_by_talk` vector-routing workaround if Weaviate is upgraded
+
+**Status:** Working as intended via a workaround. Revisit only after a Weaviate
+version/config change.
+
+**Finding (live stack `10.0.0.231:8765`, verified 2026-07-01):** on this Weaviate
+version, `hybrid()` + `group_by` returns **zero groups** — the grouped result dict is
+empty regardless of query. Only the `near_vector()` + `group_by` path returns groups.
+(Confirmed by running the identical grouped query both ways against the live stack.)
+
+**Current workaround (in `server.py` `search()`):** whenever `group_by_talk=True`,
+grouping is routed through `near_vector` regardless of `alpha` — `search_mode` reports
+`"vector_grouped"`. It requires a query vector, so when the embedding service is down we
+return a clear message instead of empty results. The trade-off (documented in the
+`search` docstring and `MCP_INSTRUCTIONS`): **grouped results are always vector-ranked;
+`alpha` applies only to the flat, non-grouped path.**
+
+**Also fixed alongside it (not a workaround — a real bug):** the grouped-output code had
+iterated `result.groups` as a list reading `.belongs_to_group`, but this weaviate-client
+returns a dict `{group_value: GroupObject}` keyed by `.name`. That path had never worked.
+
+**Revisit when:** Weaviate is upgraded or reconfigured. Re-run the two-way probe
+(`hybrid`+`group_by` vs `near_vector`+`group_by`). If hybrid grouping returns groups,
+consider honoring `alpha` on the grouped path too (route grouped hybrid through
+`hybrid()` when `alpha` is in `(0, 1)`), and drop the "grouped is always vector-ranked"
+caveat from the docs.
+
+---
+
 ## Denormalize `speaker_id` + `speaker_name` onto all collections (pipeline)
 
 **Status:** Postponed. Keep the current fuzzy `speaker_name` filter as-is for now.
