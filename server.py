@@ -190,16 +190,25 @@ def _build_weaviate_filters(year, season, speaker):
     return result
 
 
-def _format_search_result(document: str, meta: dict) -> dict:
+def _format_search_result(
+    document: str,
+    meta: dict,
+    *,
+    relevance=None,
+    score_type=None,
+    distance=None,
+) -> dict:
     """
-    Build the 6-field public result dict from a document snippet + Weaviate properties.
+    Build the public result dict from a document snippet + Weaviate properties.
 
-    D-01: exactly 6 fields — snippet, speaker_name, title, conference_year,
+    Base fields (always present): snippet, speaker_name, title, conference_year,
     conference_month, talk_id.
+    Optional fields (present only when passed): relevance, score_type, distance.
+
     D-04: NO pipeline-internal fields (paragraph_id, word_count, text, text_raw,
     source_type, speaker_id, conference_id, etc.).
     """
-    return {
+    result = {
         "snippet": document,
         "speaker_name": meta.get("speaker_name", ""),
         "title": meta.get("title", ""),
@@ -207,6 +216,13 @@ def _format_search_result(document: str, meta: dict) -> dict:
         "conference_month": meta.get("conference_month", ""),
         "talk_id": f"talk_{int(meta.get('talk_id', 0))}",
     }
+    if relevance is not None:
+        result["relevance"] = relevance
+    if score_type is not None:
+        result["score_type"] = score_type
+    if distance is not None:
+        result["distance"] = distance
+    return result
 
 
 def _parse_talk_id(talk_id: str) -> int | None:
@@ -329,6 +345,8 @@ async def search(
     season: str | None = None,
     collection: str = "paragraphs",
     limit: int = 5,
+    alpha: float = 0.7,
+    group_by_talk: bool = False,
     ctx: Context = None,
 ) -> str:
     """Search LDS General Conference content by meaning.
@@ -343,41 +361,178 @@ async def search(
         season: Optional conference season filter ("April" or "October").
         collection: Collection to search - "talks", "paragraphs" (default), "citations", or "footnotes".
         limit: Number of results to return (default 5, max 20).
+        alpha: Blend of vector (1.0) and keyword/BM25 (0.0). Default 0.7 (hybrid).
+        group_by_talk: If True (paragraphs only), cluster results by talk_id.
     """
     app: AppContext = ctx.lifespan_context["app"]
 
-    collection_map = WEAVIATE_COLLECTION_NAMES
-    col_name = collection_map.get(collection)
+    col_name = WEAVIATE_COLLECTION_NAMES.get(collection)
     if col_name is None:
         return f"Unknown collection '{collection}'. Valid: talks, paragraphs, citations, footnotes."
 
+    if group_by_talk and collection != "paragraphs":
+        return "group_by_talk is only supported for the paragraphs collection."
+
+    alpha = max(0.0, min(1.0, alpha))
     limit = max(1, min(limit, 20))
     weaviate_filter = _build_weaviate_filters(year, season, speaker)
-
-    try:
-        ollama_url = resolve_ollama_url()
-        ef = get_embedding_function(url=ollama_url)
-        query_vector = ef([query])[0]
-    except Exception as e:
-        return f"Search unavailable: Ollama is unreachable ({e})."
-
     col = app.client.collections.use(col_name)
-    result = col.query.near_vector(
-        near_vector=query_vector,
-        limit=limit,
-        filters=weaviate_filter,
-        target_vector="default",
-    )
+    snippet_fn = _SNIPPET_PROP.get(collection, lambda p: "")
 
+    # Empty/whitespace query — browse or error
+    if not query.strip():
+        if weaviate_filter is None:
+            return "Provide a query or at least one filter (speaker, year, or season)."
+        result = col.query.fetch_objects(filters=weaviate_filter, limit=limit)
+        if not result.objects:
+            return "No results found."
+        results = [
+            _format_search_result(snippet_fn(obj.properties), obj.properties)
+            for obj in result.objects
+        ]
+        return json.dumps(
+            {"search_mode": "browse_filtered", "results": results},
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    # Embedding — only needed when alpha > 0
+    need_vector = alpha != 0.0
+    query_vector = None
+    ollama_failed = False
+
+    if need_vector:
+        try:
+            ollama_url = resolve_ollama_url()
+            ef = get_embedding_function(url=ollama_url)
+            query_vector = ef([query])[0]
+        except Exception as e:
+            logger.warning("Ollama unavailable for search (falling back to bm25): %s", e)
+            ollama_failed = True
+
+    # Determine effective search path
+    if ollama_failed:
+        effective_alpha = 0.0
+        search_mode = "keyword_only_ollama_unavailable"
+    elif alpha == 0.0:
+        effective_alpha = 0.0
+        search_mode = "keyword"
+    elif alpha == 1.0:
+        effective_alpha = 1.0
+        search_mode = "vector"
+    else:
+        effective_alpha = alpha
+        search_mode = "hybrid"
+
+    # GroupBy — only for ranked (vector/hybrid) paths
+    group_by_arg = None
+    if group_by_talk and effective_alpha != 0.0:
+        group_by_arg = GroupBy(prop="talk_id", number_of_groups=limit, objects_per_group=3)
+
+    # Execute the appropriate Weaviate query
+    if effective_alpha == 1.0:
+        kwargs: dict = dict(
+            near_vector=query_vector,
+            limit=limit,
+            filters=weaviate_filter,
+            target_vector="default",
+            return_metadata=MetadataQuery(distance=True, certainty=True),
+        )
+        if group_by_arg is not None:
+            kwargs["group_by"] = group_by_arg
+        result = col.query.near_vector(**kwargs)
+    elif effective_alpha == 0.0:
+        result = col.query.bm25(
+            query=query,
+            limit=limit,
+            filters=weaviate_filter,
+            return_metadata=MetadataQuery(score=True),
+        )
+    else:
+        kwargs = dict(
+            query=query,
+            vector=query_vector,
+            alpha=effective_alpha,
+            limit=limit,
+            filters=weaviate_filter,
+            target_vector="default",
+            return_metadata=MetadataQuery(score=True),
+        )
+        if group_by_arg is not None:
+            kwargs["group_by"] = group_by_arg
+        result = col.query.hybrid(**kwargs)
+
+    # Grouped output (near_vector or hybrid with group_by_talk)
+    if group_by_arg is not None:
+        groups_raw = getattr(result, "groups", None)
+        if not groups_raw:
+            return "No results found."
+        groups_out = []
+        for group in groups_raw:
+            group_val = group.belongs_to_group
+            try:
+                talk_id_str = f"talk_{int(group_val)}"
+            except (ValueError, TypeError):
+                talk_id_str = str(group_val)
+            paragraphs = []
+            for obj in group.objects:
+                props = obj.properties
+                meta = obj.metadata
+                if effective_alpha == 1.0:
+                    relevance = getattr(meta, "certainty", None)
+                    dist = getattr(meta, "distance", None)
+                    row = _format_search_result(
+                        snippet_fn(props), props,
+                        relevance=relevance, score_type="vector_certainty", distance=dist,
+                    )
+                else:
+                    relevance = getattr(meta, "score", None)
+                    row = _format_search_result(
+                        snippet_fn(props), props,
+                        relevance=relevance, score_type="hybrid_fusion",
+                    )
+                paragraphs.append(row)
+            groups_out.append({"talk_id": talk_id_str, "paragraphs": paragraphs})
+        return json.dumps(
+            {"search_mode": search_mode, "groups": groups_out},
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    # Non-grouped output
     if not result.objects:
         return "No results found."
 
-    snippet_fn = _SNIPPET_PROP.get(collection, lambda p: "")
     results = []
     for obj in result.objects:
         props = obj.properties
-        results.append(_format_search_result(snippet_fn(props), props))
-    return json.dumps(results, ensure_ascii=False, indent=2)
+        meta = obj.metadata
+        if effective_alpha == 1.0:
+            relevance = getattr(meta, "certainty", None)
+            dist = getattr(meta, "distance", None)
+            row = _format_search_result(
+                snippet_fn(props), props,
+                relevance=relevance, score_type="vector_certainty", distance=dist,
+            )
+        elif effective_alpha == 0.0:
+            relevance = getattr(meta, "score", None)
+            row = _format_search_result(
+                snippet_fn(props), props,
+                relevance=relevance, score_type="bm25",
+            )
+        else:
+            relevance = getattr(meta, "score", None)
+            row = _format_search_result(
+                snippet_fn(props), props,
+                relevance=relevance, score_type="hybrid_fusion",
+            )
+        results.append(row)
+
+    return json.dumps(
+        {"search_mode": search_mode, "results": results},
+        ensure_ascii=False,
+        indent=2,
+    )
 
 
 @mcp.tool()

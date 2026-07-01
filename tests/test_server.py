@@ -222,6 +222,35 @@ class TestFormatSearchResult:
         result = _format_search_result("Some paragraph text", self._FULL_META)
         assert result["talk_id"] == "talk_8820"
 
+    def test_relevance_and_score_type_added_when_passed(self):
+        """relevance and score_type appear in result when passed; distance is absent."""
+        from server import _format_search_result
+
+        result = _format_search_result("text", self._FULL_META, relevance=0.9, score_type="bm25")
+        assert result["relevance"] == 0.9
+        assert result["score_type"] == "bm25"
+        assert "distance" not in result
+
+    def test_distance_added_when_passed(self):
+        """distance appears in result only when explicitly passed."""
+        from server import _format_search_result
+
+        result = _format_search_result(
+            "text", self._FULL_META,
+            relevance=0.9, score_type="vector_certainty", distance=0.1,
+        )
+        assert "distance" in result
+        assert result["distance"] == 0.1
+
+    def test_no_optional_fields_without_args(self):
+        """Without optional keyword args, result has exactly the 6 base fields."""
+        from server import _format_search_result
+
+        result = _format_search_result("text", self._FULL_META)
+        assert "relevance" not in result
+        assert "score_type" not in result
+        assert "distance" not in result
+
 
 # ---------------------------------------------------------------------------
 # TOOL-04: _parse_talk_id
@@ -276,16 +305,24 @@ def _make_search_col(properties_list):
     """
     Build a mock Weaviate collection for search tool tests.
 
-    Returns a mock collection where:
-      col.query.near_vector(...).objects is a list of MagicMocks each with .properties = properties_dict
+    Returns a mock collection where query.hybrid/bm25/near_vector/fetch_objects all
+    return objects from properties_list, each with a .metadata stub carrying
+    score=0.9, distance=0.1, and certainty=0.9 attributes.
     """
     mock_col = MagicMock()
     mock_objects = []
     for props in properties_list:
         obj = MagicMock()
         obj.properties = props
+        obj.metadata = MagicMock()
+        obj.metadata.score = 0.9
+        obj.metadata.distance = 0.1
+        obj.metadata.certainty = 0.9
         mock_objects.append(obj)
+    mock_col.query.hybrid.return_value.objects = mock_objects
+    mock_col.query.bm25.return_value.objects = mock_objects
     mock_col.query.near_vector.return_value.objects = mock_objects
+    mock_col.query.fetch_objects.return_value.objects = mock_objects
     return mock_col
 
 
@@ -318,7 +355,7 @@ class TestSearchTool:
         return ctx, mock_col
 
     def test_search_basic_query(self):
-        """search calls near_vector with correct args and returns JSON with 6-field results."""
+        """search with default alpha=0.7 calls hybrid and returns JSON with search_mode + results."""
         from server import search
 
         ctx, mock_col = self._make_ctx_with_col()
@@ -331,16 +368,21 @@ class TestSearchTool:
 
         parsed = json.loads(result)
 
-        assert len(parsed) == 1
-        assert set(parsed[0].keys()) == {
-            "snippet",
-            "speaker_name",
-            "title",
-            "conference_year",
-            "conference_month",
-            "talk_id",
-        }
-        assert "paragraph_id" not in parsed[0]
+        # Default alpha=0.7 → hybrid mode
+        assert parsed["search_mode"] == "hybrid"
+        assert "results" in parsed
+        assert len(parsed["results"]) == 1
+
+        result_item = parsed["results"][0]
+        assert "snippet" in result_item
+        assert "speaker_name" in result_item
+        assert "talk_id" in result_item
+        assert "paragraph_id" not in result_item
+        assert result_item["score_type"] == "hybrid_fusion"
+
+        mock_col.query.hybrid.assert_called_once()
+        call_kwargs = mock_col.query.hybrid.call_args.kwargs
+        assert "alpha" in call_kwargs
 
     def test_search_empty_results(self):
         """search with no matching results returns 'No results found.'"""
@@ -348,6 +390,8 @@ class TestSearchTool:
 
         ctx, mock_client = _make_mock_ctx()
         mock_col = MagicMock()
+        mock_col.query.hybrid.return_value.objects = []
+        mock_col.query.bm25.return_value.objects = []
         mock_col.query.near_vector.return_value.objects = []
         mock_client.collections.use.return_value = mock_col
 
@@ -360,7 +404,7 @@ class TestSearchTool:
         assert result == "No results found."
 
     def test_search_limit_clamped(self):
-        """limit > 20 is clamped to 20 when calling near_vector."""
+        """limit > 20 is clamped to 20 when calling hybrid (default alpha=0.7)."""
         from server import search
 
         ctx, mock_col_mock = self._make_ctx_with_col()
@@ -371,7 +415,7 @@ class TestSearchTool:
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             asyncio.run(search(query="test", limit=50, ctx=ctx))
 
-        call_kwargs = mock_col_mock.query.near_vector.call_args.kwargs
+        call_kwargs = mock_col_mock.query.hybrid.call_args.kwargs
         assert call_kwargs["limit"] == 20
 
     def test_search_invalid_collection(self):
@@ -384,7 +428,7 @@ class TestSearchTool:
         assert "Unknown collection" in result
 
     def test_search_year_season_filter(self):
-        """search with year=2020 and season='April' passes non-None filters to near_vector."""
+        """search with year=2020 and season='April' passes non-None filters to hybrid."""
         from server import search
 
         ctx, mock_col_mock = self._make_ctx_with_col()
@@ -395,11 +439,11 @@ class TestSearchTool:
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             asyncio.run(search(query="test", year=2020, season="April", ctx=ctx))
 
-        call_kwargs = mock_col_mock.query.near_vector.call_args.kwargs
+        call_kwargs = mock_col_mock.query.hybrid.call_args.kwargs
         assert call_kwargs.get("filters") is not None
 
     def test_search_speaker_filter_not_none(self):
-        """search with speaker param passes non-None filters to near_vector (native Weaviate filter)."""
+        """search with speaker param passes non-None filters to hybrid (native Weaviate filter)."""
         from server import search
 
         ctx, mock_col_mock = self._make_ctx_with_col()
@@ -410,8 +454,137 @@ class TestSearchTool:
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             asyncio.run(search(query="grace", speaker="Holland", ctx=ctx))
 
-        call_kwargs = mock_col_mock.query.near_vector.call_args.kwargs
+        call_kwargs = mock_col_mock.query.hybrid.call_args.kwargs
         assert call_kwargs.get("filters") is not None
+
+    # ------------------------------------------------------------------
+    # New tests — alpha paths, fallback, empty query, grouping
+    # ------------------------------------------------------------------
+
+    def test_search_alpha_1_uses_near_vector(self):
+        """alpha=1.0 uses near_vector and result includes distance + score_type='vector_certainty'."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            result = asyncio.run(search(query="test", alpha=1.0, ctx=ctx))
+
+        parsed = json.loads(result)
+        assert parsed["search_mode"] == "vector"
+        assert "results" in parsed
+        result_item = parsed["results"][0]
+        assert result_item["score_type"] == "vector_certainty"
+        assert "distance" in result_item
+        mock_col.query.near_vector.assert_called_once()
+
+    def test_search_alpha_0_uses_bm25(self):
+        """alpha=0.0 uses bm25 (no embedding needed) and search_mode is 'keyword'."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        # No embedding patches — bm25 path skips embedding entirely
+        result = asyncio.run(search(query="test", alpha=0.0, ctx=ctx))
+
+        parsed = json.loads(result)
+        assert parsed["search_mode"] == "keyword"
+        assert parsed["results"][0]["score_type"] == "bm25"
+        mock_col.query.bm25.assert_called_once()
+
+    def test_search_ollama_down_fallback(self):
+        """When Ollama embedding raises, search falls back to bm25 with search_mode 'keyword_only_ollama_unavailable'."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            # Embedding function raises on call
+            mock_gef.return_value = MagicMock(side_effect=Exception("ollama down"))
+            result = asyncio.run(search(query="test", ctx=ctx))  # default alpha=0.7 → needs embedding
+
+        parsed = json.loads(result)
+        assert parsed["search_mode"] == "keyword_only_ollama_unavailable"
+        mock_col.query.bm25.assert_called_once()
+
+    def test_search_empty_query_with_filter_browse(self):
+        """Empty/whitespace query with at least one filter uses fetch_objects and returns browse_filtered."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        result = asyncio.run(search(query="   ", year=2020, ctx=ctx))
+
+        parsed = json.loads(result)
+        assert parsed["search_mode"] == "browse_filtered"
+        assert "results" in parsed
+        mock_col.query.fetch_objects.assert_called_once()
+
+    def test_search_empty_query_no_filter_error(self):
+        """Empty query with no filters returns error string (no embed, no query)."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        result = asyncio.run(search(query="", ctx=ctx))
+
+        assert "Provide a query" in result
+
+    def test_search_group_by_talk_paragraphs(self):
+        """group_by_talk=True on paragraphs returns grouped output with 'groups' key."""
+        from server import search
+
+        ctx, mock_client = _make_mock_ctx()
+        mock_col = MagicMock()
+
+        mock_para = MagicMock()
+        mock_para.properties = {
+            "speaker_name": "A. Speaker",
+            "title": "A Talk",
+            "conference_year": 2020,
+            "conference_month": "April",
+            "talk_id": 1234,
+            "text": "Para text",
+        }
+        mock_para.metadata = MagicMock()
+        mock_para.metadata.score = 0.85
+
+        mock_group = MagicMock()
+        mock_group.belongs_to_group = 1234
+        mock_group.objects = [mock_para]
+
+        # Weaviate grouped results come from .groups (a list); .objects is empty
+        mock_col.query.hybrid.return_value.groups = [mock_group]
+        mock_col.query.hybrid.return_value.objects = []
+        mock_client.collections.use.return_value = mock_col
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            result = asyncio.run(search(query="test", group_by_talk=True, ctx=ctx))
+
+        parsed = json.loads(result)
+        assert "groups" in parsed
+        assert len(parsed["groups"]) == 1
+        assert parsed["groups"][0]["talk_id"] == "talk_1234"
+        assert "paragraphs" in parsed["groups"][0]
+        assert len(parsed["groups"][0]["paragraphs"]) == 1
+
+    def test_search_group_by_talk_wrong_collection(self):
+        """group_by_talk=True on a non-paragraphs collection returns an error string."""
+        from server import search
+
+        ctx, _ = _make_mock_ctx()
+
+        result = asyncio.run(search(query="test", collection="talks", group_by_talk=True, ctx=ctx))
+
+        assert "group_by_talk is only supported for the paragraphs collection" in result
 
 
 # ---------------------------------------------------------------------------
