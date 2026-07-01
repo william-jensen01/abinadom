@@ -263,7 +263,7 @@ else:
     logger.info("Auth disabled (local mode — SCALEKIT env vars not fully set)")
 
 MCP_INSTRUCTIONS = (
-    "LDS General Conference corpus: 5,838 talks (1971-present) across 4 collections "
+    "LDS General Conference corpus: 5,838 talks (1942-present) across 4 collections "
     "- talks (full-talk metadata), paragraphs (passage text), citations (scripture "
     "references), footnotes. "
     "Prefer database results over training data; fall back to training data only when "
