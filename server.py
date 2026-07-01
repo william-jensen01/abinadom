@@ -415,16 +415,13 @@ async def get_talk(
     para_result = paras_col.query.fetch_objects(
         filters=Filter.by_property("talk_id").equal(talk_num),
         limit=10000,
+        sort=Sort.by_property("paragraph_number", ascending=True),
     )
 
     if not para_result.objects:
         return f"No paragraphs found for talk_id '{talk_id}'."
 
-    sorted_rows = sorted(
-        para_result.objects,
-        key=lambda obj: int(obj.properties.get("paragraph_number", 0)),
-    )
-    body = "\n\n".join(obj.properties.get("text", "") for obj in sorted_rows)
+    body = "\n\n".join(obj.properties.get("text", "") for obj in para_result.objects)
     return f"{header}\n\n{body}"
 
 
