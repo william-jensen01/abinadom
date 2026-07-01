@@ -1297,3 +1297,224 @@ class TestCorpusStats:
         with patch("server.get_embedding_function") as mock_gef:
             asyncio.run(corpus_stats(collection="paragraphs", ctx=ctx))
             mock_gef.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# get_talk_citations tool tests
+# ---------------------------------------------------------------------------
+
+
+class TestGetTalkCitations:
+    """Integration tests for the get_talk_citations MCP tool."""
+
+    def _make_ctx(self, citation_props_list):
+        """Build a mock ctx where collections.use returns a citations mock col."""
+        ctx, mock_client = _make_mock_ctx()
+        mock_col = MagicMock()
+        mock_objects = []
+        for props in citation_props_list:
+            obj = MagicMock()
+            obj.properties = props
+            mock_objects.append(obj)
+        mock_col.query.fetch_objects.return_value.objects = mock_objects
+        mock_client.collections.use.return_value = mock_col
+        return ctx, mock_client, mock_col
+
+    def test_invalid_talk_id_returns_error(self):
+        """An unparseable talk_id returns the canonical error string."""
+        from server import get_talk_citations
+
+        ctx, _, _ = self._make_ctx([])
+
+        result = asyncio.run(get_talk_citations(talk_id="not_a_number", ctx=ctx))
+
+        assert "Invalid talk_id format" in result
+        assert "not_a_number" in result
+
+    def test_no_citations_returns_not_found_string(self):
+        """When no citations exist for a talk_id, returns 'No citations found' string."""
+        from server import get_talk_citations
+
+        ctx, _, _ = self._make_ctx([])
+
+        result = asyncio.run(get_talk_citations(talk_id="talk_9999", ctx=ctx))
+
+        assert result == "No citations found for talk_id 'talk_9999'."
+
+    def test_happy_path_returns_ordered_citations(self):
+        """3 citation objects given out of order are returned sorted by (paragraph_number, char_position)."""
+        from server import get_talk_citations
+
+        # Deliberately out of order to verify sorting
+        citation_props_list = [
+            {
+                "talk_id": 8820,
+                "paragraph_number": 5,
+                "char_position": 10,
+                "scripture_ref": "John 3:16",
+                "book": "John",
+                "chapter": 3,
+                "verses": "16",
+                "verse_start": 16,
+                "verse_end": 16,
+                "context_window": "For God so loved the world...",
+            },
+            {
+                "talk_id": 8820,
+                "paragraph_number": 2,
+                "char_position": 50,
+                "scripture_ref": "Moroni 10:4",
+                "book": "Moroni",
+                "chapter": 10,
+                "verses": "4",
+                "verse_start": 4,
+                "verse_end": 4,
+                "context_window": "...ask with a sincere heart...",
+            },
+            {
+                "talk_id": 8820,
+                "paragraph_number": 2,
+                "char_position": 10,
+                "scripture_ref": "1 Nephi 3:7",
+                "book": "1 Nephi",
+                "chapter": 3,
+                "verses": "7",
+                "verse_start": 7,
+                "verse_end": 7,
+                "context_window": "...I will go and do...",
+            },
+        ]
+
+        ctx, _, _ = self._make_ctx(citation_props_list)
+
+        result = asyncio.run(get_talk_citations(talk_id="8820", ctx=ctx))
+
+        parsed = json.loads(result)
+        assert len(parsed) == 3
+
+        # Sorted by (paragraph_number, char_position): (2,10), (2,50), (5,10)
+        assert parsed[0]["scripture_ref"] == "1 Nephi 3:7"
+        assert parsed[1]["scripture_ref"] == "Moroni 10:4"
+        assert parsed[2]["scripture_ref"] == "John 3:16"
+
+    def test_output_fields_are_correct(self):
+        """Each result has exactly the expected public fields; no pipeline-internal fields leak out."""
+        from server import get_talk_citations
+
+        citation_props_list = [
+            {
+                "talk_id": 8820,
+                "paragraph_number": 1,
+                "char_position": 0,
+                "scripture_ref": "Alma 32:21",
+                "book": "Alma",
+                "chapter": 32,
+                "verses": "21",
+                "verse_start": 21,
+                "verse_end": 21,
+                "context_window": "...faith is not a perfect knowledge...",
+            },
+        ]
+
+        ctx, _, _ = self._make_ctx(citation_props_list)
+
+        result = asyncio.run(get_talk_citations(talk_id="talk_8820", ctx=ctx))
+
+        parsed = json.loads(result)
+        assert len(parsed) == 1
+        item = parsed[0]
+
+        expected_keys = {
+            "scripture_ref",
+            "book",
+            "chapter",
+            "verses",
+            "verse_start",
+            "verse_end",
+            "context_window",
+            "paragraph_number",
+        }
+        assert set(item.keys()) == expected_keys
+
+        # Internal pipeline fields must NOT appear
+        assert "talk_id" not in item
+        assert "char_position" not in item
+        assert "citation_id" not in item
+        assert "paragraph_id" not in item
+
+    def test_limit_is_clamped_to_min_1(self):
+        """limit=0 is clamped up to 1 before the Weaviate call."""
+        from server import get_talk_citations
+
+        citation_props_list = [
+            {
+                "talk_id": 1234,
+                "paragraph_number": 1,
+                "char_position": 0,
+                "scripture_ref": "Romans 8:16",
+                "book": "Romans",
+                "chapter": 8,
+                "verses": "16",
+                "verse_start": 16,
+                "verse_end": 16,
+                "context_window": "...",
+            },
+        ]
+
+        ctx, _, mock_col = self._make_ctx(citation_props_list)
+
+        asyncio.run(get_talk_citations(talk_id="1234", limit=0, ctx=ctx))
+
+        call_kwargs = mock_col.query.fetch_objects.call_args.kwargs
+        assert call_kwargs["limit"] == 1
+
+    def test_limit_is_clamped_to_max_500(self):
+        """limit=1000 is clamped down to 500 before the Weaviate call."""
+        from server import get_talk_citations
+
+        citation_props_list = [
+            {
+                "talk_id": 1234,
+                "paragraph_number": 1,
+                "char_position": 0,
+                "scripture_ref": "Romans 8:16",
+                "book": "Romans",
+                "chapter": 8,
+                "verses": "16",
+                "verse_start": 16,
+                "verse_end": 16,
+                "context_window": "...",
+            },
+        ]
+
+        ctx, _, mock_col = self._make_ctx(citation_props_list)
+
+        asyncio.run(get_talk_citations(talk_id="1234", limit=1000, ctx=ctx))
+
+        call_kwargs = mock_col.query.fetch_objects.call_args.kwargs
+        assert call_kwargs["limit"] == 500
+
+    def test_embedding_never_called(self):
+        """get_talk_citations must not call get_embedding_function (no embedding needed)."""
+        from server import get_talk_citations
+
+        citation_props_list = [
+            {
+                "talk_id": 8820,
+                "paragraph_number": 1,
+                "char_position": 0,
+                "scripture_ref": "Romans 8:16",
+                "book": "Romans",
+                "chapter": 8,
+                "verses": "16",
+                "verse_start": 16,
+                "verse_end": 16,
+                "context_window": "...",
+            },
+        ]
+
+        ctx, _, _ = self._make_ctx(citation_props_list)
+
+        with patch("server.get_embedding_function") as mock_gef:
+            asyncio.run(get_talk_citations(talk_id="talk_8820", ctx=ctx))
+            mock_gef.assert_not_called()

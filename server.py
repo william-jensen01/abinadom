@@ -758,6 +758,63 @@ async def corpus_stats(
     return json.dumps({"collection": collection, "group_by": group_by, "groups": groups}, ensure_ascii=False)
 
 
+@mcp.tool()
+async def get_talk_citations(
+    talk_id: str,
+    limit: int = 100,
+    ctx: Context = None,
+) -> str:
+    """Return the ordered scripture citations for a single talk. No embedding needed.
+
+    Args:
+        talk_id: Talk identifier (e.g. "talk_8820" or "8820").
+        limit: Maximum number of citations to return (default 100, capped at 500).
+    """
+    app: AppContext = ctx.lifespan_context["app"]
+
+    talk_num = _parse_talk_id(talk_id)
+    if talk_num is None:
+        return f"Invalid talk_id format '{talk_id}'. Expected format: 'talk_8820' or '8820'."
+
+    limit = max(1, min(limit, 500))
+
+    citations_col = app.client.collections.use(WEAVIATE_COLLECTION_NAMES["citations"])
+    result = citations_col.query.fetch_objects(
+        filters=Filter.by_property("talk_id").equal(talk_num),
+        limit=limit,
+        sort=Sort.by_property("paragraph_number", ascending=True),
+    )
+
+    if not result.objects:
+        return f"No citations found for talk_id '{talk_id}'."
+
+    # Secondary sort by char_position within each paragraph for stable ordering.
+    # Weaviate's single-key sort handles paragraph_number; Python handles char_position.
+    sorted_objects = sorted(
+        result.objects,
+        key=lambda o: (
+            o.properties.get("paragraph_number") or 0,
+            o.properties.get("char_position") or 0,
+        ),
+    )
+
+    results = []
+    for o in sorted_objects:
+        props = o.properties
+        results.append({
+            "scripture_ref": props.get("scripture_ref", ""),
+            "book": props.get("book", ""),
+            "chapter": props.get("chapter"),
+            "verses": props.get("verses", ""),
+            "verse_start": props.get("verse_start"),
+            "verse_end": props.get("verse_end"),
+            "context_window": props.get("context_window", ""),
+            "paragraph_number": props.get("paragraph_number"),
+        })
+
+    return json.dumps(results, ensure_ascii=False, indent=2)
+
+
 if __name__ == "__main__":
     import asyncio
     asyncio.run(mcp.run_http_async(
