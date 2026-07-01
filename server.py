@@ -548,6 +548,41 @@ async def find_by_scripture(
     return json.dumps(results, ensure_ascii=False, indent=2)
 
 
+@mcp.tool()
+async def corpus_stats(
+    collection: str = "talks",
+    group_by: str | None = None,
+    limit: int = 20,
+    ctx: Context = None,
+) -> str:
+    """Returns aggregate counts across a collection, optionally grouped by a field (e.g. speaker_name, conference_year, conference_month); no embedding needed.
+
+    Args:
+        collection: Collection to aggregate - "talks" (default), "paragraphs", "citations", or "footnotes".
+        group_by: Optional property name to group by (e.g. "speaker_name", "conference_year", "conference_month").
+        limit: Maximum number of groups to return when group_by is set (default 20).
+    """
+    app: AppContext = ctx.lifespan_context["app"]
+
+    if collection not in WEAVIATE_COLLECTION_NAMES:
+        return f"Unknown collection '{collection}'. Valid: talks, paragraphs, citations, footnotes."
+
+    col = app.client.collections.use(WEAVIATE_COLLECTION_NAMES[collection])
+
+    if group_by is None:
+        res = col.aggregate.over_all(total_count=True)
+        return json.dumps({"collection": collection, "total": res.total_count})
+
+    res = col.aggregate.over_all(group_by=GroupByAggregate(prop=group_by), total_count=True)
+    groups = [
+        {"value": group.grouped_by.value, "count": group.total_count}
+        for group in res.groups
+    ]
+    groups.sort(key=lambda g: g["count"], reverse=True)
+    groups = groups[:limit]
+    return json.dumps({"collection": collection, "group_by": group_by, "groups": groups}, ensure_ascii=False)
+
+
 if __name__ == "__main__":
     import asyncio
     asyncio.run(mcp.run_http_async(
