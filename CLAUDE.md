@@ -59,7 +59,7 @@
 
 ## Project Structure Index
 
-> **Maintenance rule**: Always update this index when adding or removing files in `docs/`, `extractors/`, `config/`, `models/`, `tests/`, or any pipeline-related file.
+> **Maintenance rule**: Always update this index when adding or removing files in `docs/`, `extractors/`, `loaders/`, `config/`, `models/`, `tests/`, or any pipeline-related file.
 >
 > **Navigation strategy — use all three layers:**
 > 1. **Index (this section)** — orient to file locations; use as a map/TOC to know where to look
@@ -99,7 +99,12 @@
 - `extractors/phase3_citation_extraction.py` — Phase 3: citation extraction
 - `extractors/phase4_footnote_extraction.py` — Phase 4: footnote extraction
 - `extractors/phase5_validation.py` — Phase 5: validation
-- `extractors/phase6_weaviate_loader.py` — Phase 6: Weaviate loader (ProductionWeaviateLoader subclass)
+
+### loaders/
+- `loaders/__init__.py` — BaseLoader ABC (embed_fn + batch_size DI; no host/port)
+- `loaders/shared_transforms.py` — rich_metadata, prepare_* functions, prepare_talk_bundle, load_talk_bundles
+- `loaders/weaviate_loader.py` — WeaviateLoader (client-injected, uses WEAVIATE_COLLECTION_NAMES)
+- `loaders/qdrant_loader.py` — QdrantLoader (client-injected)
 
 ### config/
 - `config/weaviate_client.py` — Shared Weaviate client factory (Phase 24)

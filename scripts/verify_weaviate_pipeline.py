@@ -365,6 +365,32 @@ def check_metadata_filters(client: weaviate.WeaviateClient) -> Dict[str, Any]:
 # =============================================================================
 
 
+def _check_fk_sample(
+    sample_col,
+    target_col,
+    id_prop: str,
+    id_prefix: str,
+    limit: int,
+) -> dict:
+    """Sample objects from sample_col and verify their id_prop resolves in target_col."""
+    from weaviate.util import generate_uuid5
+    sample = sample_col.query.fetch_objects(limit=limit, return_properties=[id_prop])
+    hits, misses, miss_ids = 0, 0, []
+    for obj in sample.objects:
+        val = obj.properties.get(id_prop)
+        if val is None:
+            misses += 1
+            continue
+        uuid = generate_uuid5(f"{id_prefix}{int(val)}")
+        result = target_col.query.fetch_object_by_id(uuid)
+        if result is not None:
+            hits += 1
+        else:
+            misses += 1
+            miss_ids.append(val)
+    return {"sampled": hits + misses, "hits": hits, "misses": misses, "miss_ids": miss_ids, "passed": misses == 0}
+
+
 def check_fk_integrity(client: weaviate.WeaviateClient) -> Dict[str, Any]:
     """
     VER-04: FK spot-check across Weaviate collections.
@@ -372,43 +398,18 @@ def check_fk_integrity(client: weaviate.WeaviateClient) -> Dict[str, Any]:
     Samples 10 paragraph records and 5 citation records and verifies that
     their talk_id values resolve to an object in the talks collection via UUID.
 
-    Uses col.query.fetch_objects(limit=N) for sampling (first N objects).
-    Uses weaviate.util.generate_uuid5 to derive deterministic talk UUIDs.
-
     Returns:
         Dict with keys: passed, scans (dict of scan results)
     """
     print("VER-04: FK integrity ...")
 
-    from weaviate.util import generate_uuid5
-
     talks_col = client.collections.use(WEAVIATE_COLLECTION_NAMES["talks"])
     paras_col = client.collections.use(WEAVIATE_COLLECTION_NAMES["paragraphs"])
     citations_col = client.collections.use(WEAVIATE_COLLECTION_NAMES["citations"])
 
-    # --- Scan 1: Paragraphs -> Talks FK ---
     print("  Scanning paragraphs -> talks FK (spot-check, 10 records) ...")
-    para_hits = 0
-    para_misses = 0
-    para_miss_talk_ids: List[Any] = []
-
     try:
-        para_sample = paras_col.query.fetch_objects(
-            limit=10,
-            return_properties=["talk_id"],
-        )
-        for obj in para_sample.objects:
-            talk_id = obj.properties.get("talk_id")
-            if talk_id is None:
-                para_misses += 1
-                continue
-            uuid = generate_uuid5(f"talk_{int(talk_id)}")
-            result = talks_col.query.fetch_object_by_id(uuid)
-            if result is not None:
-                para_hits += 1
-            else:
-                para_misses += 1
-                para_miss_talk_ids.append(talk_id)
+        para_result = _check_fk_sample(paras_col, talks_col, "talk_id", "talk_", 10)
     except Exception as exc:
         logger.warning("Paragraph FK scan error: %s", exc)
         print(f"  Paragraphs -> talks scan error: {exc}")
@@ -416,45 +417,20 @@ def check_fk_integrity(client: weaviate.WeaviateClient) -> Dict[str, Any]:
             "passed": False,
             "scans": {
                 "paragraphs_to_talks": {"error": str(exc), "passed": False},
-                "citations_to_talks": {"scanned": 0, "hits": 0, "misses": 0, "passed": False},
+                "citations_to_talks": {"sampled": 0, "hits": 0, "misses": 0, "passed": False},
             },
         }
+    print(f"  Paragraphs spot-check: {para_result['hits']} hits, {para_result['misses']} misses {'PASS' if para_result['passed'] else 'FAIL'}")
 
-    para_fk_pass = para_misses == 0
-    print(f"  Paragraphs spot-check: {para_hits} hits, {para_misses} misses {'PASS' if para_fk_pass else 'FAIL'}")
-
-    # --- Scan 2: Citations -> Talks FK ---
     print("  Scanning citations -> talks FK (spot-check, 5 records) ...")
-    cit_hits = 0
-    cit_misses = 0
-    cit_miss_talk_ids: List[Any] = []
-
     try:
-        cit_sample = citations_col.query.fetch_objects(
-            limit=5,
-            return_properties=["talk_id"],
-        )
-        for obj in cit_sample.objects:
-            talk_id = obj.properties.get("talk_id")
-            if talk_id is None:
-                cit_misses += 1
-                continue
-            uuid = generate_uuid5(f"talk_{int(talk_id)}")
-            result = talks_col.query.fetch_object_by_id(uuid)
-            if result is not None:
-                cit_hits += 1
-            else:
-                cit_misses += 1
-                cit_miss_talk_ids.append(talk_id)
+        cit_result = _check_fk_sample(citations_col, talks_col, "talk_id", "talk_", 5)
     except Exception as exc:
         logger.warning("Citation FK scan error: %s", exc)
-        cit_hits = 0
-        cit_misses = 0
+        cit_result = {"sampled": 0, "hits": 0, "misses": 0, "miss_ids": [], "passed": False}
+    print(f"  Citations spot-check: {cit_result['hits']} hits, {cit_result['misses']} misses {'PASS' if cit_result['passed'] else 'FAIL'}")
 
-    cit_fk_pass = cit_misses == 0
-    print(f"  Citations spot-check: {cit_hits} hits, {cit_misses} misses {'PASS' if cit_fk_pass else 'FAIL'}")
-
-    overall_passed = para_fk_pass and cit_fk_pass
+    overall_passed = para_result["passed"] and cit_result["passed"]
     status = "PASS" if overall_passed else "FAIL"
     print(f"VER-04: FK integrity ... {status}")
 
@@ -462,18 +438,18 @@ def check_fk_integrity(client: weaviate.WeaviateClient) -> Dict[str, Any]:
         "passed": overall_passed,
         "scans": {
             "paragraphs_to_talks": {
-                "sampled": para_hits + para_misses,
-                "hits": para_hits,
-                "misses": para_misses,
-                "miss_talk_ids": para_miss_talk_ids,
-                "passed": para_fk_pass,
+                "sampled": para_result["sampled"],
+                "hits": para_result["hits"],
+                "misses": para_result["misses"],
+                "miss_talk_ids": para_result["miss_ids"],
+                "passed": para_result["passed"],
             },
             "citations_to_talks": {
-                "sampled": cit_hits + cit_misses,
-                "hits": cit_hits,
-                "misses": cit_misses,
-                "miss_talk_ids": cit_miss_talk_ids,
-                "passed": cit_fk_pass,
+                "sampled": cit_result["sampled"],
+                "hits": cit_result["hits"],
+                "misses": cit_result["misses"],
+                "miss_talk_ids": cit_result["miss_ids"],
+                "passed": cit_result["passed"],
             },
         },
     }

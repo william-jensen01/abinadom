@@ -20,7 +20,6 @@ Usage:
 import argparse
 import json
 import logging
-import os
 import sys
 import time
 from pathlib import Path
@@ -38,11 +37,9 @@ from config.ollama import get_embedding_function, resolve_ollama_url
 from extractors.pipeline import process_talk_pipeline
 from extractors.phase3_citation_extraction import fetch_all_books
 from extractors.phase5_validation import validate_talk
-from extractors.phase6_weaviate_loader import (
-    load_talk_bundles,
-    TalkBundle,
-    ProductionWeaviateLoader,
-)
+from config.weaviate_client import get_weaviate_client
+from loaders.weaviate_loader import WeaviateLoader
+from loaders.shared_transforms import load_talk_bundles, TalkBundle
 
 logger = logging.getLogger(__name__)
 
@@ -95,16 +92,8 @@ def main() -> None:
     book_cache = fetch_all_books(core_db)
     embedding_fn = get_embedding_function(url=resolve_ollama_url())
 
-    weaviate_host = os.environ.get("WEAVIATE_HOST", "localhost")
-    weaviate_port = int(os.environ.get("WEAVIATE_PORT", "8080"))
-    weaviate_grpc_port = int(os.environ.get("WEAVIATE_GRPC_PORT", "50051"))
-
-    with ProductionWeaviateLoader(
-        host=weaviate_host,
-        port=weaviate_port,
-        embed_fn=embedding_fn,
-        grpc_port=weaviate_grpc_port,
-    ) as loader:
+    client = get_weaviate_client()
+    with WeaviateLoader(client=client, embed_fn=embedding_fn) as loader:
         all_talk_ids = _get_all_gc_talk_ids()
 
         # --- Counters and buffers ---

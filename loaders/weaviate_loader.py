@@ -1,15 +1,14 @@
 """
-Weaviate loader for benchmark vector DB comparisons.
+Weaviate loader — production collection names, client injection.
 
-Creates 4 Weaviate classes (Talk, Paragraph, Citation, Footnote) with fully typed
-property schemas and batch-loads talk bundles using pre-computed embedding vectors.
+Creates 4 Weaviate collections with fully typed property schemas and batch-loads
+talk bundles using pre-computed embedding vectors.
 
 Key implementation notes:
-- Collection names are PascalCase per Weaviate convention: Talk, Paragraph, Citation, Footnote
-- Vectorizer is disabled (pre-computed vectors passed explicitly per benchmark design)
+- Collection names come from WEAVIATE_COLLECTION_NAMES in config/pipeline_config.py
+- Vectorizer is disabled (pre-computed vectors passed explicitly)
 - UUIDs are derived deterministically from doc_id strings via generate_uuid5()
-- Client connection requires both HTTP port (8080) and gRPC port (50051)
-- Client must be closed via close() to release gRPC connections (Pitfall 1)
+- Client must be closed via close() to release gRPC connections
 """
 import logging
 import sys
@@ -20,84 +19,57 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 import weaviate
 import weaviate.classes as wvc
-from weaviate.classes.config import DataType, Property, Configure
+from weaviate.classes.config import DataType, Property
 from weaviate.classes.data import DataObject
 from weaviate.util import generate_uuid5
 from loaders import BaseLoader
-from loaders.shared_transforms import TalkBundle, prepare_talk_bundle_rich
+from loaders.shared_transforms import TalkBundle, prepare_talk_bundle
+from config.pipeline_config import WEAVIATE_COLLECTION_NAMES
 
 logger = logging.getLogger(__name__)
 
 
 class WeaviateLoader(BaseLoader):
     """
-    Benchmark Weaviate loader.
+    Weaviate loader.
 
-    Creates 4 Weaviate classes with fully typed schemas and batch-inserts records
+    Creates 4 Weaviate collections with fully typed schemas and batch-inserts records
     using pre-computed embedding vectors. Schema creation is idempotent.
 
     Usage:
-        loader = WeaviateLoader("localhost", 8080, embed_fn=my_embed)
-        loader.load(talk_bundle)
-        loader.close()  # REQUIRED — releases gRPC connection
-
-    Or wrap in try/finally:
-        loader = WeaviateLoader("localhost", 8080, embed_fn=my_embed)
-        try:
-            loader.load(bundle)
-        finally:
-            loader.close()
+        client = get_weaviate_client()
+        with WeaviateLoader(client=client, embed_fn=my_embed) as loader:
+            loader.load(talk_bundle)
     """
-
-    # Weaviate class names are PascalCase (per Weaviate naming convention)
-    COLLECTIONS = ["Talk", "Paragraph", "Citation", "Footnote"]
 
     def __init__(
         self,
-        host: str,
-        port: int,
+        client: weaviate.WeaviateClient,
         embed_fn: Callable[[list[str]], list[list[float]]],
         batch_size: int = 100,
-        grpc_port: int = 50051,
     ) -> None:
-        super().__init__(host, port, embed_fn, batch_size)
-        # MUST include grpc_port — Weaviate Docker exposes both HTTP and gRPC ports (Pitfall 3)
-        self._client = weaviate.connect_to_local(
-            host=host,
-            port=port,
-            grpc_port=grpc_port,
-        )
+        super().__init__(embed_fn, batch_size)
+        self._client = client
         self._ensure_schema()
 
     def _ensure_schema(self) -> None:
-        """Create Weaviate classes if they don't exist (idempotent)."""
-        if not self._client.collections.exists("Talk"):
-            self._client.collections.create(
-                name="Talk",
-                vector_config=wvc.config.Configure.Vectors.self_provided(),
-                properties=self._talk_properties(),
-            )
-        if not self._client.collections.exists("Paragraph"):
-            self._client.collections.create(
-                name="Paragraph",
-                vector_config=wvc.config.Configure.Vectors.self_provided(),
-                properties=self._paragraph_properties(),
-            )
-        if not self._client.collections.exists("Citation"):
-            self._client.collections.create(
-                name="Citation",
-                vector_config=wvc.config.Configure.Vectors.self_provided(),
-                properties=self._citation_properties(),
-            )
-        if not self._client.collections.exists("Footnote"):
-            self._client.collections.create(
-                name="Footnote",
-                vector_config=wvc.config.Configure.Vectors.self_provided(),
-                properties=self._footnote_properties(),
-            )
+        """Create Weaviate collections if they don't exist (idempotent)."""
+        props_map = {
+            "talks": self._talk_properties(),
+            "paragraphs": self._paragraph_properties(),
+            "citations": self._citation_properties(),
+            "footnotes": self._footnote_properties(),
+        }
+        for key, name in WEAVIATE_COLLECTION_NAMES.items():
+            if not self._client.collections.exists(name):
+                self._client.collections.create(
+                    name=name,
+                    vector_config=wvc.config.Configure.Vectors.self_provided(),
+                    properties=props_map[key],
+                )
 
     def _talk_properties(self) -> list:
-        """Property schema for Talk class — covers all TalkMetadata fields."""
+        """Property schema for talks collection — covers all TalkMetadata fields."""
         return [
             Property(name="talk_id", data_type=DataType.INT),
             Property(name="speaker_id", data_type=DataType.INT),
@@ -132,11 +104,11 @@ class WeaviateLoader(BaseLoader):
             Property(name="extraction_timestamp", data_type=DataType.TEXT),
             Property(name="extraction_version", data_type=DataType.TEXT),
             Property(name="annotations", data_type=DataType.TEXT),
-            Property(name="doc_id_str",  data_type=DataType.TEXT),
+            Property(name="doc_id_str", data_type=DataType.TEXT),
         ]
 
     def _paragraph_properties(self) -> list:
-        """Property schema for Paragraph class — covers all ParagraphData fields."""
+        """Property schema for paragraphs collection — covers all ParagraphData fields."""
         return [
             Property(name="paragraph_id", data_type=DataType.INT),
             Property(name="talk_id", data_type=DataType.INT),
@@ -152,16 +124,15 @@ class WeaviateLoader(BaseLoader):
             Property(name="has_footnote", data_type=DataType.BOOL),
             Property(name="citation_count", data_type=DataType.INT),
             Property(name="footnote_count", data_type=DataType.INT),
-            # Injected by prepare_paragraph_records when talk_metadata is provided
             Property(name="speaker_name", data_type=DataType.TEXT),
             Property(name="title", data_type=DataType.TEXT),
             Property(name="conference_year", data_type=DataType.INT),
             Property(name="conference_month", data_type=DataType.TEXT),
-            Property(name="doc_id_str",       data_type=DataType.TEXT),
+            Property(name="doc_id_str", data_type=DataType.TEXT),
         ]
 
     def _citation_properties(self) -> list:
-        """Property schema for Citation class — covers all CitationData fields."""
+        """Property schema for citations collection — covers all CitationData fields."""
         return [
             Property(name="citation_id", data_type=DataType.INT),
             Property(name="talk_id", data_type=DataType.INT),
@@ -188,11 +159,11 @@ class WeaviateLoader(BaseLoader):
             Property(name="context_before", data_type=DataType.TEXT),
             Property(name="context_after", data_type=DataType.TEXT),
             Property(name="context_window", data_type=DataType.TEXT),
-            Property(name="doc_id_str",     data_type=DataType.TEXT),
+            Property(name="doc_id_str", data_type=DataType.TEXT),
         ]
 
     def _footnote_properties(self) -> list:
-        """Property schema for Footnote class — covers all FootnoteData fields."""
+        """Property schema for footnotes collection — covers all FootnoteData fields."""
         return [
             Property(name="footnote_id", data_type=DataType.INT),
             Property(name="talk_id", data_type=DataType.INT),
@@ -205,33 +176,20 @@ class WeaviateLoader(BaseLoader):
             Property(name="context_after", data_type=DataType.TEXT),
             Property(name="context_window", data_type=DataType.TEXT),
             Property(name="parse_success", data_type=DataType.BOOL),
-            Property(name="doc_id_str",    data_type=DataType.TEXT),
+            Property(name="doc_id_str", data_type=DataType.TEXT),
         ]
 
     def load(self, bundle: TalkBundle) -> None:
         """
-        Load a single talk bundle into Weaviate across all 4 classes.
+        Load a single talk bundle into Weaviate across all 4 collections.
 
-        Calls prepare_talk_bundle_rich() to get (doc, meta, id, vector) tuples,
+        Calls prepare_talk_bundle() to get (doc, meta, id, vector) tuples,
         then insert_many for each collection. Errors are logged as WARNING
-        (D-03, D-04) and execution continues to the next collection.
-
-        The rich bundle uses rich_metadata() so list fields (topics, verse_list)
-        are preserved as native Python lists for Weaviate's TEXT_ARRAY / INT_ARRAY.
+        and execution continues to the next collection.
         """
-        # Map from shared_transforms dict key -> Weaviate class name
-        # Uses self.COLLECTIONS so subclasses (e.g. ProductionWeaviateLoader) can
-        # override collection names without re-implementing load(). Order matches
-        # COLLECTIONS: [talks, paragraphs, citations, footnotes].
-        collection_map = {
-            "talks": self.COLLECTIONS[0],
-            "paragraphs": self.COLLECTIONS[1],
-            "citations": self.COLLECTIONS[2],
-            "footnotes": self.COLLECTIONS[3],
-        }
-        records = prepare_talk_bundle_rich(*bundle, embed_fn=self.embed_fn)
+        records = prepare_talk_bundle(*bundle, embed_fn=self.embed_fn)
 
-        for key, class_name in collection_map.items():
+        for key, class_name in WEAVIATE_COLLECTION_NAMES.items():
             col = self._client.collections.use(class_name)
             objects = [
                 DataObject(
@@ -259,11 +217,9 @@ class WeaviateLoader(BaseLoader):
                     class_name,
                     e,
                 )
-                # continue to next collection — never crash a talk load (D-04)
 
     def talk_exists(self, talk_id: int) -> bool:
-        from weaviate.util import generate_uuid5
-        col = self._client.collections.use("ConferenceTalks")
+        col = self._client.collections.use(WEAVIATE_COLLECTION_NAMES["talks"])
         obj = col.query.fetch_object_by_id(generate_uuid5(f"talk_{talk_id}"))
         return obj is not None
 
@@ -278,35 +234,22 @@ class WeaviateLoader(BaseLoader):
         Query a Weaviate collection and return the top-k document IDs.
 
         Args:
-            collection: Collection name in snake_case (e.g. "paragraphs").
-                        Mapped to PascalCase Weaviate class name internally.
+            collection: snake_case key ("talks", "paragraphs", etc.) or the actual
+                        collection name ("ConferenceTalks", etc.).
             query_text: Query string to embed and search.
             k:          Number of results to return.
-            filter:     Optional filter dict (e.g. {"book_name": "John"}).
-                        Translated to a Weaviate Filter object.
-
-        Returns:
-            list[str] of document IDs (from the "doc_id_str" metadata field,
-            falls back to UUID string if not present).
+            filter:     Optional filter dict (e.g. {"book": "John"}).
         """
-        # Map snake_case collection name to PascalCase Weaviate class
         name_map = {
-            "talks": "Talk",
-            "paragraphs": "Paragraph",
-            "citations": "Citation",
-            "footnotes": "Footnote",
-            # Accept PascalCase directly too
-            "Talk": "Talk",
-            "Paragraph": "Paragraph",
-            "Citation": "Citation",
-            "Footnote": "Footnote",
+            **WEAVIATE_COLLECTION_NAMES,
+            **{v: v for v in WEAVIATE_COLLECTION_NAMES.values()},
         }
         class_name = name_map.get(collection, collection)
-        if class_name not in ["Talk", "Paragraph", "Citation", "Footnote"]:
+        if class_name not in WEAVIATE_COLLECTION_NAMES.values():
             raise ValueError(
                 f"Unknown collection: {collection!r}. "
-                "Must be one of: talks, paragraphs, citations, footnotes, "
-                "Talk, Paragraph, Citation, Footnote"
+                f"Must be one of: {list(WEAVIATE_COLLECTION_NAMES.keys())} or "
+                f"{list(WEAVIATE_COLLECTION_NAMES.values())}"
             )
         col = self._client.collections.use(class_name)
         query_embedding = self.embed_fn([query_text])[0]
@@ -315,7 +258,6 @@ class WeaviateLoader(BaseLoader):
 
         kwargs: dict = {"near_vector": query_embedding, "limit": k, "target_vector": "default"}
         if filter is not None:
-            # Build a simple equality filter for each key-value pair
             conditions = [Filter.by_property(prop).equal(v) for prop, v in filter.items()]
             if len(conditions) == 1:
                 kwargs["filters"] = conditions[0]
@@ -336,24 +278,24 @@ class WeaviateLoader(BaseLoader):
         return False
 
     def close(self) -> None:
-        """Close the Weaviate client and release the gRPC connection (Pitfall 1)."""
+        """Close the Weaviate client and release the gRPC connection."""
         self._client.close()
 
-    @classmethod
-    def reset(cls, host: str, port: int, grpc_port: int = 50051) -> None:
-        """Delete all 4 Weaviate classes (Talk, Paragraph, Citation, Footnote) per D-02.
+    @staticmethod
+    def reset(host: str, port: int, grpc_port: int = 50051) -> None:
+        """Delete all Weaviate collections defined in WEAVIATE_COLLECTION_NAMES.
 
         Swallows NotFound — safe to call on a fresh stack.
         Caller must instantiate a new WeaviateLoader after this returns.
         """
         client = weaviate.connect_to_local(host=host, port=port, grpc_port=grpc_port)
         try:
-            for class_name in cls.COLLECTIONS:
+            for name in WEAVIATE_COLLECTION_NAMES.values():
                 try:
-                    client.collections.delete(class_name)
-                    logger.info("Weaviate: deleted collection %r", class_name)
+                    client.collections.delete(name)
+                    logger.info("Weaviate: deleted collection %r", name)
                 except Exception as e:
-                    logger.debug("Weaviate: delete(%r) skipped: %s", class_name, e)
+                    logger.debug("Weaviate: delete(%r) skipped: %s", name, e)
         finally:
             try:
                 client.close()

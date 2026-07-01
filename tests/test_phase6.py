@@ -1,5 +1,5 @@
 """
-Unit tests for Phase 6: Weaviate Loader (extractors/phase6_weaviate_loader.py).
+Unit tests for Phase 6: Weaviate Loader (loaders/weaviate_loader.py).
 
 Integration tests use weaviate.connect_to_embedded() when available (Linux/macOS CI).
 On Windows (where embedded Weaviate is not supported), integration tests use a
@@ -24,10 +24,9 @@ from models.paragraph_data import ParagraphData, TalkParagraphs
 from models.citation_data import CitationData, TalkCitations
 from models.footnote_data import FootnoteData, TalkFootnotes
 from models.validation_report import ValidationReport
-from extractors.phase6_weaviate_loader import (
-    load_talk_bundles, TalkBundle, generate_verification_report, ProductionWeaviateLoader
-)
+from loaders.shared_transforms import load_talk_bundles, TalkBundle
 from loaders.weaviate_loader import WeaviateLoader
+from config.pipeline_config import WEAVIATE_COLLECTION_NAMES
 
 # Embedded Weaviate is only supported on Linux/macOS (not Windows).
 # See: https://github.com/weaviate/weaviate/issues/3315
@@ -259,17 +258,15 @@ def weaviate_client():
 
 @pytest.fixture(scope="session")
 def weaviate_loader(weaviate_client):
-    """Session-scoped ProductionWeaviateLoader.
+    """Session-scoped WeaviateLoader.
 
     On Linux/macOS: connects to embedded Weaviate (ports 8079 HTTP, 50050 gRPC).
     On Windows: returns a MagicMock loader that exercises load_talk_bundles logic
     without requiring a real Weaviate instance.
     """
     if EMBEDDED_AVAILABLE:
-        loader = ProductionWeaviateLoader(
-            host="127.0.0.1",
-            port=8079,
-            grpc_port=50050,
+        loader = WeaviateLoader(
+            client=weaviate_client,
             embed_fn=_mock_embed_fn,
         )
         yield loader
@@ -281,8 +278,8 @@ def weaviate_loader(weaviate_client):
 
 
 def _build_mock_loader():
-    """Build a MagicMock ProductionWeaviateLoader for Windows testing."""
-    mock_loader = MagicMock(spec=ProductionWeaviateLoader)
+    """Build a MagicMock WeaviateLoader for Windows testing."""
+    mock_loader = MagicMock(spec=WeaviateLoader)
     _inserted = set()
 
     def _load(bundle):
@@ -308,7 +305,7 @@ def reset_between_tests(weaviate_loader):
     # On Linux/macOS with real Weaviate: uses _client directly.
     # On Windows with mock loader: reset mock state.
     if EMBEDDED_AVAILABLE:
-        for col_name in ProductionWeaviateLoader.COLLECTIONS:
+        for col_name in WEAVIATE_COLLECTION_NAMES.values():
             try:
                 col = weaviate_loader._client.collections.use(col_name)
                 result = col.query.fetch_objects(limit=10000)
@@ -387,20 +384,16 @@ class TestTalkExists:
 
 
 class TestCollectionNames:
-    def test_collections_list_is_pascal_case(self):
-        assert ProductionWeaviateLoader.COLLECTIONS == [
-            "ConferenceTalks",
-            "ConferenceTalkParagraphs",
-            "ConferenceTalkCitations",
-            "ConferenceTalkFootnotes",
-        ]
+    def test_weaviate_collection_names_keys(self):
+        assert set(WEAVIATE_COLLECTION_NAMES.keys()) == {"talks", "paragraphs", "citations", "footnotes"}
 
-    def test_benchmark_loader_unchanged(self):
-        assert WeaviateLoader.COLLECTIONS == [
-            "Talk", "Paragraph", "Citation", "Footnote"
-        ]
+    def test_weaviate_collection_names_values_are_pascal_case(self):
+        assert WEAVIATE_COLLECTION_NAMES["talks"] == "ConferenceTalks"
+        assert WEAVIATE_COLLECTION_NAMES["paragraphs"] == "ConferenceTalkParagraphs"
+        assert WEAVIATE_COLLECTION_NAMES["citations"] == "ConferenceTalkCitations"
+        assert WEAVIATE_COLLECTION_NAMES["footnotes"] == "ConferenceTalkFootnotes"
 
     @pytest.mark.skipif(not EMBEDDED_AVAILABLE, reason="weaviate-embedded not supported on Windows")
     def test_ensure_schema_creates_pascal_case_collections(self, weaviate_client):
-        for name in ProductionWeaviateLoader.COLLECTIONS:
+        for name in WEAVIATE_COLLECTION_NAMES.values():
             assert weaviate_client.collections.exists(name), f"Collection {name} not found"

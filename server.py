@@ -67,6 +67,7 @@ from weaviate.classes.query import Filter
 from weaviate.util import generate_uuid5
 
 from config.weaviate_client import get_weaviate_client
+from config.pipeline_config import WEAVIATE_COLLECTION_NAMES
 from config.ollama import resolve_ollama_url, get_embedding_function
 
 # ---------------------------------------------------------------------------
@@ -126,8 +127,7 @@ def _check_ollama() -> None:
 
 def _validate_collections(client: weaviate.WeaviateClient) -> None:
     """Validate all 4 Weaviate collections are present and non-empty. Calls sys.exit(1) on any failure."""
-    for name in ["ConferenceTalks", "ConferenceTalkParagraphs",
-                 "ConferenceTalkCitations", "ConferenceTalkFootnotes"]:
+    for name in WEAVIATE_COLLECTION_NAMES.values():
         if not client.collections.exists(name):
             print(
                 f"ERROR: Weaviate collection '{name}' not found. Run the pipeline first.",
@@ -336,12 +336,7 @@ async def search(
     """
     app: AppContext = ctx.lifespan_context["app"]
 
-    collection_map = {
-        "talks": "ConferenceTalks",
-        "paragraphs": "ConferenceTalkParagraphs",
-        "citations": "ConferenceTalkCitations",
-        "footnotes": "ConferenceTalkFootnotes",
-    }
+    collection_map = WEAVIATE_COLLECTION_NAMES
     col_name = collection_map.get(collection)
     if col_name is None:
         return f"Unknown collection '{collection}'. Valid: talks, paragraphs, citations, footnotes."
@@ -393,7 +388,7 @@ async def get_talk(
     if talk_num is None:
         return f"Invalid talk_id format '{talk_id}'. Expected format: 'talk_8820' or '8820'."
 
-    talks_col = app.client.collections.use("ConferenceTalks")
+    talks_col = app.client.collections.use(WEAVIATE_COLLECTION_NAMES["talks"])
     talk_obj = talks_col.query.fetch_object_by_id(generate_uuid5(f"talk_{talk_num}"))
     if talk_obj is None:
         return f"No talk found with ID '{talk_id}'."
@@ -406,7 +401,7 @@ async def get_talk(
         f"Session: {tm.get('session_description', '')}"
     )
 
-    paras_col = app.client.collections.use("ConferenceTalkParagraphs")
+    paras_col = app.client.collections.use(WEAVIATE_COLLECTION_NAMES["paragraphs"])
     para_result = paras_col.query.fetch_objects(
         filters=Filter.by_property("talk_id").equal(talk_num),
         limit=10000,

@@ -1,9 +1,9 @@
 """
 Unit tests for loaders/shared_transforms.py.
 
-Tests flatten_metadata, rich_metadata, prepare_talk_record, prepare_paragraph_records,
+Tests rich_metadata, prepare_talk_record, prepare_paragraph_records,
 prepare_citation_records, prepare_footnote_records, and prepare_talk_bundle.
-Imports from loaders.shared_transforms (public API), not from extractors.phase6_chromadb_loader.
+Imports from loaders.shared_transforms (public API).
 """
 
 import sys
@@ -18,7 +18,6 @@ from models.citation_data import CitationData, TalkCitations
 from models.footnote_data import FootnoteData, TalkFootnotes
 from models.validation_report import ValidationReport
 from loaders.shared_transforms import (
-    flatten_metadata,
     rich_metadata,
     prepare_talk_record,
     prepare_paragraph_records,
@@ -157,58 +156,6 @@ def make_validation_report(is_valid=True) -> ValidationReport:
         warnings=[],
         stats={},
     )
-
-
-# =============================================================================
-# Tests: flatten_metadata
-# =============================================================================
-
-
-class TestFlattenMetadata:
-    def test_removes_none_values(self):
-        """None values are dropped from the output dict."""
-        meta = {"a": 1, "b": None}
-        result = flatten_metadata(meta)
-        assert "b" not in result
-        assert result["a"] == 1
-
-    def test_removes_empty_lists(self):
-        """Empty list values are dropped from the output dict."""
-        meta = {"a": []}
-        result = flatten_metadata(meta)
-        assert "a" not in result
-
-    def test_joins_int_list_with_comma(self):
-        """A list of ints is joined with commas."""
-        meta = {"b": [1, 2]}
-        result = flatten_metadata(meta)
-        assert result["b"] == "1,2"
-
-    def test_joins_str_list_with_pipe(self):
-        """A list of strings is joined with pipes."""
-        meta = {"c": ["x", "y"]}
-        result = flatten_metadata(meta)
-        assert result["c"] == "x|y"
-
-    def test_spec_acceptance_criterion(self):
-        """SPEC Req 2 acceptance criterion: mixed dict flattened correctly."""
-        meta = {"a": None, "b": [1, 2], "c": ["x", "y"]}
-        result = flatten_metadata(meta)
-        assert result == {"b": "1,2", "c": "x|y"}
-
-    def test_preserves_scalar_values(self):
-        """Scalar int, float, bool, str values are passed through unchanged."""
-        meta = {"talk_id": 8820, "score": 0.95, "is_valid": True, "title": "Test"}
-        result = flatten_metadata(meta)
-        assert result["talk_id"] == 8820
-        assert result["score"] == 0.95
-        assert result["is_valid"] is True
-        assert result["title"] == "Test"
-
-    def test_empty_dict_returns_empty_dict(self):
-        """Empty input produces empty output."""
-        result = flatten_metadata({})
-        assert result == {}
 
 
 # =============================================================================
@@ -450,13 +397,13 @@ class TestPrepareCitationRecords:
         doc, meta, doc_id, _ = records[0]
         assert doc_id == "cite_42_88200003"
 
-    def test_verse_list_flattened(self):
-        """verse_list is comma-joined in metadata."""
+    def test_verse_list_preserved_as_list(self):
+        """verse_list is preserved as a native list in metadata."""
         c = make_citation(verse_list=[32, 33, 44])
         talk_cites = make_talk_citations([c])
         records = prepare_citation_records(talk_cites)
         doc, meta, doc_id, _ = records[0]
-        assert meta["verse_list"] == "32,33,44"
+        assert meta["verse_list"] == [32, 33, 44]
 
 
 # =============================================================================

@@ -25,7 +25,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, PayloadSchemaType
 from loaders import BaseLoader
-from loaders.shared_transforms import TalkBundle, prepare_talk_bundle_rich
+from loaders.shared_transforms import TalkBundle, prepare_talk_bundle
 
 logger = logging.getLogger(__name__)
 
@@ -64,13 +64,12 @@ class QdrantLoader(BaseLoader):
 
     def __init__(
         self,
-        host: str,
-        port: int,
+        client: QdrantClient,
         embed_fn: Callable[[list[str]], list[list[float]]],
         batch_size: int = 100,
     ) -> None:
-        super().__init__(host, port, embed_fn, batch_size)
-        self._client = QdrantClient(host=host, port=port)
+        super().__init__(embed_fn, batch_size)
+        self._client = client
         self._ensure_collections()
 
     def _ensure_collections(self) -> None:
@@ -101,12 +100,12 @@ class QdrantLoader(BaseLoader):
         """
         Load a single talk bundle into Qdrant across all 4 collections.
 
-        Calls prepare_talk_bundle_rich() to get (doc, meta, id, vector) tuples.
+        Calls prepare_talk_bundle() to get (doc, meta, id, vector) tuples.
         For each record, derives a uint64 point ID from the string doc_id and
         stores the original string in payload["_doc_id"]. Errors per record are
-        logged as WARNING and the record is skipped (D-07).
+        logged as WARNING and the record is skipped.
         """
-        records = prepare_talk_bundle_rich(*bundle, embed_fn=self.embed_fn)
+        records = prepare_talk_bundle(*bundle, embed_fn=self.embed_fn)
 
         for coll_name in self.COLLECTIONS:
             for batch in _chunks(records[coll_name], self.batch_size):

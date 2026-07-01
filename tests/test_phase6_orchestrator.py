@@ -5,9 +5,7 @@ Unit tests for Phase 6 orchestrator: scripts/run_pipeline.py
 All tests mock external dependencies (DB, Weaviate, extractors) using
 unittest.mock.patch so no real database or Weaviate is needed.
 
-Minimal patch from Phase 24-05 (D-20): replaced legacy ChromaDB patches with
-ProductionWeaviateLoader context manager mocks. Replaced batch size constant patches
-with WEAVIATE_BATCH_SIZE. Preserved all existing test logic.
+Patches WeaviateLoader and get_weaviate_client so no real Weaviate instance is needed.
 """
 
 import json
@@ -52,7 +50,7 @@ def _make_validation(is_valid=True):
 
 
 def _make_weaviate_loader_mock(talk_exists_return=False):
-    """Build a mock ProductionWeaviateLoader context manager."""
+    """Build a mock WeaviateLoader context manager."""
     mock_loader = MagicMock()
     mock_loader.__enter__ = MagicMock(return_value=mock_loader)
     mock_loader.__exit__ = MagicMock(return_value=False)
@@ -97,7 +95,8 @@ def test_full_loop_calls_all_phases():
     with (
         patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[1, 2]),
         patch.object(run_pipeline, "fetch_all_books", return_value={}),
-        patch.object(run_pipeline, "ProductionWeaviateLoader", return_value=mock_loader),
+        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
+        patch.object(run_pipeline, "WeaviateLoader", return_value=mock_loader),
         patch.object(run_pipeline, "get_embedding_function", return_value=None),
         patch.object(run_pipeline, "process_talk_pipeline", return_value=mock_pipeline_result) as mock_pipeline,
         patch.object(run_pipeline, "validate_talk", return_value=mock_validation) as mock_validate,
@@ -135,7 +134,8 @@ def test_resume_skips_processed():
     with (
         patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[1, 2]),
         patch.object(run_pipeline, "fetch_all_books", return_value={}),
-        patch.object(run_pipeline, "ProductionWeaviateLoader", return_value=mock_loader),
+        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
+        patch.object(run_pipeline, "WeaviateLoader", return_value=mock_loader),
         patch.object(run_pipeline, "get_embedding_function", return_value=None),
         patch.object(run_pipeline, "process_talk_pipeline", return_value=mock_pipeline_result) as mock_pipeline,
         patch.object(run_pipeline, "validate_talk", return_value=mock_validation),
@@ -188,7 +188,8 @@ def test_failed_talk_logged_on_exception():
     with (
         patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[42]),
         patch.object(run_pipeline, "fetch_all_books", return_value={}),
-        patch.object(run_pipeline, "ProductionWeaviateLoader", return_value=mock_loader),
+        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
+        patch.object(run_pipeline, "WeaviateLoader", return_value=mock_loader),
         patch.object(run_pipeline, "get_embedding_function", return_value=None),
         patch.object(run_pipeline, "process_talk_pipeline", side_effect=RuntimeError("boom")),
         patch.object(run_pipeline, "load_talk_bundles", return_value={}),
@@ -219,7 +220,8 @@ def test_validation_failure_skips_talk():
     with (
         patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[7]),
         patch.object(run_pipeline, "fetch_all_books", return_value={}),
-        patch.object(run_pipeline, "ProductionWeaviateLoader", return_value=mock_loader),
+        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
+        patch.object(run_pipeline, "WeaviateLoader", return_value=mock_loader),
         patch.object(run_pipeline, "get_embedding_function", return_value=None),
         patch.object(run_pipeline, "process_talk_pipeline", return_value=mock_pipeline_result),
         patch.object(run_pipeline, "validate_talk", return_value=mock_validation),
@@ -256,7 +258,8 @@ def test_final_summary_printed(capsys):
     with (
         patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[1]),
         patch.object(run_pipeline, "fetch_all_books", return_value={}),
-        patch.object(run_pipeline, "ProductionWeaviateLoader", return_value=mock_loader),
+        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
+        patch.object(run_pipeline, "WeaviateLoader", return_value=mock_loader),
         patch.object(run_pipeline, "get_embedding_function", return_value=None),
         patch.object(run_pipeline, "process_talk_pipeline", return_value=mock_pipeline_result),
         patch.object(run_pipeline, "validate_talk", return_value=mock_validation),
@@ -295,7 +298,8 @@ def test_skip_mode_default():
     with (
         patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[1, 2, 3]),
         patch.object(run_pipeline, "fetch_all_books", return_value={}),
-        patch.object(run_pipeline, "ProductionWeaviateLoader", return_value=mock_loader),
+        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
+        patch.object(run_pipeline, "WeaviateLoader", return_value=mock_loader),
         patch.object(run_pipeline, "get_embedding_function", return_value=None),
         patch.object(run_pipeline, "process_talk_pipeline", return_value=mock_pipeline_result) as mock_pipeline,
         patch.object(run_pipeline, "validate_talk", return_value=mock_validation),
@@ -328,7 +332,8 @@ def test_force_flag_reprocesses():
     with (
         patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[1, 2]),
         patch.object(run_pipeline, "fetch_all_books", return_value={}),
-        patch.object(run_pipeline, "ProductionWeaviateLoader", return_value=mock_loader),
+        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
+        patch.object(run_pipeline, "WeaviateLoader", return_value=mock_loader),
         patch.object(run_pipeline, "get_embedding_function", return_value=None),
         patch.object(run_pipeline, "process_talk_pipeline", side_effect=pipeline_side_effect) as mock_pipeline,
         patch.object(run_pipeline, "validate_talk", return_value=mock_validation),
@@ -370,7 +375,8 @@ def test_buffer_flush_at_batch_size():
         patch.object(run_pipeline, "WEAVIATE_BATCH_SIZE", 2),
         patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[1, 2, 3]),
         patch.object(run_pipeline, "fetch_all_books", return_value={}),
-        patch.object(run_pipeline, "ProductionWeaviateLoader", return_value=mock_loader),
+        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
+        patch.object(run_pipeline, "WeaviateLoader", return_value=mock_loader),
         patch.object(run_pipeline, "get_embedding_function", return_value=None),
         patch.object(run_pipeline, "process_talk_pipeline", side_effect=pipeline_side_effect),
         patch.object(run_pipeline, "validate_talk", return_value=mock_validation),
@@ -410,7 +416,8 @@ def test_final_flush_on_remaining():
         patch.object(run_pipeline, "WEAVIATE_BATCH_SIZE", 100),
         patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[1, 2]),
         patch.object(run_pipeline, "fetch_all_books", return_value={}),
-        patch.object(run_pipeline, "ProductionWeaviateLoader", return_value=mock_loader),
+        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
+        patch.object(run_pipeline, "WeaviateLoader", return_value=mock_loader),
         patch.object(run_pipeline, "get_embedding_function", return_value=None),
         patch.object(run_pipeline, "process_talk_pipeline", side_effect=pipeline_side_effect),
         patch.object(run_pipeline, "validate_talk", return_value=mock_validation),
