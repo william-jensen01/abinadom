@@ -222,6 +222,35 @@ class TestFormatSearchResult:
         result = _format_search_result("Some paragraph text", self._FULL_META)
         assert result["talk_id"] == "talk_8820"
 
+    def test_relevance_and_score_type_added_when_passed(self):
+        """relevance and score_type appear in result when passed; distance is absent."""
+        from server import _format_search_result
+
+        result = _format_search_result("text", self._FULL_META, relevance=0.9, score_type="bm25")
+        assert result["relevance"] == 0.9
+        assert result["score_type"] == "bm25"
+        assert "distance" not in result
+
+    def test_distance_added_when_passed(self):
+        """distance appears in result only when explicitly passed."""
+        from server import _format_search_result
+
+        result = _format_search_result(
+            "text", self._FULL_META,
+            relevance=0.9, score_type="vector_certainty", distance=0.1,
+        )
+        assert "distance" in result
+        assert result["distance"] == 0.1
+
+    def test_no_optional_fields_without_args(self):
+        """Without optional keyword args, result has exactly the 6 base fields."""
+        from server import _format_search_result
+
+        result = _format_search_result("text", self._FULL_META)
+        assert "relevance" not in result
+        assert "score_type" not in result
+        assert "distance" not in result
+
 
 # ---------------------------------------------------------------------------
 # TOOL-04: _parse_talk_id
@@ -276,16 +305,24 @@ def _make_search_col(properties_list):
     """
     Build a mock Weaviate collection for search tool tests.
 
-    Returns a mock collection where:
-      col.query.near_vector(...).objects is a list of MagicMocks each with .properties = properties_dict
+    Returns a mock collection where query.hybrid/bm25/near_vector/fetch_objects all
+    return objects from properties_list, each with a .metadata stub carrying
+    score=0.9, distance=0.1, and certainty=0.9 attributes.
     """
     mock_col = MagicMock()
     mock_objects = []
     for props in properties_list:
         obj = MagicMock()
         obj.properties = props
+        obj.metadata = MagicMock()
+        obj.metadata.score = 0.9
+        obj.metadata.distance = 0.1
+        obj.metadata.certainty = 0.9
         mock_objects.append(obj)
+    mock_col.query.hybrid.return_value.objects = mock_objects
+    mock_col.query.bm25.return_value.objects = mock_objects
     mock_col.query.near_vector.return_value.objects = mock_objects
+    mock_col.query.fetch_objects.return_value.objects = mock_objects
     return mock_col
 
 
@@ -318,7 +355,7 @@ class TestSearchTool:
         return ctx, mock_col
 
     def test_search_basic_query(self):
-        """search calls near_vector with correct args and returns JSON with 6-field results."""
+        """search with default alpha=0.7 calls hybrid and returns JSON with search_mode + results."""
         from server import search
 
         ctx, mock_col = self._make_ctx_with_col()
@@ -331,16 +368,21 @@ class TestSearchTool:
 
         parsed = json.loads(result)
 
-        assert len(parsed) == 1
-        assert set(parsed[0].keys()) == {
-            "snippet",
-            "speaker_name",
-            "title",
-            "conference_year",
-            "conference_month",
-            "talk_id",
-        }
-        assert "paragraph_id" not in parsed[0]
+        # Default alpha=0.7 → hybrid mode
+        assert parsed["search_mode"] == "hybrid"
+        assert "results" in parsed
+        assert len(parsed["results"]) == 1
+
+        result_item = parsed["results"][0]
+        assert "snippet" in result_item
+        assert "speaker_name" in result_item
+        assert "talk_id" in result_item
+        assert "paragraph_id" not in result_item
+        assert result_item["score_type"] == "hybrid_fusion"
+
+        mock_col.query.hybrid.assert_called_once()
+        call_kwargs = mock_col.query.hybrid.call_args.kwargs
+        assert "alpha" in call_kwargs
 
     def test_search_empty_results(self):
         """search with no matching results returns 'No results found.'"""
@@ -348,6 +390,8 @@ class TestSearchTool:
 
         ctx, mock_client = _make_mock_ctx()
         mock_col = MagicMock()
+        mock_col.query.hybrid.return_value.objects = []
+        mock_col.query.bm25.return_value.objects = []
         mock_col.query.near_vector.return_value.objects = []
         mock_client.collections.use.return_value = mock_col
 
@@ -360,7 +404,7 @@ class TestSearchTool:
         assert result == "No results found."
 
     def test_search_limit_clamped(self):
-        """limit > 20 is clamped to 20 when calling near_vector."""
+        """limit > 20 is clamped to 20 when calling hybrid (default alpha=0.7)."""
         from server import search
 
         ctx, mock_col_mock = self._make_ctx_with_col()
@@ -371,7 +415,7 @@ class TestSearchTool:
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             asyncio.run(search(query="test", limit=50, ctx=ctx))
 
-        call_kwargs = mock_col_mock.query.near_vector.call_args.kwargs
+        call_kwargs = mock_col_mock.query.hybrid.call_args.kwargs
         assert call_kwargs["limit"] == 20
 
     def test_search_invalid_collection(self):
@@ -384,7 +428,7 @@ class TestSearchTool:
         assert "Unknown collection" in result
 
     def test_search_year_season_filter(self):
-        """search with year=2020 and season='April' passes non-None filters to near_vector."""
+        """search with year=2020 and season='April' passes non-None filters to hybrid."""
         from server import search
 
         ctx, mock_col_mock = self._make_ctx_with_col()
@@ -395,11 +439,11 @@ class TestSearchTool:
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             asyncio.run(search(query="test", year=2020, season="April", ctx=ctx))
 
-        call_kwargs = mock_col_mock.query.near_vector.call_args.kwargs
+        call_kwargs = mock_col_mock.query.hybrid.call_args.kwargs
         assert call_kwargs.get("filters") is not None
 
     def test_search_speaker_filter_not_none(self):
-        """search with speaker param passes non-None filters to near_vector (native Weaviate filter)."""
+        """search with speaker param passes non-None filters to hybrid (native Weaviate filter)."""
         from server import search
 
         ctx, mock_col_mock = self._make_ctx_with_col()
@@ -410,8 +454,137 @@ class TestSearchTool:
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             asyncio.run(search(query="grace", speaker="Holland", ctx=ctx))
 
-        call_kwargs = mock_col_mock.query.near_vector.call_args.kwargs
+        call_kwargs = mock_col_mock.query.hybrid.call_args.kwargs
         assert call_kwargs.get("filters") is not None
+
+    # ------------------------------------------------------------------
+    # New tests — alpha paths, fallback, empty query, grouping
+    # ------------------------------------------------------------------
+
+    def test_search_alpha_1_uses_near_vector(self):
+        """alpha=1.0 uses near_vector and result includes distance + score_type='vector_certainty'."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            result = asyncio.run(search(query="test", alpha=1.0, ctx=ctx))
+
+        parsed = json.loads(result)
+        assert parsed["search_mode"] == "vector"
+        assert "results" in parsed
+        result_item = parsed["results"][0]
+        assert result_item["score_type"] == "vector_certainty"
+        assert "distance" in result_item
+        mock_col.query.near_vector.assert_called_once()
+
+    def test_search_alpha_0_uses_bm25(self):
+        """alpha=0.0 uses bm25 (no embedding needed) and search_mode is 'keyword'."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        # No embedding patches — bm25 path skips embedding entirely
+        result = asyncio.run(search(query="test", alpha=0.0, ctx=ctx))
+
+        parsed = json.loads(result)
+        assert parsed["search_mode"] == "keyword"
+        assert parsed["results"][0]["score_type"] == "bm25"
+        mock_col.query.bm25.assert_called_once()
+
+    def test_search_ollama_down_fallback(self):
+        """When Ollama embedding raises, search falls back to bm25 with search_mode 'keyword_only_ollama_unavailable'."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            # Embedding function raises on call
+            mock_gef.return_value = MagicMock(side_effect=Exception("ollama down"))
+            result = asyncio.run(search(query="test", ctx=ctx))  # default alpha=0.7 → needs embedding
+
+        parsed = json.loads(result)
+        assert parsed["search_mode"] == "keyword_only_ollama_unavailable"
+        mock_col.query.bm25.assert_called_once()
+
+    def test_search_empty_query_with_filter_browse(self):
+        """Empty/whitespace query with at least one filter uses fetch_objects and returns browse_filtered."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        result = asyncio.run(search(query="   ", year=2020, ctx=ctx))
+
+        parsed = json.loads(result)
+        assert parsed["search_mode"] == "browse_filtered"
+        assert "results" in parsed
+        mock_col.query.fetch_objects.assert_called_once()
+
+    def test_search_empty_query_no_filter_error(self):
+        """Empty query with no filters returns error string (no embed, no query)."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        result = asyncio.run(search(query="", ctx=ctx))
+
+        assert "Provide a query" in result
+
+    def test_search_group_by_talk_paragraphs(self):
+        """group_by_talk=True on paragraphs returns grouped output with 'groups' key."""
+        from server import search
+
+        ctx, mock_client = _make_mock_ctx()
+        mock_col = MagicMock()
+
+        mock_para = MagicMock()
+        mock_para.properties = {
+            "speaker_name": "A. Speaker",
+            "title": "A Talk",
+            "conference_year": 2020,
+            "conference_month": "April",
+            "talk_id": 1234,
+            "text": "Para text",
+        }
+        mock_para.metadata = MagicMock()
+        mock_para.metadata.score = 0.85
+
+        mock_group = MagicMock()
+        mock_group.belongs_to_group = 1234
+        mock_group.objects = [mock_para]
+
+        # Weaviate grouped results come from .groups (a list); .objects is empty
+        mock_col.query.hybrid.return_value.groups = [mock_group]
+        mock_col.query.hybrid.return_value.objects = []
+        mock_client.collections.use.return_value = mock_col
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            result = asyncio.run(search(query="test", group_by_talk=True, ctx=ctx))
+
+        parsed = json.loads(result)
+        assert "groups" in parsed
+        assert len(parsed["groups"]) == 1
+        assert parsed["groups"][0]["talk_id"] == "talk_1234"
+        assert "paragraphs" in parsed["groups"][0]
+        assert len(parsed["groups"][0]["paragraphs"]) == 1
+
+    def test_search_group_by_talk_wrong_collection(self):
+        """group_by_talk=True on a non-paragraphs collection returns an error string."""
+        from server import search
+
+        ctx, _ = _make_mock_ctx()
+
+        result = asyncio.run(search(query="test", collection="talks", group_by_talk=True, ctx=ctx))
+
+        assert "group_by_talk is only supported for the paragraphs collection" in result
 
 
 # ---------------------------------------------------------------------------
@@ -509,14 +682,14 @@ class TestGetTalkTool:
         assert "Second paragraph." in result
 
     def test_get_talk_paragraph_order(self):
-        """Paragraphs are sorted by paragraph_number ascending even when returned out of order."""
+        """Paragraphs are returned in Weaviate's ascending order — get_talk must NOT re-sort client-side."""
         from server import get_talk
 
-        # Supply paragraphs in REVERSE order: 3, 1, 2
+        # Weaviate is responsible for ordering; mock returns paragraphs already in ascending order.
         para_list = [
-            {"text": "Para three.", "paragraph_number": 3},
             {"text": "Para one.", "paragraph_number": 1},
             {"text": "Para two.", "paragraph_number": 2},
+            {"text": "Para three.", "paragraph_number": 3},
         ]
         ctx = self._make_ctx(para_list=para_list)
 
@@ -526,6 +699,11 @@ class TestGetTalkTool:
         pos_two = result.index("Para two.")
         pos_three = result.index("Para three.")
         assert pos_one < pos_two < pos_three
+
+        # Assert fetch_objects was called with sort= kwarg (ordering delegated to Weaviate)
+        paras_col = ctx.lifespan_context["app"].client.collections.use("ConferenceTalkParagraphs")
+        call_kwargs = paras_col.query.fetch_objects.call_args.kwargs
+        assert "sort" in call_kwargs
 
     def test_get_talk_not_found(self):
         """get_talk with nonexistent ID returns 'No talk found' error message."""
@@ -821,3 +999,301 @@ def test_fastapi_import_absent():
     import inspect, server
     source = inspect.getsource(server)
     assert "from fastapi" not in source, "FastAPI imports should be removed per D-09"
+
+
+# ---------------------------------------------------------------------------
+# Wave 2 Agent C: find_by_scripture tool
+# ---------------------------------------------------------------------------
+
+
+def _make_citation_col(citation_props_list):
+    """
+    Build a mock Weaviate citations collection for find_by_scripture tests.
+
+    citation_props_list: list of property dicts for citation objects.
+    """
+    mock_col = MagicMock()
+    mock_objects = []
+    for props in citation_props_list:
+        obj = MagicMock()
+        obj.properties = props
+        mock_objects.append(obj)
+    mock_col.query.fetch_objects.return_value.objects = mock_objects
+    return mock_col
+
+
+def _make_talks_fetch_col(talk_props_list):
+    """
+    Build a mock talks collection whose fetch_objects returns the given talks list.
+
+    Used by find_by_scripture's batched talk join (not fetch_object_by_id).
+    """
+    mock_col = MagicMock()
+    mock_objects = []
+    for props in talk_props_list:
+        obj = MagicMock()
+        obj.properties = props
+        mock_objects.append(obj)
+    mock_col.query.fetch_objects.return_value.objects = mock_objects
+    return mock_col
+
+
+class TestFindByScripture:
+    """Integration tests for the find_by_scripture MCP tool."""
+
+    _CITATION_PROPS = {
+        "talk_id": 8820,
+        "paragraph_number": 3,
+        "scripture_ref": "Romans 8:16",
+        "book": "Romans",
+        "book_abbr": "Rom.",
+        "chapter": 8,
+        "verses": "16",
+        "verse_start": 16,
+        "verse_end": 16,
+        "context_window": "The Spirit itself beareth witness...",
+    }
+
+    _TALK_PROPS = {
+        "talk_id": 8820,
+        "speaker_name": "Jeffrey R. Holland",
+        "title": "A Sure Foundation",
+        "conference_year": 2020,
+        "conference_month": "April",
+    }
+
+    def _make_ctx(self, citation_props_list, talk_props_list):
+        """
+        Build a mock ctx where:
+          - client.collections.use("ConferenceTalkCitations") -> citations_col
+          - client.collections.use("ConferenceTalks") -> talks_col
+        Uses side_effect keyed on collection name (same pattern as TestGetTalkTool).
+        """
+        ctx, mock_client = _make_mock_ctx()
+        citations_col = _make_citation_col(citation_props_list)
+        talks_col = _make_talks_fetch_col(talk_props_list)
+
+        def use_side_effect(name):
+            if name == "ConferenceTalkCitations":
+                return citations_col
+            elif name == "ConferenceTalks":
+                return talks_col
+            return MagicMock()
+
+        mock_client.collections.use.side_effect = use_side_effect
+        return ctx, citations_col, talks_col
+
+    def test_book_only_returns_joined_metadata(self):
+        """Book-only query returns JSON with joined speaker/title/year from talks collection."""
+        from server import find_by_scripture
+
+        ctx, _, _ = self._make_ctx(
+            citation_props_list=[self._CITATION_PROPS],
+            talk_props_list=[self._TALK_PROPS],
+        )
+
+        result = asyncio.run(find_by_scripture(book="romans", ctx=ctx))
+
+        parsed = json.loads(result)
+        assert len(parsed) == 1
+        item = parsed[0]
+        assert item["speaker_name"] == "Jeffrey R. Holland"
+        assert item["title"] == "A Sure Foundation"
+        assert item["conference_year"] == 2020
+        assert item["talk_id"] == "talk_8820"
+        assert item["scripture_ref"] == "Romans 8:16"
+        assert item["context_window"] == "The Spirit itself beareth witness..."
+
+    def test_book_and_chapter_filter_applied(self):
+        """book+chapter: fetch_objects is called with a non-None filter object."""
+        from server import find_by_scripture
+
+        ctx, citations_col, _ = self._make_ctx(
+            citation_props_list=[self._CITATION_PROPS],
+            talk_props_list=[self._TALK_PROPS],
+        )
+
+        asyncio.run(find_by_scripture(book="Romans", chapter=8, ctx=ctx))
+
+        call_kwargs = citations_col.query.fetch_objects.call_args.kwargs
+        assert call_kwargs.get("filters") is not None
+
+    def test_verse_overlap_filter_applied(self):
+        """verse_start + verse_end: fetch_objects receives a filter (overlap conditions ANDed)."""
+        from server import find_by_scripture
+
+        ctx, citations_col, _ = self._make_ctx(
+            citation_props_list=[self._CITATION_PROPS],
+            talk_props_list=[self._TALK_PROPS],
+        )
+
+        asyncio.run(
+            find_by_scripture(book="Romans", chapter=8, verse_start=14, verse_end=18, ctx=ctx)
+        )
+
+        call_kwargs = citations_col.query.fetch_objects.call_args.kwargs
+        assert call_kwargs.get("filters") is not None
+
+    def test_empty_result_returns_no_match_string(self):
+        """When no citations match, returns the canonical no-match string."""
+        from server import find_by_scripture
+
+        ctx, _, _ = self._make_ctx(
+            citation_props_list=[],   # empty — no hits
+            talk_props_list=[],
+        )
+
+        result = asyncio.run(find_by_scripture(book="Obadiah", ctx=ctx))
+
+        assert result == "No talks found citing that scripture."
+
+    def test_embedding_never_called(self):
+        """find_by_scripture must not call get_embedding_function (no Ollama dependency)."""
+        from server import find_by_scripture
+
+        ctx, _, _ = self._make_ctx(
+            citation_props_list=[self._CITATION_PROPS],
+            talk_props_list=[self._TALK_PROPS],
+        )
+
+        with patch("server.get_embedding_function") as mock_gef:
+            asyncio.run(find_by_scripture(book="Romans", ctx=ctx))
+            mock_gef.assert_not_called()
+
+    def test_book_normalization(self):
+        """Lowercase input is normalized to title-case before filtering."""
+        from server import _normalize_book
+
+        assert _normalize_book("romans") == "Romans"
+        assert _normalize_book("1 nephi") == "1 Nephi"
+        assert _normalize_book("  john  ") == "John"
+
+    def test_result_has_exactly_six_fields(self):
+        """Each result item has exactly the 6 expected public fields."""
+        from server import find_by_scripture
+
+        ctx, _, _ = self._make_ctx(
+            citation_props_list=[self._CITATION_PROPS],
+            talk_props_list=[self._TALK_PROPS],
+        )
+
+        result = asyncio.run(find_by_scripture(book="Romans", ctx=ctx))
+        parsed = json.loads(result)
+        assert set(parsed[0].keys()) == {
+            "speaker_name",
+            "title",
+            "conference_year",
+            "talk_id",
+            "scripture_ref",
+            "context_window",
+        }
+
+
+# ---------------------------------------------------------------------------
+# corpus_stats tool tests
+# ---------------------------------------------------------------------------
+
+
+class TestCorpusStats:
+    """Integration tests for the corpus_stats MCP tool."""
+
+    def test_no_group_by_returns_total(self):
+        """corpus_stats with no group_by returns JSON with collection and total count."""
+        from server import corpus_stats
+
+        ctx, mock_client = _make_mock_ctx()
+        agg_result = MagicMock()
+        agg_result.total_count = 5838
+        mock_client.collections.use.return_value.aggregate.over_all.return_value = agg_result
+
+        result = asyncio.run(corpus_stats(collection="talks", ctx=ctx))
+
+        parsed = json.loads(result)
+        assert parsed["collection"] == "talks"
+        assert parsed["total"] == 5838
+        assert "groups" not in parsed
+
+    def test_group_by_returns_sorted_groups(self):
+        """corpus_stats with group_by returns groups sorted by count descending."""
+        from server import corpus_stats
+
+        ctx, mock_client = _make_mock_ctx()
+
+        # Build unsorted groups: Nelson=10, Hinckley=50, Monson=30
+        group1 = MagicMock()
+        group1.grouped_by.value = "Russell M. Nelson"
+        group1.total_count = 10
+
+        group2 = MagicMock()
+        group2.grouped_by.value = "Gordon B. Hinckley"
+        group2.total_count = 50
+
+        group3 = MagicMock()
+        group3.grouped_by.value = "Thomas S. Monson"
+        group3.total_count = 30
+
+        agg_result = MagicMock()
+        agg_result.groups = [group1, group2, group3]  # unsorted
+        mock_client.collections.use.return_value.aggregate.over_all.return_value = agg_result
+
+        result = asyncio.run(corpus_stats(collection="talks", group_by="speaker_name", ctx=ctx))
+
+        parsed = json.loads(result)
+        assert parsed["collection"] == "talks"
+        assert parsed["group_by"] == "speaker_name"
+        groups = parsed["groups"]
+        # Must be sorted descending by count
+        assert groups[0] == {"value": "Gordon B. Hinckley", "count": 50}
+        assert groups[1] == {"value": "Thomas S. Monson", "count": 30}
+        assert groups[2] == {"value": "Russell M. Nelson", "count": 10}
+
+    def test_group_by_limit_caps_results(self):
+        """corpus_stats with group_by and limit caps the returned groups."""
+        from server import corpus_stats
+
+        ctx, mock_client = _make_mock_ctx()
+
+        # 5 groups, but limit=2
+        mock_groups = []
+        for i in range(5):
+            g = MagicMock()
+            g.grouped_by.value = f"Speaker {i}"
+            g.total_count = i * 10
+            mock_groups.append(g)
+
+        agg_result = MagicMock()
+        agg_result.groups = mock_groups
+        mock_client.collections.use.return_value.aggregate.over_all.return_value = agg_result
+
+        result = asyncio.run(corpus_stats(collection="talks", group_by="speaker_name", limit=2, ctx=ctx))
+
+        parsed = json.loads(result)
+        assert len(parsed["groups"]) == 2
+        # Top 2 should be the highest counts (40 and 30)
+        assert parsed["groups"][0]["count"] == 40
+        assert parsed["groups"][1]["count"] == 30
+
+    def test_unknown_collection_returns_error(self):
+        """corpus_stats with an unknown collection key returns the error string without querying Weaviate."""
+        from server import corpus_stats
+
+        ctx, mock_client = _make_mock_ctx()
+
+        result = asyncio.run(corpus_stats(collection="nonexistent", ctx=ctx))
+
+        assert result == "Unknown collection 'nonexistent'. Valid: talks, paragraphs, citations, footnotes."
+        # Weaviate must not have been called
+        mock_client.collections.use.assert_not_called()
+
+    def test_no_ollama_calls(self):
+        """corpus_stats must never call get_embedding_function (no embedding needed)."""
+        from server import corpus_stats
+
+        ctx, mock_client = _make_mock_ctx()
+        agg_result = MagicMock()
+        agg_result.total_count = 100
+        mock_client.collections.use.return_value.aggregate.over_all.return_value = agg_result
+
+        with patch("server.get_embedding_function") as mock_gef:
+            asyncio.run(corpus_stats(collection="paragraphs", ctx=ctx))
+            mock_gef.assert_not_called()
