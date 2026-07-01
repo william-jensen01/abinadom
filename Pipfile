@@ -11,7 +11,7 @@ html5lib = "*"
 ollama = "*"
 weaviate-client = "==4.20.5"
 tqdm = "*"
-fastmcp = "*"
+fastmcp = "==3.2.4"
 psutil = "*"
 
 [dev-packages]
