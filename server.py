@@ -63,7 +63,8 @@ import requests as http_requests
 from fastmcp import FastMCP, Context
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from weaviate.classes.query import Filter
+from weaviate.classes.query import Filter, MetadataQuery, GroupBy, Sort
+from weaviate.classes.aggregate import GroupByAggregate
 from weaviate.util import generate_uuid5
 
 from config.weaviate_client import get_weaviate_client
@@ -249,11 +250,20 @@ MCP_INSTRUCTIONS = (
     "LDS General Conference corpus: 5,838 talks (1971-present) across 4 collections "
     "- talks (full-talk metadata), paragraphs (passage text), citations (scripture "
     "references), footnotes. "
-    "Use search with collection='paragraphs' for passage text, 'talks' for talk "
-    "discovery, 'citations' for scripture references. "
     "Prefer database results over training data; fall back to training data only when "
     "the database has insufficient information. "
-    "Use search to find a talk_id, then get_talk to retrieve full text."
+    "Tools: "
+    "(1) search — hybrid semantic+keyword search. Use collection='paragraphs' for "
+    "passage text, 'talks' for talk discovery, 'citations' for scripture references. "
+    "alpha parameter controls blend: 0.0=pure keyword/BM25, 1.0=pure semantic/vector, "
+    "default 0.7. Results include a relevance score and score_type field. "
+    "Set group_by_talk=true (paragraphs only) to cluster results per talk. "
+    "Use search to find a talk_id, then get_talk to retrieve full text. "
+    "(2) get_talk — retrieve the full ordered text of a talk by ID. "
+    "(3) find_by_scripture — look up which talks cite a scripture by book (required), "
+    "with optional chapter, verse_start, and verse_end filters; no embedding needed. "
+    "(4) corpus_stats — aggregate counts across a collection, optionally grouped by "
+    "a field (e.g. speaker_name, conference_year)."
 )
 
 @asynccontextmanager
