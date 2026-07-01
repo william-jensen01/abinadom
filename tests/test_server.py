@@ -169,6 +169,75 @@ class TestBuildWeaviateFilters:
         result = _build_weaviate_filters(2020, "April", "Holland")
         assert result is not None
 
+    # --- new keyword-only params ---
+
+    def test_session_only(self):
+        """Returns a non-None filter when only session is provided."""
+        from server import _build_weaviate_filters
+
+        result = _build_weaviate_filters(None, None, None, session="Sun AM")
+        assert result is not None
+
+    def test_cites_scripture_true(self):
+        """Returns a non-None filter when cites_scripture=True."""
+        from server import _build_weaviate_filters
+
+        result = _build_weaviate_filters(None, None, None, cites_scripture=True)
+        assert result is not None
+
+    def test_cites_scripture_false(self):
+        """Returns a non-None filter when cites_scripture=False (must use 'is not None' check)."""
+        from server import _build_weaviate_filters
+
+        result = _build_weaviate_filters(None, None, None, cites_scripture=False)
+        assert result is not None
+
+    def test_year_from_only(self):
+        """Returns a non-None filter when only year_from is provided."""
+        from server import _build_weaviate_filters
+
+        result = _build_weaviate_filters(None, None, None, year_from=2010)
+        assert result is not None
+
+    def test_year_to_only(self):
+        """Returns a non-None filter when only year_to is provided."""
+        from server import _build_weaviate_filters
+
+        result = _build_weaviate_filters(None, None, None, year_to=2020)
+        assert result is not None
+
+    def test_year_range(self):
+        """Returns a non-None filter when both year_from and year_to are provided."""
+        from server import _build_weaviate_filters
+
+        result = _build_weaviate_filters(None, None, None, year_from=2010, year_to=2020)
+        assert result is not None
+
+    def test_all_new_params_combined(self):
+        """Returns a non-None filter when all new keyword-only params are provided."""
+        from server import _build_weaviate_filters
+
+        result = _build_weaviate_filters(
+            2020, "April", "Holland",
+            session="Sun AM",
+            cites_scripture=True,
+            year_from=2015,
+            year_to=2022,
+        )
+        assert result is not None
+
+    def test_backward_compat_positional(self):
+        """Positional 3-arg call with all None still returns None (backward compat)."""
+        from server import _build_weaviate_filters
+
+        assert _build_weaviate_filters(None, None, None) is None
+
+    def test_no_new_params_defaults_to_none(self):
+        """Calling with only old params and no new keyword args returns None when no conditions."""
+        from server import _build_weaviate_filters
+
+        assert _build_weaviate_filters(None, None, None) is None
+
 
 # ---------------------------------------------------------------------------
 # TOOL-03: _format_search_result
@@ -251,6 +320,81 @@ class TestFormatSearchResult:
         assert "score_type" not in result
         assert "distance" not in result
 
+    # --- snippet fallback ---
+
+    def test_snippet_fallback_empty_document(self):
+        """Empty string document falls back to meta title as snippet."""
+        from server import _format_search_result
+
+        result = _format_search_result("", self._FULL_META)
+        assert result["snippet"] == self._FULL_META["title"]
+
+    def test_snippet_fallback_whitespace_document(self):
+        """Whitespace-only document falls back to meta title as snippet."""
+        from server import _format_search_result
+
+        result = _format_search_result("   ", self._FULL_META)
+        assert result["snippet"] == self._FULL_META["title"]
+
+    def test_snippet_not_overridden_when_document_present(self):
+        """Non-empty document is used as snippet (title is NOT substituted)."""
+        from server import _format_search_result
+
+        result = _format_search_result("Some paragraph text", self._FULL_META)
+        assert result["snippet"] == "Some paragraph text"
+
+    # --- topics field ---
+
+    def test_topics_included_when_present(self):
+        """topics list is included in result when meta contains a non-empty list."""
+        from server import _format_search_result
+
+        meta = {**self._FULL_META, "topics": ["Grace", "Atonement"]}
+        result = _format_search_result("text", meta)
+        assert "topics" in result
+        assert result["topics"] == ["Grace", "Atonement"]
+
+    def test_topics_absent_when_missing_from_meta(self):
+        """topics key is absent when meta does not contain 'topics'."""
+        from server import _format_search_result
+
+        result = _format_search_result("text", self._FULL_META)
+        assert "topics" not in result
+
+    def test_topics_absent_when_empty_list(self):
+        """topics key is absent when meta['topics'] is an empty list."""
+        from server import _format_search_result
+
+        meta = {**self._FULL_META, "topics": []}
+        result = _format_search_result("text", meta)
+        assert "topics" not in result
+
+    # --- citation_count field ---
+
+    def test_citation_count_included_when_present(self):
+        """citation_count is included as int when meta contains a non-None value."""
+        from server import _format_search_result
+
+        meta = {**self._FULL_META, "citation_count": 7}
+        result = _format_search_result("text", meta)
+        assert "citation_count" in result
+        assert result["citation_count"] == 7
+
+    def test_citation_count_absent_when_key_missing(self):
+        """citation_count is absent when 'citation_count' key is not in meta."""
+        from server import _format_search_result
+
+        result = _format_search_result("text", self._FULL_META)
+        assert "citation_count" not in result
+
+    def test_citation_count_absent_when_none(self):
+        """citation_count is absent when meta['citation_count'] is None."""
+        from server import _format_search_result
+
+        meta = {**self._FULL_META, "citation_count": None}
+        result = _format_search_result("text", meta)
+        assert "citation_count" not in result
+
 
 # ---------------------------------------------------------------------------
 # TOOL-04: _parse_talk_id
@@ -308,6 +452,9 @@ def _make_search_col(properties_list):
     Returns a mock collection where query.hybrid/bm25/near_vector/fetch_objects all
     return objects from properties_list, each with a .metadata stub carrying
     score=0.9, distance=0.1, and certainty=0.9 attributes.
+
+    aggregate.over_all.return_value.total_count is set to len(properties_list) so
+    total/has_more in the result envelope work correctly.
     """
     mock_col = MagicMock()
     mock_objects = []
@@ -323,6 +470,7 @@ def _make_search_col(properties_list):
     mock_col.query.bm25.return_value.objects = mock_objects
     mock_col.query.near_vector.return_value.objects = mock_objects
     mock_col.query.fetch_objects.return_value.objects = mock_objects
+    mock_col.aggregate.over_all.return_value.total_count = len(properties_list)
     return mock_col
 
 
@@ -585,6 +733,186 @@ class TestSearchTool:
         result = asyncio.run(search(query="test", collection="talks", group_by_talk=True, ctx=ctx))
 
         assert "group_by_talk is only supported for the paragraphs collection" in result
+
+    # ------------------------------------------------------------------
+    # New tests — total/has_more, sort_by, query_properties, results_per_talk
+    # ------------------------------------------------------------------
+
+    def test_search_returns_total_and_has_more(self):
+        """Result envelope contains 'total' and 'has_more' fields."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+        # _make_search_col sets total_count = 1 and returns 1 object,
+        # so has_more should be False (0 + 1 < 1 is False)
+        mock_col.aggregate.over_all.return_value.total_count = 10
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            result = asyncio.run(search(query="test query", ctx=ctx))
+
+        parsed = json.loads(result)
+        assert "total" in parsed
+        assert "has_more" in parsed
+        assert isinstance(parsed["total"], int)
+        assert isinstance(parsed["has_more"], bool)
+
+    def test_search_has_more_true_when_more_results_exist(self):
+        """has_more is True when total > offset + len(results)."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+        # 1 result returned but total is 100 → has_more = True
+        mock_col.aggregate.over_all.return_value.total_count = 100
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            result = asyncio.run(search(query="test query", ctx=ctx))
+
+        parsed = json.loads(result)
+        assert parsed["has_more"] is True
+        assert parsed["total"] == 100
+
+    def test_sort_by_date_desc_passes_sort_to_fetch_objects(self):
+        """sort_by='date_desc' on empty query passes a sort argument to fetch_objects."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        result = asyncio.run(search(query="", sort_by="date_desc", ctx=ctx))
+
+        parsed = json.loads(result)
+        assert parsed["search_mode"] == "browse_filtered"
+        call_kwargs = mock_col.query.fetch_objects.call_args.kwargs
+        assert "sort" in call_kwargs
+
+    def test_sort_by_allows_browse_without_filter(self):
+        """sort_by alone (no filter) is enough to allow browse path without error."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        result = asyncio.run(search(query="", sort_by="date_asc", ctx=ctx))
+
+        # Should return JSON, not the guard error string
+        parsed = json.loads(result)
+        assert parsed["search_mode"] == "browse_filtered"
+
+    def test_sort_by_invalid_value_ignored(self):
+        """Invalid sort_by value without a filter still returns the guard error."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        result = asyncio.run(search(query="", sort_by="invalid_value", ctx=ctx))
+
+        assert "Provide a query" in result
+
+    def test_query_properties_passed_to_hybrid(self):
+        """query_properties is forwarded to hybrid query call."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            asyncio.run(search(query="test", query_properties=["title", "text"], ctx=ctx))
+
+        call_kwargs = mock_col.query.hybrid.call_args.kwargs
+        assert call_kwargs.get("query_properties") == ["title", "text"]
+
+    def test_query_properties_passed_to_bm25(self):
+        """query_properties is forwarded to bm25 query call (alpha=0.0)."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        # alpha=0.0 forces bm25 path, no embedding needed
+        asyncio.run(search(query="test", alpha=0.0, query_properties=["title"], ctx=ctx))
+
+        call_kwargs = mock_col.query.bm25.call_args.kwargs
+        assert call_kwargs.get("query_properties") == ["title"]
+
+    def test_query_properties_not_passed_to_near_vector(self):
+        """query_properties is NOT forwarded to near_vector query (pure vector path)."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            asyncio.run(search(query="test", alpha=1.0, query_properties=["title"], ctx=ctx))
+
+        call_kwargs = mock_col.query.near_vector.call_args.kwargs
+        assert "query_properties" not in call_kwargs
+
+    def test_results_per_talk_flows_into_group_by(self):
+        """results_per_talk value flows into GroupBy.objects_per_group."""
+        from server import search
+
+        ctx, mock_client = _make_mock_ctx()
+        mock_col = MagicMock()
+        # Return empty groups so the function proceeds past the query
+        mock_col.query.hybrid.return_value.groups = []
+        mock_col.query.hybrid.return_value.objects = []
+        mock_col.aggregate.over_all.return_value.total_count = 0
+        mock_client.collections.use.return_value = mock_col
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            asyncio.run(search(query="test", group_by_talk=True, results_per_talk=5, ctx=ctx))
+
+        call_kwargs = mock_col.query.hybrid.call_args.kwargs
+        group_by = call_kwargs.get("group_by")
+        assert group_by is not None
+        assert group_by.objects_per_group == 5
+
+    def test_offset_passed_to_hybrid(self):
+        """offset is forwarded to hybrid query call."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            asyncio.run(search(query="test", offset=10, ctx=ctx))
+
+        call_kwargs = mock_col.query.hybrid.call_args.kwargs
+        assert call_kwargs.get("offset") == 10
+
+    def test_new_filter_params_produce_non_none_filter(self):
+        """session, cites_scripture, year_from/year_to all produce a non-None filter for hybrid."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_ollama_url") as mock_url:
+            mock_url.return_value = "http://localhost:11434"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            asyncio.run(search(
+                query="test",
+                session="Sun AM",
+                cites_scripture=True,
+                year_from=2000,
+                year_to=2020,
+                ctx=ctx,
+            ))
+
+        call_kwargs = mock_col.query.hybrid.call_args.kwargs
+        assert call_kwargs.get("filters") is not None
 
 
 # ---------------------------------------------------------------------------
