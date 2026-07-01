@@ -821,3 +821,113 @@ def test_fastapi_import_absent():
     import inspect, server
     source = inspect.getsource(server)
     assert "from fastapi" not in source, "FastAPI imports should be removed per D-09"
+
+
+# ---------------------------------------------------------------------------
+# corpus_stats tool tests
+# ---------------------------------------------------------------------------
+
+
+class TestCorpusStats:
+    """Integration tests for the corpus_stats MCP tool."""
+
+    def test_no_group_by_returns_total(self):
+        """corpus_stats with no group_by returns JSON with collection and total count."""
+        from server import corpus_stats
+
+        ctx, mock_client = _make_mock_ctx()
+        agg_result = MagicMock()
+        agg_result.total_count = 5838
+        mock_client.collections.use.return_value.aggregate.over_all.return_value = agg_result
+
+        result = asyncio.run(corpus_stats(collection="talks", ctx=ctx))
+
+        parsed = json.loads(result)
+        assert parsed["collection"] == "talks"
+        assert parsed["total"] == 5838
+        assert "groups" not in parsed
+
+    def test_group_by_returns_sorted_groups(self):
+        """corpus_stats with group_by returns groups sorted by count descending."""
+        from server import corpus_stats
+
+        ctx, mock_client = _make_mock_ctx()
+
+        # Build unsorted groups: Nelson=10, Hinckley=50, Monson=30
+        group1 = MagicMock()
+        group1.grouped_by.value = "Russell M. Nelson"
+        group1.total_count = 10
+
+        group2 = MagicMock()
+        group2.grouped_by.value = "Gordon B. Hinckley"
+        group2.total_count = 50
+
+        group3 = MagicMock()
+        group3.grouped_by.value = "Thomas S. Monson"
+        group3.total_count = 30
+
+        agg_result = MagicMock()
+        agg_result.groups = [group1, group2, group3]  # unsorted
+        mock_client.collections.use.return_value.aggregate.over_all.return_value = agg_result
+
+        result = asyncio.run(corpus_stats(collection="talks", group_by="speaker_name", ctx=ctx))
+
+        parsed = json.loads(result)
+        assert parsed["collection"] == "talks"
+        assert parsed["group_by"] == "speaker_name"
+        groups = parsed["groups"]
+        # Must be sorted descending by count
+        assert groups[0] == {"value": "Gordon B. Hinckley", "count": 50}
+        assert groups[1] == {"value": "Thomas S. Monson", "count": 30}
+        assert groups[2] == {"value": "Russell M. Nelson", "count": 10}
+
+    def test_group_by_limit_caps_results(self):
+        """corpus_stats with group_by and limit caps the returned groups."""
+        from server import corpus_stats
+
+        ctx, mock_client = _make_mock_ctx()
+
+        # 5 groups, but limit=2
+        mock_groups = []
+        for i in range(5):
+            g = MagicMock()
+            g.grouped_by.value = f"Speaker {i}"
+            g.total_count = i * 10
+            mock_groups.append(g)
+
+        agg_result = MagicMock()
+        agg_result.groups = mock_groups
+        mock_client.collections.use.return_value.aggregate.over_all.return_value = agg_result
+
+        result = asyncio.run(corpus_stats(collection="talks", group_by="speaker_name", limit=2, ctx=ctx))
+
+        parsed = json.loads(result)
+        assert len(parsed["groups"]) == 2
+        # Top 2 should be the highest counts (40 and 30)
+        assert parsed["groups"][0]["count"] == 40
+        assert parsed["groups"][1]["count"] == 30
+
+    def test_unknown_collection_returns_error(self):
+        """corpus_stats with an unknown collection key returns the error string without querying Weaviate."""
+        from server import corpus_stats
+
+        ctx, mock_client = _make_mock_ctx()
+
+        result = asyncio.run(corpus_stats(collection="nonexistent", ctx=ctx))
+
+        assert result == "Unknown collection 'nonexistent'. Valid: talks, paragraphs, citations, footnotes."
+        # Weaviate must not have been called
+        mock_client.collections.use.assert_not_called()
+
+    def test_no_ollama_calls(self):
+        """corpus_stats must never call get_embedding_function (no embedding needed)."""
+        from server import corpus_stats
+
+        ctx, mock_client = _make_mock_ctx()
+        agg_result = MagicMock()
+        agg_result.total_count = 100
+        mock_client.collections.use.return_value.aggregate.over_all.return_value = agg_result
+
+        with patch("server.get_embedding_function") as mock_gef:
+            asyncio.run(corpus_stats(collection="paragraphs", ctx=ctx))
+            mock_gef.assert_not_called()
