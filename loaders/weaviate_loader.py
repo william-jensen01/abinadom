@@ -46,10 +46,16 @@ class WeaviateLoader(BaseLoader):
         self,
         client: weaviate.WeaviateClient,
         embed_fn: Callable[[list[str]], list[list[float]]],
-        batch_size: int = 100,
+        batch_size: int = 1000,
+        buffered: bool = False,
     ) -> None:
         super().__init__(embed_fn, batch_size)
         self._client = client
+        self._buffered = buffered
+        self._buffers: dict[str, list[DataObject]] = {
+            key: [] for key in WEAVIATE_COLLECTION_NAMES
+        }
+        self._buffer_talk_count: int = 0
         self._ensure_schema()
 
     def _ensure_schema(self) -> None:
@@ -183,14 +189,15 @@ class WeaviateLoader(BaseLoader):
         """
         Load a single talk bundle into Weaviate across all 4 collections.
 
-        Calls prepare_talk_bundle() to get (doc, meta, id, vector) tuples,
-        then insert_many for each collection. Errors are logged as WARNING
-        and execution continues to the next collection.
+        Builds (doc, meta, id, vector) tuples via prepare_talk_bundle() and
+        appends DataObjects to per-collection buffers. In buffered mode, buffers
+        flush when any reaches batch_size (see _flush_if_needed); in unbuffered
+        mode (default) each call flushes immediately, matching per-talk inserts.
         """
         records = prepare_talk_bundle(*bundle, embed_fn=self.embed_fn)
 
-        for key, class_name in WEAVIATE_COLLECTION_NAMES.items():
-            col = self._client.collections.use(class_name)
+        any_buffered = False
+        for key in WEAVIATE_COLLECTION_NAMES:
             objects = [
                 DataObject(
                     properties={**meta, "doc_id_str": doc_id},
@@ -199,8 +206,50 @@ class WeaviateLoader(BaseLoader):
                 )
                 for doc, meta, doc_id, vector in records[key]
             ]
+            if objects:
+                self._buffers[key].extend(objects)
+                any_buffered = True
+
+        if any_buffered:
+            self._buffer_talk_count += 1
+
+        if self._buffered:
+            self._flush_if_needed()
+        else:
+            self.flush()
+
+    def _flush_if_needed(self) -> None:
+        """Flush buffers if any collection buffer has reached batch_size."""
+        if any(len(buf) >= self.batch_size for buf in self._buffers.values()):
+            self.flush()
+
+    def flush(self) -> None:
+        """Flush all buffered objects to Weaviate, dependents first, talks last.
+
+        Write order (paragraphs, citations, footnotes, talks) is a crash-safety
+        measure: talk_exists() checks only the talks collection, so writing talks
+        last guarantees a mid-flush crash leaves the talk looking un-processed,
+        triggering safe reprocessing on resume (inserts are idempotent via
+        deterministic UUIDs). Buffers are always cleared, even on error, to avoid
+        infinite retry loops; any lost objects are safely reprocessed next run.
+        """
+        total = sum(len(buf) for buf in self._buffers.values())
+        if total == 0:
+            return
+
+        logger.info(
+            "Flushing %d buffered objects (%d talks) to Weaviate",
+            total,
+            self._buffer_talk_count,
+        )
+
+        flush_order = ["paragraphs", "citations", "footnotes", "talks"]
+        for key in flush_order:
+            objects = self._buffers[key]
             if not objects:
                 continue
+            class_name = WEAVIATE_COLLECTION_NAMES[key]
+            col = self._client.collections.use(class_name)
             try:
                 result = col.data.insert_many(objects)
                 if result.has_errors:
@@ -213,10 +262,14 @@ class WeaviateLoader(BaseLoader):
                         )
             except Exception as e:
                 logger.warning(
-                    "Weaviate insert_many error in %s: %s",
+                    "Weaviate insert_many error in %s (%d objects): %s",
                     class_name,
+                    len(objects),
                     e,
                 )
+
+        self._buffers = {key: [] for key in WEAVIATE_COLLECTION_NAMES}
+        self._buffer_talk_count = 0
 
     def talk_exists(self, talk_id: int) -> bool:
         col = self._client.collections.use(WEAVIATE_COLLECTION_NAMES["talks"])
@@ -278,8 +331,11 @@ class WeaviateLoader(BaseLoader):
         return False
 
     def close(self) -> None:
-        """Close the Weaviate client and release the gRPC connection."""
-        self._client.close()
+        """Flush remaining buffers and close the Weaviate gRPC connection."""
+        try:
+            self.flush()
+        finally:
+            self._client.close()
 
     @staticmethod
     def reset(host: str, port: int, grpc_port: int = 50051) -> None:

@@ -284,6 +284,9 @@ def load_talk_bundles(bundles: list[TalkBundle], loader) -> dict:
         citations_inserted += len(citations.citations)
         footnotes_inserted += len(footnotes.footnotes)
 
+    # Drain any records the loader buffered internally (no-op for non-buffering loaders)
+    loader.flush()
+
     return {
         "talks_inserted": talks_inserted,
         "paragraphs_inserted": paragraphs_inserted,

@@ -15,6 +15,7 @@ Features:
 Usage:
     pipenv run py scripts/run_pipeline.py
     pipenv run py scripts/run_pipeline.py --force
+    pipenv run py scripts/run_pipeline.py --buffered
 """
 
 import argparse
@@ -85,6 +86,11 @@ def main() -> None:
         action="store_true",
         help="Re-process already-loaded talks (skip the Weaviate existence check)",
     )
+    parser.add_argument(
+        "--buffered",
+        action="store_true",
+        help="Buffer records across talks and bulk-flush to Weaviate (fewer round trips)",
+    )
     args = parser.parse_args()
 
     start_time = time.time()
@@ -93,7 +99,9 @@ def main() -> None:
     embedding_fn = get_embedding_function(url=resolve_ollama_url())
 
     client = get_weaviate_client()
-    with WeaviateLoader(client=client, embed_fn=embedding_fn) as loader:
+    with WeaviateLoader(
+        client=client, embed_fn=embedding_fn, buffered=args.buffered
+    ) as loader:
         all_talk_ids = _get_all_gc_talk_ids()
 
         # --- Counters and buffers ---

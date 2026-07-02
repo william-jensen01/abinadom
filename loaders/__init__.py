@@ -36,6 +36,10 @@ class BaseLoader(ABC):
         """Release any held connections. Default is no-op. Override when needed."""
         pass
 
+    def flush(self) -> None:
+        """Flush any buffered records to the target DB. Default is no-op."""
+        pass
+
     @abstractmethod
     def query(
         self,
