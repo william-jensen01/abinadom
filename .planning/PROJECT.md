@@ -8,6 +8,20 @@ A data pipeline and RAG system that transforms the BYU Scripture Citation Index 
 
 All LDS content searchable by meaning — find how scriptures are cited, applied, and discussed across decades of conference talks and discourse, with full referential integrity between talks, paragraphs, citations, and footnotes.
 
+## Current Milestone: v5.0 Scriptures
+
+**Goal:** Make the LDS scripture canon a first-class searchable corpus alongside conference talks — semantic + hybrid search over verse text, exact-reference retrieval, and grounded composition with the existing talk tools. Sourced entirely from the core DB (`db/core.52.db`); no web scraping.
+
+**Target features:**
+- Canonical (`S`) + JST (`J`,`F`) verse extraction from `core.52.db` → clean, canonical `ScriptureVerse` objects (~41,996 canonical + ~31k JST; NULL-`Verse` front matter dropped)
+- `config/book_resolver.py` — word↔digit ordinal bridge ("1 Nephi"/"First Nephi"/"1 Ne."), D&C `Sections`→"Doctrine and Covenants" mapping, em-dash mojibake repair; shared by `get_verse` and `search`
+- Reference-prefixed windowed embedding on the existing Ollama/nomic stack — `standard` verses get a chapter-clamped neighbor window (`SCRIPTURE_WINDOW_RADIUS`, default 1); JST embedded reference-prefixed but un-windowed (sparse)
+- New `ScriptureVerses` Weaviate collection + `ScriptureLoader(BaseLoader)` + `scripts/run_scripture_pipeline.py` (streaming, resume, `--force`)
+- New `get_verse` MCP tool (pure filter query, no Ollama); `search` and `corpus_stats` extended to `scripture_verses` (search defaults to `variant=standard`)
+- Post-load verification `scripts/verify_weaviate_scripture.py` (SCR-01…06)
+
+**Scope boundary:** v1 = verse text only. Chapter/section headings, summaries, footnote cross-references, Topical Guide, and the verse↔verse graph are all deferred to v2 (a Church-API "study apparatus" milestone). Full spec: `docs/scriptures/SPEC.md`.
+
 ## Requirements
 
 ### Validated
@@ -48,7 +62,7 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - ✓ OAuth 2.1 via ScaleKit — native FastMCP server with two-mode ScalekitProvider auth (local passthrough / remote OAuth); Auth0 fallback path removed; 449 tests green — Phases 16.1, 16.2, 18, 19 (v3.0)
 - ✓ Operator docs — connection guide, self-deploy guide, root README entry point — Phase 17 (v3.0)
 
-### Active (v4.0 — Vector DB Migration)
+### Validated (v4.0 — Vector DB Migration)
 
 - ✓ Benchmark framework — `loaders/shared_transforms.py` (flatten_metadata, rich_metadata, prepare_*), `benchmark/metrics.py` (4 dataclasses + recall_at_k), `benchmark/queries.py` (8 canonical queries), `infra/docker-compose.vector-dbs.yml` (ChromaDB 1.5.7, Weaviate 1.37.1, Qdrant v1.17.1) — Phase 20 (v4.0)
 - ✓ DB loaders — ChromaDB, Weaviate, and Qdrant loaders each accept a talk bundle and persist it correctly — Phase 21 (v4.0)
@@ -59,12 +73,25 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - ✓ Production migration — ChromaDB removed; Weaviate in server.py (native filters, startup validation, health check), run_pipeline.py, and Docker stack; verify_weaviate_pipeline.py with VER-01–VER-05 — Phase 24 (v4.0)
 - ✓ MCP server smoke test — `search` and `get_talk` tools verified end-to-end on Weaviate; 44 server tests green — Phase 24 (v4.0)
 
+### Active (v5.0 — Scriptures)
+
+<!-- Building toward these. Full requirements in REQUIREMENTS.md. -->
+
+- [ ] Scripture verse extraction — canonical (`S`) + JST (`J`,`F`) from `core.52.db`, NULL-`Verse` front matter excluded, UTF-8 decode, HTML + name-encoding cleanup
+- [ ] `book_resolver` — canonical digit-form names, word↔digit ordinals, D&C mapping, em-dash repair; shared by `get_verse` and `search`
+- [ ] Windowing + validation — `standard` neighbor window / JST reference-prefix-only; per-verse and per-chapter sanity checks
+- [ ] `ScriptureLoader` + `ScriptureVerses` collection + `run_scripture_pipeline.py` — idempotent, resumable, `--force`
+- [ ] `get_verse` MCP tool + `search`/`corpus_stats` extension to `scripture_verses`
+- [ ] Full load + post-load verification (SCR-01…06)
+
 ### Out of Scope
 
-- Remote/mobile access — Milestone 3 (ChromaDB across machines, hosting, auth)
-- Journal of Discourse content — Milestone 4
-- Scriptures (OT, NT, BOM, D&C, POGP) — Milestone 5+
-- Web scraping — HTML is read from SQLite only, no live fetching
+- Scripture study apparatus — headings, chapter summaries, footnote cross-refs, Topical Guide, verse↔verse graph — deferred to v2 (requires Church-API scrape; none exists in `core.db`)
+- Official Declarations & other verse-less canonical front matter — v2 candidate, not a v1 verse (NULL `Verse`)
+- Late chunking / embedding-model swap / multi-model routing — parked in `backlog.md`; non-blocking for v1 (stay on nomic)
+- Remote/mobile access — delivered in v3.0
+- Journal of Discourse content — future milestone
+- Web scraping — content is read from SQLite only, no live fetching
 - Multi-user / hosted deployment — personal use only
 
 ## Current State: v4.0 Shipped 2026-07-02
@@ -140,4 +167,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-07-02 — after v4.0 milestone (Weaviate production migration complete; ChromaDB removed from all production paths)*
+*Last updated: 2026-07-03 — v5.0 Scriptures milestone started (verse-only searchable corpus from core.52.db; see docs/scriptures/SPEC.md)*

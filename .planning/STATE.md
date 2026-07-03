@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v4.0
-milestone_name: Vector DB Migration
-status: shipped
-stopped_at: Milestone v4.0 complete — archived 2026-07-02
-last_updated: "2026-07-02T00:00:00.000Z"
-last_activity: 2026-07-02 -- v4.0 milestone archived
+milestone: v5.0
+milestone_name: Scriptures
+status: planning
+last_updated: "2026-07-03T18:40:42.748Z"
+last_activity: 2026-07-03
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 30
-  completed_plans: 30
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -25,9 +24,10 @@ See: .planning/PROJECT.md (updated 2026-07-02)
 
 ## Current Position
 
-Milestone v4.0 Vector DB Migration — SHIPPED 2026-07-02
-
-All 7 phases complete (30 plans). ChromaDB removed from production; Weaviate in production. 5,838 GC talks searchable via MCP tools at lds-sci.williambjensen.com.
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-07-03 — Milestone v5.0 started
 
 ## Next Steps
 
