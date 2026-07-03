@@ -79,30 +79,30 @@ Which phases cover which requirements. Populated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| EXT-01 | TBD | Pending |
-| EXT-02 | TBD | Pending |
-| EXT-03 | TBD | Pending |
-| EXT-04 | TBD | Pending |
-| EXT-05 | TBD | Pending |
-| RES-01 | TBD | Pending |
-| EMB-01 | TBD | Pending |
-| EMB-02 | TBD | Pending |
-| VAL-01 | TBD | Pending |
-| VAL-02 | TBD | Pending |
-| LOAD-01 | TBD | Pending |
-| LOAD-02 | TBD | Pending |
-| LOAD-03 | TBD | Pending |
-| TOOL-01 | TBD | Pending |
-| TOOL-02 | TBD | Pending |
-| TOOL-03 | TBD | Pending |
-| VRFY-01 | TBD | Pending |
-| VRFY-02 | TBD | Pending |
+| EXT-01 | Phase 25 | Pending |
+| EXT-02 | Phase 25 | Pending |
+| EXT-03 | Phase 25 | Pending |
+| EXT-04 | Phase 25 | Pending |
+| EXT-05 | Phase 25 | Pending |
+| RES-01 | Phase 25 | Pending |
+| EMB-01 | Phase 26 | Pending |
+| EMB-02 | Phase 26 | Pending |
+| VAL-01 | Phase 26 | Pending |
+| VAL-02 | Phase 26 | Pending |
+| LOAD-01 | Phase 27 | Pending |
+| LOAD-02 | Phase 27 | Pending |
+| LOAD-03 | Phase 27 | Pending |
+| TOOL-01 | Phase 28 | Pending |
+| TOOL-02 | Phase 28 | Pending |
+| TOOL-03 | Phase 28 | Pending |
+| VRFY-01 | Phase 29 | Pending |
+| VRFY-02 | Phase 29 | Pending |
 
 **Coverage:**
 - v5.0 requirements: 18 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 18 ⚠️
+- Mapped to phases: 18
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-07-03*
-*Last updated: 2026-07-03 after initial definition*
+*Last updated: 2026-07-03 — traceability filled in after roadmap creation (Phases 25–29)*

@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Scriptures
 status: planning
-last_updated: "2026-07-03T18:40:42.748Z"
+last_updated: "2026-07-03"
 last_activity: 2026-07-03
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,21 +17,28 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-07-02)
+See: .planning/PROJECT.md (updated 2026-07-03)
 
-**Core value:** All LDS content searchable by meaning — find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** v4.0 shipped — start next milestone with `/gsd-new-milestone`
+**Core value:** All LDS content searchable by meaning — find how scriptures are cited, applied, and discussed across decades of conference talks and discourse.
+**Current focus:** v5.0 Scriptures — roadmap created; ready for Phase 25 planning
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Phase 25 (next — not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-07-03 — Milestone v5.0 started
+Status: Roadmap created; ready for planning
+Last activity: 2026-07-03 — v5.0 roadmap written (Phases 25–29, 18 requirements mapped)
+
+## Progress Bar
+
+```
+Phase 25 [ ] → Phase 26 [ ] → Phase 27 [ ] → Phase 28 [ ] → Phase 29 [ ]
+0 / 5 phases complete
+```
 
 ## Next Steps
 
-Run `/gsd-new-milestone` to define v5.0 goals, requirements, and roadmap.
+Run `/gsd-plan-phase 25` to plan Phase 25: Data Model, Book Resolver & Extraction.
 
 ## Accumulated Context
 
@@ -41,6 +48,15 @@ Run `/gsd-new-milestone` to define v5.0 goals, requirements, and roadmap.
 - Phase 22.1 inserted after Phase 22: address Recall@k = 0.0 bug (URGENT)
 - Phase 22.2 inserted after Phase 22.1: optimize benchmark loaders for efficiency (URGENT)
 - 2026-07-02: v4.0 archived — ROADMAP.md collapsed, REQUIREMENTS.md removed
+- 2026-07-03: v5.0 roadmap created — 5 phases (25–29), 18 requirements mapped
+
+### Key Decisions (v5.0)
+
+- Phase structure mirrors SPEC §13 exactly: 5 phases 1→2→3→4→5 mapped to 25→29
+- book_resolver (Phase 25) is the shared dependency reused by both the pipeline (Phase 27) and MCP tools (Phase 28)
+- Phases 25–26 are pure/offline (no Weaviate, no Ollama) and fully unit-testable
+- Phase 28 can be built and tested against a Phase-27 subset before the Phase-29 full load
+- No UI phases — all work is backend pipeline + MCP server
 
 ### Key Decisions (v4.0)
 
@@ -49,7 +65,11 @@ Run `/gsd-new-milestone` to define v5.0 goals, requirements, and roadmap.
 - doc_id_str as TEXT property in Weaviate schemas — ensures stable set-intersection key for recall computation (Phase 22.1 fix)
 - CHROMADB_COLLECTION_NAMES retained in pipeline_config.py for backward compat with verify_chromadb_pipeline.py
 
+### Blockers
+
+None.
+
 ### Session
 
-**Last session:** 2026-07-02
-**Stopped at:** Milestone v4.0 archived
+**Last session:** 2026-07-03
+**Stopped at:** v5.0 roadmap created
