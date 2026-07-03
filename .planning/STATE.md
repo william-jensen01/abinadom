@@ -3,8 +3,9 @@ gsd_state_version: 1.0
 milestone: v5.0
 milestone_name: Scriptures
 status: planning
-last_updated: "2026-07-03"
-last_activity: 2026-07-03
+stopped_at: Phase 25 context gathered
+last_updated: "2026-07-03T20:59:45.913Z"
+last_activity: 2026-07-03 — v5.0 roadmap written (Phases 25–29, 18 requirements mapped)
 progress:
   total_phases: 5
   completed_phases: 0
@@ -71,5 +72,11 @@ None.
 
 ### Session
 
-**Last session:** 2026-07-03
-**Stopped at:** v5.0 roadmap created
+**Last session:** 2026-07-03T20:59:45.903Z
+**Stopped at:** Phase 25 context gathered
+
+## Session
+
+**Last session:** 2026-07-03T20:59:45.903Z
+**Stopped at:** Phase 25 context gathered
+**Resume file:** .planning/phases/25-data-model-book-resolver-extraction/25-CONTEXT.md
