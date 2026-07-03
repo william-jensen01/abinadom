@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A data pipeline and RAG system that transforms the BYU Scripture Citation Index SQLite database into four ChromaDB vector collections optimized for semantic search. Content is exposed via an MCP server to AI clients (e.g., Claude Desktop). The project starts with General Conference talks (5,838 GC-only via INNER JOIN) and expands to Journal of Discourse, and the standard LDS scripture canon in future milestones.
+A data pipeline and RAG system that transforms the BYU Scripture Citation Index SQLite database into four Weaviate vector collections optimized for semantic search. Content is exposed via an MCP server to AI clients (e.g., Claude Desktop). The project covers General Conference talks (5,838 GC-only via INNER JOIN) and will expand to Journal of Discourse and the standard LDS scripture canon in future milestones.
 
 ## Core Value
 
@@ -56,8 +56,8 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - ✓ Benchmark efficiency — `embed_batch()` batches all embed calls per talk (1 Ollama call vs N); `shared_transforms.py` collect-embed-distribute pattern; `WeaviateLoader` uses `insert_many`; `runner.py` upsert parallelized with ThreadPoolExecutor (thread-local loaders, `--workers` default 4); smoke test confirmed all 3 DBs exceed pre-22.2 rps baselines — Phase 22.2 (v4.0)
 - ✓ Full benchmark run — 5,838 talks loaded into all 3 DBs; Weaviate wins: serial p50 42ms, filtered p50 51ms (4× faster than ChromaDB/Qdrant), cold-start 34ms, throughput 215 q/s, recall@k10=0.9875 — Phase 23 (v4.0)
 - ✓ Decision report — `benchmark/DECISION.md` names Weaviate as winner; full comparison table with real numbers; recall@k framed as ANN fidelity — Phase 23 (v4.0)
-- [ ] Production migration — replace ChromaDB in server.py, pipeline loader (phase6), and Docker stack
-- [ ] MCP server smoke test — `search` and `get_talk` tools verified end-to-end on new DB
+- ✓ Production migration — ChromaDB removed; Weaviate in server.py (native filters, startup validation, health check), run_pipeline.py, and Docker stack; verify_weaviate_pipeline.py with VER-01–VER-05 — Phase 24 (v4.0)
+- ✓ MCP server smoke test — `search` and `get_talk` tools verified end-to-end on Weaviate; 44 server tests green — Phase 24 (v4.0)
 
 ### Out of Scope
 
@@ -67,32 +67,31 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 - Web scraping — HTML is read from SQLite only, no live fetching
 - Multi-user / hosted deployment — personal use only
 
-## Current Milestone: v4.0 Vector DB Migration
+## Current State: v4.0 Shipped 2026-07-02
 
-**Goal:** Evaluate ChromaDB, Weaviate, and Qdrant against the 5,838-talk corpus, then migrate the production MCP server to the winner.
+**Delivered:** Evaluated ChromaDB, Weaviate, and Qdrant against the 5,838-talk corpus; migrated production MCP server, pipeline, and Docker stack to Weaviate.
 
-**Target features:**
+**What shipped:**
 - Benchmark framework (shared transforms, loaders, metrics, canonical queries, runner CLI)
-- Full benchmark run with structured comparison report
-- Production migration of server, pipeline loader, and Docker stack to winning DB
-- End-to-end MCP server smoke test on new DB
+- Full benchmark run with structured comparison report (`benchmark/DECISION.md`)
+- Production migration of server, pipeline loader, and Docker stack to Weaviate
+- End-to-end MCP server smoke test verified on Weaviate
 
 ## Context
 
 - **Data source**: BYU Scripture Citation Index SQLite database (5,838 General Conference talks via INNER JOIN conference_talk — GC-only, verified)
-- **Current state (v2.0)**: Full MCP server shipped — FastMCP with startup validation, `search` and `get_talk` tools, Claude Desktop config template, system prompt, 38 server tests green; ChromaDB holds 5,838 talks / 202,175 paragraphs / 67,307 citations / 25,608 footnotes (paragraphs enriched with speaker/title/date metadata)
-- **Architecture**: Layered, configuration-driven (`config/pipeline_config.py`), typed dataclasses, pure functions, idempotent; fail-fast (schema validation) + fail-safe (FK spot-check) hybrid; MCP server as read-only consumer of ChromaDB
-- **Processing model**: Per-talk streaming loop — Phases 1–6 run sequentially per talk; ChromaDB write buffer flushes every 1,000 talks
-- **ID strategy**: Existing SQLite primary keys (`talk_8820`, `para_156789`, etc.) for bidirectional lookups
-- **MCP server**: Native FastMCP 3.2.4 server with two-mode ScalekitProvider auth — local mode (no SCALEKIT_ vars) passes all requests unauthenticated; remote mode (SCALEKIT_ENVIRONMENT_URL + SCALEKIT_RESOURCE_ID + MCP_BASE_URL set) validates OAuth JWTs; `GET /health` returns live Ollama + ChromaDB status
-- **Deployment**: Dockerfile (python:3.12-slim), docker-compose.yml (single mcp-server service, bind mounts, healthcheck), infra/docker-compose.yml (Caddy + cloudflared), .env.example (7 operator vars); full stack starts with `docker compose up` in each directory
-- **Current state (v3.0 shipped 2026-04-17)**: 449 tests green; server live at lds-sci.williambjensen.com; Claude Desktop connects via OAuth 2.1 handshake; FastAPI dependency removed
+- **Current state (v4.0 shipped 2026-07-02)**: Weaviate in production; ChromaDB removed from all production paths; 44 server tests green; 5,838 talks loaded and searchable via MCP tools; server live at lds-sci.williambjensen.com; Claude Desktop connects via OAuth 2.1 handshake
+- **Architecture**: Layered, configuration-driven (`config/pipeline_config.py`), typed dataclasses, pure functions, idempotent; fail-fast (schema validation) + fail-safe (FK spot-check) hybrid; MCP server as read-only consumer of Weaviate
+- **Processing model**: Per-talk streaming loop — Phases 1–6 run sequentially per talk; WeaviateLoader batch inserts via `insert_many()`; `embed_batch()` makes one Ollama call per talk bundle
+- **ID strategy**: Existing SQLite primary keys (`talk_8820`, `para_156789`, etc.) for bidirectional lookups; Weaviate UUIDs derived via `generate_uuid5` + stored `doc_id_str` for set-intersection lookups
+- **MCP server**: Native FastMCP 3.2.4 server with two-mode ScalekitProvider auth — local mode (no SCALEKIT_ vars) passes all requests unauthenticated; remote mode (SCALEKIT_ENVIRONMENT_URL + SCALEKIT_RESOURCE_ID + MCP_BASE_URL set) validates OAuth JWTs; `GET /health` returns live Ollama + Weaviate status
+- **Deployment**: Dockerfile (python:3.12-slim), docker-compose.yml (single mcp-server service with Weaviate, bind mounts, healthcheck), infra/docker-compose.yml (Caddy + cloudflared), .env.example (updated for Weaviate vars); full stack starts with `docker compose up` in each directory
 
 ## Constraints
 
-- **Tech stack**: Python (pipenv), ChromaDB, SQLite — no changes to stack
+- **Tech stack**: Python (pipenv), Weaviate v4 client, SQLite — ChromaDB removed from production (retained in benchmark tooling)
 - **Pattern consistency**: New phases must follow the patterns established in Phases 1–5 (layered architecture, dataclasses, same logging/error handling strategy)
-- **Database**: Read-only from SQLite; all output goes to ChromaDB only
+- **Database**: Read-only from SQLite; all output goes to Weaviate
 - **Idempotency**: Pipeline must be safe to re-run; supports skip-if-processed and force-reprocess modes
 - **Scale**: 5,838 GC talks × ~35 paragraphs each (202,175 total); batch sizes must manage memory
 
@@ -117,6 +116,10 @@ All LDS content searchable by meaning — find how scriptures are cited, applied
 | doc_id_str as TEXT property in Weaviate schemas (Phase 22.1) | Weaviate query() was falling back to UUID strings which never match ChromaDB's para_N baseline IDs; storing doc_id_str alongside the UUID gives a stable set-intersection key | ✓ Good — recall@k10=0.0 → 1.0 after fix |
 | ChromaDB collection name resolution in query() (Phase 22.1) | Short keys like "paragraphs" must be resolved through CHROMADB_COLLECTION_NAMES before calling get_or_create_collection, otherwise a phantom empty collection is silently created | ✓ Good — phantom collection creation eliminated |
 | Runner baseline collected after ChromaDB populates (Phase 22.1) | On a fresh stack, collecting the baseline before the ChromaDB benchmark loop runs guarantees an empty baseline and 0.0 recall for all comparators | ✓ Good — ordering fix ensures correct recall on fresh stacks |
+| Weaviate selected as production DB (Phase 23) | Serial p50 42ms, filtered p50 51ms (4× faster than ChromaDB/Qdrant), cold-start 34ms, memory delta 0.02 MB, recall@k10=0.9875 — decisive on all dimensions for MCP use | ✓ Good — production migration complete |
+| AppContext holds only weaviate.WeaviateClient, no collections dict (Phase 24) | collections.use() called inline per tool call — simpler than pre-warming a dict; matches Weaviate v4 client idiom | ✓ Good — 44 server tests green |
+| weaviate.connect_to_embedded() unsupported on Windows (Phase 24-05) | gh#3315 — tests use platform-conditional fixture with MagicMock fallback on Windows | ✓ Good — CI passes on all platforms |
+| CHROMADB_COLLECTION_NAMES retained in pipeline_config.py (Phase 24-09) | backward compat for verify_chromadb_pipeline.py — production uses Weaviate; comment explains the dual-path | ✓ Good — backward compat without ambiguity |
 
 ---
 ## Evolution
@@ -137,4 +140,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-08 — after Phase 23 (full benchmark run complete; Weaviate selected for Phase 24 production migration)*
+*Last updated: 2026-07-02 — after v4.0 milestone (Weaviate production migration complete; ChromaDB removed from all production paths)*

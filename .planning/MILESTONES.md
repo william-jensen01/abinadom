@@ -1,5 +1,20 @@
 # Milestones
 
+## v4.0 Vector DB Migration (Shipped: 2026-07-02)
+
+**Phases completed:** 7 phases (20, 21, 22, 22.1, 22.2, 23, 24), 30 plans
+
+**Key accomplishments:**
+
+- Benchmark infrastructure: shared transforms (`flatten_metadata`, `rich_metadata`, `prepare_*`), metrics dataclasses + `recall_at_k`, 8 canonical queries, Docker Compose for ChromaDB 1.5.7, Weaviate 1.37.1, and Qdrant v1.17.1 — all running with one command
+- DB loaders: ChromaDB, Weaviate, and Qdrant loaders each accept a talk bundle; `BaseLoader` ABC with `embed_fn` DI; `embed_batch()` batching one Ollama call per talk bundle; Weaviate `insert_many()` for batch efficiency
+- Benchmark runner: `benchmark/runner.py` CLI measuring upsert speed, p50/p95/p99 latency, concurrency throughput, memory delta, and recall@k across all three DBs; recall@k bug fixed (phantom ChromaDB collection + missing `doc_id_str` in Weaviate schema)
+- Full benchmark run: 5,838 talks loaded into all three DBs; Weaviate wins — serial p50 42ms, filtered p50 51ms (4× faster than ChromaDB/Qdrant), cold-start 34ms, memory delta 0.02 MB, recall@k10=0.9875; decision report at `benchmark/DECISION.md`
+- Production migration: ChromaDB removed from all production paths; Weaviate wired into `server.py` (startup validation, native filters, health check), `scripts/run_pipeline.py`, and Docker stack; `scripts/verify_weaviate_pipeline.py` covering VER-01–VER-05
+- Test suite migrated: `tests/test_server.py` fully rewritten from 34 failing ChromaDB tests to 44 passing Weaviate tests; `_validate_collections` and `_build_weaviate_filters` covered
+
+---
+
 ## v3.0 Remote MCP (Shipped: 2026-04-17)
 
 **Phases completed:** 9 phases, 26 plans, 32 tasks

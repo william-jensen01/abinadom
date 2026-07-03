@@ -2,44 +2,36 @@
 gsd_state_version: 1.0
 milestone: v4.0
 milestone_name: Vector DB Migration
-status: executing
-stopped_at: Completed 24-09-PLAN.md
-last_updated: "2026-06-28T00:55:00.000Z"
-last_activity: 2026-06-28 -- Phase 24 plan 09 completed
+status: shipped
+stopped_at: Milestone v4.0 complete — archived 2026-07-02
+last_updated: "2026-07-02T00:00:00.000Z"
+last_activity: 2026-07-02 -- v4.0 milestone archived
 progress:
   total_phases: 7
-  completed_phases: 6
-  total_plans: 29
-  completed_plans: 29
-  percent: 86
+  completed_phases: 7
+  total_plans: 30
+  completed_plans: 30
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-18)
+See: .planning/PROJECT.md (updated 2026-07-02)
 
 **Core value:** All LDS content searchable by meaning — find how scriptures are cited, applied, and discussed across decades of conference talks.
-**Current focus:** Phase 24 — production-migration
+**Current focus:** v4.0 shipped — start next milestone with `/gsd-new-milestone`
 
 ## Current Position
 
-Phase: 24 (production-migration) — EXECUTING
-Status: Executing Phase 24
-Last activity: 2026-06-28 -- Phase 24 plan 09 completed
+Milestone v4.0 Vector DB Migration — SHIPPED 2026-07-02
 
-Progress: [██████████] 100%
+All 7 phases complete (30 plans). ChromaDB removed from production; Weaviate in production. 5,838 GC talks searchable via MCP tools at lds-sci.williambjensen.com.
 
-## Performance Metrics
+## Next Steps
 
-**Velocity:**
-
-- Total plans completed: 4 (v4.0)
-- Average duration: --
-- Total execution time: 0 hours
-
-*Updated after each plan completion*
+Run `/gsd-new-milestone` to define v5.0 goals, requirements, and roadmap.
 
 ## Accumulated Context
 
@@ -48,40 +40,16 @@ Progress: [██████████] 100%
 - 2026-04-18: v4.0 roadmap created — 5 phases (20–24), 16 requirements mapped
 - Phase 22.1 inserted after Phase 22: address Recall@k = 0.0 bug (URGENT)
 - Phase 22.2 inserted after Phase 22.1: optimize benchmark loaders for efficiency (URGENT)
+- 2026-07-02: v4.0 archived — ROADMAP.md collapsed, REQUIREMENTS.md removed
 
-### Decisions
+### Key Decisions (v4.0)
 
-Decisions are logged in PROJECT.md Key Decisions table.
+- Weaviate selected over ChromaDB and Qdrant based on full benchmark data (serial p50 42ms, filtered p50 51ms, recall@k10=0.9875)
+- AppContext holds only weaviate.WeaviateClient — collections.use() called inline per tool call (D-02)
+- doc_id_str as TEXT property in Weaviate schemas — ensures stable set-intersection key for recall computation (Phase 22.1 fix)
+- CHROMADB_COLLECTION_NAMES retained in pipeline_config.py for backward compat with verify_chromadb_pipeline.py
 
-- [Phase ?]: AppContext holds only weaviate.WeaviateClient — collections.use() called inline per tool call (D-02)
-- [Phase 24-05]: WeaviateLoader.load() collection_map uses self.COLLECTIONS[i] — ProductionWeaviateLoader routes to production names without re-implementing load()
-- [Phase 24-05]: weaviate.connect_to_embedded() unsupported on Windows (gh#3315) — tests use platform-conditional fixture with MagicMock fallback
-- [Phase 24-07]: OllamaEmbedder uses one requests.post per text (Ollama /api/embeddings is single-text-per-call)
-- [Phase 24-07]: paragraphs_to_chromadb_format function name in phase2 preserved — only callee call site updated to to_db_record()
-- [Phase ?]: test_server.py rewrite uses AppContext(client=MagicMock()) no collections dict (D-02); near_vector mock interface for search; fetch_object_by_id for get_talk
-- [Phase 24-09]: verify_chromadb_pipeline.py imports fixed inline (get_chromadb_client/get_embedding_function) after phase6_chromadb_loader deletion
-- [Phase 24-09]: CHROMADB_COLLECTION_NAMES re-added to pipeline_config.py for backward compat with verify_chromadb_pipeline.py
-- [Phase 24-09]: VER-04 in verify_weaviate_pipeline.py uses spot-check (10 paragraphs, 5 citations) via generate_uuid5 + fetch_object_by_id
+### Session
 
-### Pending Todos
-
-None yet.
-
-### Blockers/Concerns
-
-None yet.
-
-### Quick Tasks Completed
-
-| # | Description | Date | Commit | Status | Directory |
-|---|-------------|------|--------|--------|-----------|
-| Phase 23-benchmark-execution-decision P02 | 30 | 1 tasks | 4 files |
-| Phase 24-production-migration P02 | 8min | 1 tasks | 1 files |
-| Phase 24 P03 | 5min | 1 tasks | 1 files |
-| Phase 24-production-migration P08 | 15min | 1 tasks | 1 files |
-
-## Session
-
-**Last session:** 2026-06-28T00:55:00.000Z
-**Stopped at:** Completed 24-09-PLAN.md
-**Resume file:** None
+**Last session:** 2026-07-02
+**Stopped at:** Milestone v4.0 archived
