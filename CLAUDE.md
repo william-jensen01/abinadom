@@ -77,6 +77,7 @@
 ### docs/
 - `docs/PIPELINE_SPEC.md` — Full pipeline specification
 - `docs/PROJECT.md` — Project overview
+- `docs/scriptures/SPEC.md` — Scriptures v1 spec (verse-only ScriptureVerses collection from core.db; get_verse tool; windowed embedding; headings/apparatus deferred to v2)
 - `docs/UNMATCHED_TALKS_ANALYSIS.md` — Analysis of 224 API URIs not matched to talk_id (sustaining, audits, stats, welfare sessions, one-offs)
 - `docs/pipeline/PLAN_PHASE_3.5_SHARED_UTILITIES.md` — Shared utilities plan
 - `docs/pipeline/phase-1-metadata/PHASE1_README.md`
