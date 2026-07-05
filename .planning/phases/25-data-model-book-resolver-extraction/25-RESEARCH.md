@@ -410,7 +410,12 @@ class TestExtractionAgainstLiveDB(unittest.TestCase):
 
 Everything else in this document is `[VERIFIED]` against the live database, the codebase, or empirical runs — no user confirmation needed beyond the D-04 test-design note already flagged inline in User Constraints.
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> **Resolution (Phase 25 planning, 2026-07-05):** All three questions below are resolved in executable plan content.
+> - **Q1 (resolver failure contract): RESOLVED** — `resolve()` returns `Optional[str]` (`None` on miss), locked in `25-02` Task 1 with a docstring-contract acceptance criterion; error-message wrapping deferred to Phase 28.
+> - **Q2 (long-form FullNames): RESOLVED** — FullNames stay verbatim (spec-conformant); adopted in `25-02`'s behavior list. Display-name remapping would be a REQUIREMENTS change, not a Phase 25 tweak.
+> - **Q3 (citations-corpus inconsistency): RESOLVED (informational)** — carried into `25-03`'s SUMMARY output note for Phase 28 consumers.
 
 1. **Resolver failure contract (raise vs `None`)** — deferred per CONTEXT.
    - What we know: SPEC §9 defines accepted inputs; Phase 28 consumes the error path.
