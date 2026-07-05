@@ -93,7 +93,12 @@ Full details: `.planning/milestones/v4.0-ROADMAP.md`
   3. Every verse carries a derived `reference` in CiteAbbr format ("1 Ne. 3:7", "D&C 45:32", "Jude 1:3") and a `variant` of "standard" or "jst"
   4. `book_resolver.resolve()` accepts any common input form (FullName, Abbr, CiteAbbr, word-ordinals like "First Nephi", "D&C", "Doctrine and Covenants") and returns the canonical digit-form book name
   5. Unit tests are green for exclusion logic, digit-form normalization, D&C `Sections` override, CiteAbbr reference format, and all resolver alias forms
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 25-01-PLAN.md — clean_verse_text utility (D-01/02/03), ScriptureVerse/BookVerses data model, scripture config constants (Wave 1)
+- [ ] 25-02-PLAN.md — book_resolver canonicalize()/resolve() with alias table + synthetic and live-DB tests (Wave 1)
+- [ ] 25-03-PLAN.md — scripture extraction pipeline, live-DB 41,996 test suite, CLAUDE.md index update (Wave 2)
 
 ### Phase 26: Windowing & Validation
 **Goal**: Every verse has a correctly bounded embed string and all data defects are caught before the live stack is touched
