@@ -103,3 +103,26 @@ Standard, honored. Plan 25-01 is a single task; that is the honest size of the s
 with a second task would only restate the verify. The one place the bias was *not* pushed further is
 inside 25-04, where the query/transform/group trio share internals and a single corpus-wide
 assertion — no seam to cut.
+
+## Revision (checker feedback, 2026-07-27)
+
+No plan boundaries moved — 0 blockers, and the four cuts above stand. One **existing** seam was
+sharpened, because the checker found the plans were leaking across it:
+
+- **Book canonicalization seam (25-02 → 25-04).** The extraction query in 25-04 Task 2 had been
+  fetching `volume` (plus abbreviation, cite abbreviation and full name) via a join to `book`, while
+  25-04 Task 3 forbade reading them and required the `CanonicalBook` record instead — the fields
+  were fetched and forbidden, a second source of truth for the same values with nothing reconciling
+  them. Resolved by narrowing the extraction query to `scripture` alone. `book_resolver.fetch_book_rows`
+  now performs the only join to `book` anywhere in the phase, which is what the seam's stated
+  contract ("give it the 99 `book` rows, get back canonical records") always implied. EXT-01's
+  "+ parent for volume" is satisfied inside the resolver. Side benefit: a book id with no `book` row
+  now raises a named error in the transform instead of vanishing from an inner join.
+
+- **Resolver alias-space contract (25-02, RESEARCH Pitfall 7).** The choice about the seven
+  verse-less child books was being made implicitly. Decided and stated: register **all 94** child
+  books, and say so in the module docstring. Restricting to the 87 verse-bearing books would require
+  either a `scripture` query (which this module is prohibited from making) or a hardcoded exclusion
+  list brittle across DB version bumps; registering them lets Phase 28 distinguish "book exists but
+  v1 stores no verses for it" from "unknown book". `resolve` answers *which book*, never *does it
+  have content* — Phase 28 now inherits a stated contract rather than an accident.
