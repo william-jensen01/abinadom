@@ -96,17 +96,18 @@ Full details: `.planning/milestones/v4.0-ROADMAP.md`
   4. `book_resolver.resolve()` accepts any common input form (FullName, Abbr, CiteAbbr, word-ordinals like "First Nephi", "D&C", "Doctrine and Covenants") and returns the canonical digit-form book name
   5. Unit tests are green for exclusion logic, digit-form normalization, D&C `Sections` override, CiteAbbr reference format, and all resolver alias forms
 
-**Plans**: 3 plans
+**Plans**: 4 plans
 
 Plans:
 **Wave 1**
 
-- [ ] 25-01-PLAN.md — clean_verse_text utility (D-01/02/03), ScriptureVerse/BookVerses data model, scripture config constants (Wave 1)
-- [ ] 25-02-PLAN.md — book_resolver canonicalize()/resolve() with alias table + synthetic and live-DB tests (Wave 1)
+- [ ] 25-01-PLAN.md — clean_verse_text decode-and-clean utility in html_parsing_utils (D-01/02/03)
+- [ ] 25-02-PLAN.md — book_resolver canonicalize()/resolve() with alias index (D-04/05)
+- [ ] 25-03-PLAN.md — ScriptureVerse/BookVerses data model + scripture config constants
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 25-03-PLAN.md — scripture extraction pipeline, live-DB 41,996 test suite, CLAUDE.md index update (Wave 2)
+- [ ] 25-04-PLAN.md — scripture extraction pipeline, schema hardening, live-DB 41,996 proof, CLAUDE.md index update
 
 ### Phase 26: Windowing & Validation
 
