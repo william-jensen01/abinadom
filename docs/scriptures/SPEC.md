@@ -327,6 +327,38 @@ Pure filter query — **no embedding / no Ollama** (works even when Ollama is do
 ## 11. Deferred / future (non-blocking, see `backlog.md`)
 - **v2 study apparatus** (Church API): headings for all volumes, summaries, footnote
   cross-references, Topical Guide, verse↔verse graph. Reintroduces `record_type`.
+  - **Traversal engine for the edge-shaped graph — consider `pgGraph`.** §7 and §12 both
+    flag that the v2 verse↔verse graph is *edge-shaped, not a text document*, and leave the
+    mechanism open. Weaviate finds records by meaning; it does not walk an edge, so today a
+    multi-hop query costs one round-trip per hop plus a Python join, and fan-out grows at
+    each hop. `pgGraph` (Evokoa, Apache-2.0, Rust/pgrx, PG 14–18) compiles FKs into an
+    in-memory CSR array and serves BFS / shortest-path / neighborhood as index lookups.
+    Only half the edges exist today: `core.52.db` already holds talk→citation→verse-reference
+    edges, but **verse↔verse edges do not exist** (§2) — they arrive with the v2 Church-API
+    scrape. **Composes with Weaviate rather than replacing it** — Weaviate resolves the entry
+    record semantically, `pgGraph` traverses from it; the CSR is a read-only artifact.
+    Unlocks "talks citing the cross-refs of verse X", shortest citation path between two
+    talks, everything within N hops of a verse. Costs: a Postgres instance, mirroring the
+    relevant `core.52.db` tables (SQLite, the current source of truth) into it — or migrating
+    the source of truth — a `cargo-pgrx` build, and one `BaseLoader` sibling. Caveats:
+    unevaluated here — the Phase 20–22.2 benchmark
+    harness (`BaseLoader`, `shared_transforms`, `benchmark/runner.py`) is the cheap path to
+    a real verdict; unbounded traversal can crash a DB, so depth/frontier limits are
+    mandatory.
+  - **Sibling extension — `pgContext`** (Evokoa, Apache-2.0, Rust): "a full AI search engine
+    built into Postgres" — a pgvector drop-in fusing ~10 retrieval methods into one ranked
+    pass. Together the two extensions are what *Polygres* packages; both are Apache-2.0 and
+    **self-hostable** — only the managed dashboard is cloud-only, and this project needs no
+    dashboard. `pgContext` is therefore a legitimate 4th loader in the Phase 20–22.2
+    harness, **not** a presumptive swap: Weaviate won Phase 23 on measured numbers (serial
+    p50 42ms, filtered p50 51ms, recall@k10=0.9875) and any replacement must beat that on
+    the same 8 canonical queries. The real draw is **one store for all three access
+    patterns** — relational filter, edge traversal, vector search — which would retire the
+    Phase 9.1 denormalization tax (see VER-06 `--force` re-run) and let `find_by_scripture`
+    run as a native relational query instead of a vector-store lookup. (`get_verse` is
+    already a pure filter query in v1 — §9 — so it gains little.)
+  - Sequencing: evaluate at v2 planning, not during v1. Do not let either extension touch
+    the v1 verse path.
 - **Embedding model revisit** — stay on nomic for v1; arctic/gte are same-paradigm +1–3
   BEIR gated on a re-embed; bge-m3's win needs in-process serving.
 - **Late chunking** — true contextual optimum; blocked by Ollama serving path.
