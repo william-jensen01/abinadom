@@ -87,7 +87,7 @@ def write_json(path, records, key="uri"):
 - Talk files and `topics.json` sort by `uri`. `conference_topics.json` sorts topics by `topic`, and each topic's `entries` by `uri` descending. That's the API's own order: the topic page groups talks into year sections, newest first, and within a conference by slug descending. All 333 saved topics follow it exactly, and so did live re-fetches. Sorting ourselves keeps it stable if the API ever reshuffles; whether the API sorts `210soares` as text or as a number is unchecked, and doesn't matter for stability.
 
 Within a conference this is **not** speaking order:
-- From 2019-04 on, slugs are `<slot><position><name>`. The slot is one digit per session type and can skip: 1 Saturday morning, 2 Saturday afternoon, 3 Saturday evening/priesthood (unused from 2026-04, which has only 4 sessions), 4 Sunday morning, 5 Sunday afternoon. Position starts at 1 and can reach two digits (`210soares` = slot 2, position 10). Sorting by (slot, position) as numbers gives speaking order; a text sort doesn't (`210soares` < `21christofferson`).
+- From 2019-04 on, slugs are `<slot><position><name>`. The slot is one digit per session type and can skip: 1 Saturday morning, 2 Saturday afternoon, 3 Saturday evening/priesthood (unused from 2026-04, which has only 4 sessions), 4 Sunday morning, 5 Sunday afternoon. Position starts at 1 and can reach two digits (`210soares` = slot 2, position 10). Sorting by (slot, position) as numbers is close to speaking order, but not exact: the `toc` sometimes lists talks out of slug order (2022-10 opens with `18oaks`; 2025-10 runs `19oaks`, `11eyring` … `15eyre`, `17johnson`, `16uchtdorf`), and some numbers are never used (2021-10 `45`, 2025-10 `18`). A text sort is further off (`210soares` < `21christofferson`).
 - Before 2019-04, slugs are title words (`born-of-god`), so the order is reverse alphabetical.
 
 Speaking order only comes from the conference contents page (`toc`) or SCI sessions. Never use a `toc` session's index as its slot. The helper only sorts the top level, so `process_topics.py` sorts each topic's `entries` (`sorted(entries, key=lambda e: e["uri"], reverse=True)`) before calling `write_json(path, results, key="topic")`.
@@ -150,7 +150,7 @@ Reads the raw release from `db/sci/core.53.db` and `db/sci/content.53.db`, copie
 
 - Ensign and other non-conference Church content. SCI talks published only in the Ensign keep their SCI data and get no Church data.
 - Pre-1971 talks (Corpus `E`): the Church API doesn't have them.
-- `api/sessions.json` stays as it is. `api/extract_conference_sections.py` made it (every conference's `toc` entries, sessions flattened); once `UPDATE.py` is retired nothing reads or updates it. It's the only saved copy of `toc` speaking order.
+- `api/sessions.json` stays as it is. `api/extract_conference_sections.py` made it (every conference's `toc` entries, sessions flattened); once `UPDATE.py` is retired nothing reads or updates it. It's the only saved copy of `toc` speaking order, except 2025-10, which has only the five session headers and no talks.
 - Weaviate loading. `run_pipeline.py` and `verify_weaviate_pipeline.py` run after `build`, unchanged.
 
 ## Verification
