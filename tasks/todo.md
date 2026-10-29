@@ -1,3 +1,26 @@
+## Embedding: Ollama → llama-server + nomic task prefixes (2026-10-28)
+
+Contract: `config/embedding.py` — `get_embedding_function(url=None, task="document"|"query")`,
+`resolve_embedding_url()` (env `EMBEDDING_URL`, default `http://localhost:8080`),
+`LlamaCppEmbedder` (POST `/v1/embeddings`, sub-batches of 64, reorders by `index`).
+`BaseLoader(..., query_embed_fn=None)` → `self.query_embed_fn` (defaults to `embed_fn`).
+
+- [x] Write `config/embedding.py`; delete `config/ollama.py`
+- [x] `BaseLoader.query_embed_fn`; `.env.example` → `EMBEDDING_URL`
+- [x] server.py: query task, rename `/health` key `ollama`→`embedding`, search_mode `keyword_only_embedding_unavailable`; tests/test_server.py
+- [x] scripts (run_pipeline, verify_weaviate, verify_chromadb) + loaders query() use `query_embed_fn`; tests/test_phase6_orchestrator.py
+- [x] benchmark/runner.py port; delete loaders/embeddings.py + tests/test_embeddings.py; conftest fixture; new tests/test_embedding.py
+- [x] CLAUDE.md index, backlog/spec notes
+- [x] Full test suite green
+- [ ] Re-embed all talks: `run_pipeline.py --force` against llama-server (operator step)
+
+### Review
+- Full suite: 464 passed / 5 failed / 47 skipped — the 5 failures are pre-existing (identical on stashed baseline: 455 passed / 5 failed).
+- Not verified live: no llama-server reachable from dev box; `test_embed_live` skips. First real check = `pytest tests/test_embedding.py` with `BENCHMARK_EMBEDDING_HOST` set, then `/health`.
+- Root cause of missing prefixes: Phase 24-07 ported chromadb's OllamaEmbeddingFunction 1:1 (raw text, one request per text).
+- verify_chromadb_pipeline.py: chromadb 1.5 rejects non-chromadb embedding functions, so collections are opened without one and VER-02 passes `query_embeddings`.
+- Removed `ollama` from Pipfile/Pipfile.lock (no remaining imports).
+
 ## Unified Pipeline Plan
 
 ### Root Problems Identified

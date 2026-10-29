@@ -20,7 +20,7 @@ Architecture (Phase 19):
 Startup sequence:
   1. Connect to Weaviate via get_weaviate_client() (WEAVIATE_HOST/WEAVIATE_PORT env vars) (CORE-01)
   2. Validate all 4 PascalCase collections are present and non-empty (CORE-01/CORE-03)
-  3. Ollama reachability check via embedding call (non-fatal) (CORE-02)
+  3. Embedding server reachability check via embedding call (non-fatal) (CORE-02)
   4. Yield AppContext (Weaviate client) via FastMCP lifespan context (ctx.lifespan_context["app"])
 
 MCP tools (Phase 10):
@@ -69,7 +69,7 @@ from weaviate.util import generate_uuid5
 
 from config.weaviate_client import get_weaviate_client
 from config.pipeline_config import WEAVIATE_COLLECTION_NAMES
-from config.ollama import resolve_ollama_url, get_embedding_function
+from config.embedding import resolve_embedding_url, get_embedding_function
 
 # ---------------------------------------------------------------------------
 # Logging — must be configured before anything else writes to stderr (INTG-01)
@@ -116,22 +116,22 @@ _SORT_PROP = {
 # ---------------------------------------------------------------------------
 
 
-def _check_ollama() -> None:
+def _check_embedding() -> None:
     """
-    Log Ollama reachability at startup — non-fatal.
+    Log embedding server (llama-server) reachability at startup — non-fatal.
 
-    Ollama is a separate service accessed by URL; the server starts regardless
-    of its availability. Search calls will fail gracefully if Ollama is down.
-    The /health endpoint reports live Ollama status on demand.
+    The embedding server is a separate service accessed by URL; the server starts regardless
+    of its availability. Search calls will fail gracefully if it is down.
+    The /health endpoint reports live embedding server status on demand.
     """
     try:
-        ollama_url = resolve_ollama_url()
-        ef = get_embedding_function(url=ollama_url)
+        embedding_url = resolve_embedding_url()
+        ef = get_embedding_function(url=embedding_url, task="query")
         ef(["health check"])
-        logger.info("Ollama reachable at startup (nomic-embed-text ready)")
+        logger.info("Embedding server reachable at startup (nomic-embed-text ready)")
     except Exception:
         logger.warning(
-            "Ollama unreachable at startup — search will be unavailable until Ollama is running"
+            "Embedding server unreachable at startup — search will be unavailable until it is running"
         )
 
 
@@ -167,7 +167,7 @@ def _startup() -> AppContext:
     except Exception as exc:
         logger.warning("Weaviate unreachable: %s", exc)
         sys.exit(1)
-    _check_ollama()
+    _check_embedding()
     _validate_collections(client)
     return AppContext(client=client)
 
@@ -352,17 +352,17 @@ mcp = FastMCP("lds-scripture-index", instructions=MCP_INSTRUCTIONS, auth=_auth, 
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health_handler(request: Request) -> JSONResponse:
-    """Return server health with live Ollama and Weaviate reachability checks."""
-    status = {"ollama": "reachable", "weaviate": "reachable"}
+    """Return server health with live embedding server and Weaviate reachability checks."""
+    status = {"embedding": "reachable", "weaviate": "reachable"}
     http_status = 200
 
-    # Ollama check: live embedding call (per D-09 — same approach as _check_ollama but without sys.exit on failure)
+    # Embedding server check: live embedding call (per D-09 — same approach as _check_embedding but without sys.exit on failure)
     try:
-        ollama_url = resolve_ollama_url()
-        ef = get_embedding_function(url=ollama_url)
+        embedding_url = resolve_embedding_url()
+        ef = get_embedding_function(url=embedding_url, task="query")
         ef(["health"])
     except Exception:
-        status["ollama"] = "unreachable"
+        status["embedding"] = "unreachable"
         http_status = 503
 
     # Weaviate check: HTTP GET with 2s timeout (D-19 — no gRPC client per health poll)
@@ -502,21 +502,21 @@ async def search(
     # is routed through near_vector, which requires a query vector).
     need_vector = alpha != 0.0 or group_by_talk
     query_vector = None
-    ollama_failed = False
+    embedding_failed = False
 
     if need_vector:
         try:
-            ollama_url = resolve_ollama_url()
-            ef = get_embedding_function(url=ollama_url)
+            embedding_url = resolve_embedding_url()
+            ef = get_embedding_function(url=embedding_url, task="query")
             query_vector = ef([query])[0]
         except Exception as e:
-            logger.warning("Ollama unavailable for search (falling back to bm25): %s", e)
-            ollama_failed = True
+            logger.warning("Embedding server unavailable for search (falling back to bm25): %s", e)
+            embedding_failed = True
 
     # Determine effective search path
-    if ollama_failed:
+    if embedding_failed:
         effective_alpha = 0.0
-        search_mode = "keyword_only_ollama_unavailable"
+        search_mode = "keyword_only_embedding_unavailable"
     elif alpha == 0.0:
         effective_alpha = 0.0
         search_mode = "keyword"
@@ -530,7 +530,7 @@ async def search(
     # Grouped path — routed through near_vector regardless of alpha. On this
     # Weaviate version hybrid+group_by returns zero groups, so grouping only works
     # via the vector path; it requires a query vector. When none is available
-    # (Ollama down), grouping cannot run — say so plainly instead of returning empty.
+    # (embedding server down), grouping cannot run — say so plainly instead of returning empty.
     if group_by_talk:
         if query_vector is None:
             return (
@@ -754,8 +754,8 @@ async def find_by_scripture(
     """Find which General Conference talks cite a given scripture.
 
     Searches the citations collection by scripture reference using a pure property
-    filter — no embedding or Ollama required, so this works even when Ollama is
-    unavailable or down.
+    filter — no embedding or embedding server required, so this works even when the
+    embedding server is unavailable or down.
 
     Args:
         book: Scripture book name (required). Case-insensitive; e.g. "romans",
@@ -774,7 +774,7 @@ async def find_by_scripture(
 
     scripture_filter = _build_scripture_filter(book, chapter, verse_start, verse_end)
 
-    # Pure filter query — no vector / no Ollama call
+    # Pure filter query — no vector / no embedding call
     citation_result = citations_col.query.fetch_objects(
         filters=scripture_filter,
         limit=limit,

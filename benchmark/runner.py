@@ -46,7 +46,7 @@ from extractors.phase3_citation_extraction import fetch_all_books
 from extractors.phase5_validation import validate_talk
 from extractors.pipeline import process_talk_pipeline
 from loaders import BaseLoader
-from loaders.embeddings import embed, embed_batch
+from config.embedding import get_embedding_function
 from loaders.qdrant_loader import QdrantLoader
 from loaders.weaviate_loader import WeaviateLoader
 from qdrant_client import QdrantClient
@@ -623,7 +623,8 @@ def _build_loader(db_name: str, config: argparse.Namespace) -> BaseLoader:
         )
         return WeaviateLoader(
             client=client,
-            embed_fn=embed_batch,
+            embed_fn=get_embedding_function(),
+            query_embed_fn=get_embedding_function(task="query"),
             batch_size=100,
         )
     elif db_name == "qdrant":
@@ -633,7 +634,8 @@ def _build_loader(db_name: str, config: argparse.Namespace) -> BaseLoader:
         )
         return QdrantLoader(
             client=client,
-            embed_fn=embed_batch,
+            embed_fn=get_embedding_function(),
+            query_embed_fn=get_embedding_function(task="query"),
             batch_size=100,
         )
     else:
@@ -709,11 +711,11 @@ def main() -> None:
     else:
         db_list = [args.db]
 
-    # Validate Ollama reachability before starting any DB work.
+    # Validate embedding server reachability before starting any DB work.
     try:
-        embed("hello", model="nomic-embed-text")
+        get_embedding_function()(["hello"])
     except Exception as e:
-        logger.error("Ollama unreachable: %s — ensure Ollama is running with nomic-embed-text pulled", e)
+        logger.error("Embedding server unreachable: %s — ensure llama-server is running with nomic-embed-text loaded", e)
         sys.exit(1)
 
     had_failure = False

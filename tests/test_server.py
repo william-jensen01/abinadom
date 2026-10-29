@@ -2,7 +2,7 @@
 Unit tests for server.py startup validation and MCP tool integration.
 
 CORE-01: Weaviate client factory (env-var config, _validate_collections guard)
-CORE-02: Ollama health check (fails fast on connection error)
+CORE-02: Embedding server health check (fails fast on connection error)
 CORE-03: _validate_collections (all 4 collections present and non-empty)
 CORE-05: _build_weaviate_filters — all 5 filter cases
 TOOL-01/TOOL-02/TOOL-03: search tool integration
@@ -111,20 +111,20 @@ class TestValidateCollections:
 
 
 # ---------------------------------------------------------------------------
-# CORE-02: _check_ollama
+# CORE-02: _check_embedding
 # ---------------------------------------------------------------------------
 
 
-def test_ollama_failure_is_non_fatal():
-    """_check_ollama() logs a warning but does not raise when Ollama is unreachable."""
-    from server import _check_ollama
+def test_embedding_failure_is_non_fatal():
+    """_check_embedding() logs a warning but does not raise when the embedding server is unreachable."""
+    from server import _check_embedding
 
     mock_ef = MagicMock(side_effect=Exception("connection refused"))
     mock_get_ef = MagicMock(return_value=mock_ef)
 
     with patch("server.get_embedding_function", mock_get_ef):
-        # Should not raise — Ollama failure is non-fatal at startup
-        _check_ollama()
+        # Should not raise — embedding server failure is non-fatal at startup
+        _check_embedding()
 
 
 # ---------------------------------------------------------------------------
@@ -509,8 +509,8 @@ class TestSearchTool:
         ctx, mock_col = self._make_ctx_with_col()
 
         with patch("server.get_embedding_function") as mock_gef, \
-             patch("server.resolve_ollama_url") as mock_url:
-            mock_url.return_value = "http://localhost:11434"
+             patch("server.resolve_embedding_url") as mock_url:
+            mock_url.return_value = "http://localhost:8080"
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             result = asyncio.run(search(query="test query", ctx=ctx))
 
@@ -544,8 +544,8 @@ class TestSearchTool:
         mock_client.collections.use.return_value = mock_col
 
         with patch("server.get_embedding_function") as mock_gef, \
-             patch("server.resolve_ollama_url") as mock_url:
-            mock_url.return_value = "http://localhost:11434"
+             patch("server.resolve_embedding_url") as mock_url:
+            mock_url.return_value = "http://localhost:8080"
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             result = asyncio.run(search(query="nothing matches", ctx=ctx))
 
@@ -558,8 +558,8 @@ class TestSearchTool:
         ctx, mock_col_mock = self._make_ctx_with_col()
 
         with patch("server.get_embedding_function") as mock_gef, \
-             patch("server.resolve_ollama_url") as mock_url:
-            mock_url.return_value = "http://localhost:11434"
+             patch("server.resolve_embedding_url") as mock_url:
+            mock_url.return_value = "http://localhost:8080"
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             asyncio.run(search(query="test", limit=50, ctx=ctx))
 
@@ -582,8 +582,8 @@ class TestSearchTool:
         ctx, mock_col_mock = self._make_ctx_with_col()
 
         with patch("server.get_embedding_function") as mock_gef, \
-             patch("server.resolve_ollama_url") as mock_url:
-            mock_url.return_value = "http://localhost:11434"
+             patch("server.resolve_embedding_url") as mock_url:
+            mock_url.return_value = "http://localhost:8080"
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             asyncio.run(search(query="test", year=2020, season="April", ctx=ctx))
 
@@ -597,8 +597,8 @@ class TestSearchTool:
         ctx, mock_col_mock = self._make_ctx_with_col()
 
         with patch("server.get_embedding_function") as mock_gef, \
-             patch("server.resolve_ollama_url") as mock_url:
-            mock_url.return_value = "http://localhost:11434"
+             patch("server.resolve_embedding_url") as mock_url:
+            mock_url.return_value = "http://localhost:8080"
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             asyncio.run(search(query="grace", speaker="Holland", ctx=ctx))
 
@@ -616,8 +616,8 @@ class TestSearchTool:
         ctx, mock_col = self._make_ctx_with_col()
 
         with patch("server.get_embedding_function") as mock_gef, \
-             patch("server.resolve_ollama_url") as mock_url:
-            mock_url.return_value = "http://localhost:11434"
+             patch("server.resolve_embedding_url") as mock_url:
+            mock_url.return_value = "http://localhost:8080"
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             result = asyncio.run(search(query="test", alpha=1.0, ctx=ctx))
 
@@ -643,22 +643,36 @@ class TestSearchTool:
         assert parsed["results"][0]["score_type"] == "bm25"
         mock_col.query.bm25.assert_called_once()
 
-    def test_search_ollama_down_fallback(self):
-        """When Ollama embedding raises, search falls back to bm25 with search_mode 'keyword_only_ollama_unavailable'."""
+    def test_search_embedding_down_fallback(self):
+        """When the embedding call raises, search falls back to bm25 with search_mode 'keyword_only_embedding_unavailable'."""
         from server import search
 
         ctx, mock_col = self._make_ctx_with_col()
 
         with patch("server.get_embedding_function") as mock_gef, \
-             patch("server.resolve_ollama_url") as mock_url:
-            mock_url.return_value = "http://localhost:11434"
+             patch("server.resolve_embedding_url") as mock_url:
+            mock_url.return_value = "http://localhost:8080"
             # Embedding function raises on call
-            mock_gef.return_value = MagicMock(side_effect=Exception("ollama down"))
+            mock_gef.return_value = MagicMock(side_effect=Exception("embedding server down"))
             result = asyncio.run(search(query="test", ctx=ctx))  # default alpha=0.7 → needs embedding
 
         parsed = json.loads(result)
-        assert parsed["search_mode"] == "keyword_only_ollama_unavailable"
+        assert parsed["search_mode"] == "keyword_only_embedding_unavailable"
         mock_col.query.bm25.assert_called_once()
+
+    def test_search_embeds_query_with_task_query(self):
+        """search embeds the query via get_embedding_function(task="query") (search_query: prefix)."""
+        from server import search
+
+        ctx, mock_col = self._make_ctx_with_col()
+
+        with patch("server.get_embedding_function") as mock_gef, \
+             patch("server.resolve_embedding_url") as mock_url:
+            mock_url.return_value = "http://localhost:8080"
+            mock_gef.return_value = lambda texts: [[0.1] * 10]
+            asyncio.run(search(query="test query", ctx=ctx))
+
+        assert mock_gef.call_args.kwargs["task"] == "query"
 
     def test_search_empty_query_with_filter_browse(self):
         """Empty/whitespace query with at least one filter uses fetch_objects and returns browse_filtered."""
@@ -715,8 +729,8 @@ class TestSearchTool:
         mock_client.collections.use.return_value = mock_col
 
         with patch("server.get_embedding_function") as mock_gef, \
-             patch("server.resolve_ollama_url") as mock_url:
-            mock_url.return_value = "http://localhost:11434"
+             patch("server.resolve_embedding_url") as mock_url:
+            mock_url.return_value = "http://localhost:8080"
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             result = asyncio.run(search(query="test", group_by_talk=True, ctx=ctx))
 
@@ -752,8 +766,8 @@ class TestSearchTool:
         mock_col.aggregate.over_all.return_value.total_count = 10
 
         with patch("server.get_embedding_function") as mock_gef, \
-             patch("server.resolve_ollama_url") as mock_url:
-            mock_url.return_value = "http://localhost:11434"
+             patch("server.resolve_embedding_url") as mock_url:
+            mock_url.return_value = "http://localhost:8080"
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             result = asyncio.run(search(query="test query", ctx=ctx))
 
@@ -772,8 +786,8 @@ class TestSearchTool:
         mock_col.aggregate.over_all.return_value.total_count = 100
 
         with patch("server.get_embedding_function") as mock_gef, \
-             patch("server.resolve_ollama_url") as mock_url:
-            mock_url.return_value = "http://localhost:11434"
+             patch("server.resolve_embedding_url") as mock_url:
+            mock_url.return_value = "http://localhost:8080"
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             result = asyncio.run(search(query="test query", ctx=ctx))
 
@@ -851,8 +865,8 @@ class TestSearchTool:
         ctx, mock_col = self._make_ctx_with_col()
 
         with patch("server.get_embedding_function") as mock_gef, \
-             patch("server.resolve_ollama_url") as mock_url:
-            mock_url.return_value = "http://localhost:11434"
+             patch("server.resolve_embedding_url") as mock_url:
+            mock_url.return_value = "http://localhost:8080"
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             asyncio.run(search(query="test", query_properties=["title", "text"], ctx=ctx))
 
@@ -878,8 +892,8 @@ class TestSearchTool:
         ctx, mock_col = self._make_ctx_with_col()
 
         with patch("server.get_embedding_function") as mock_gef, \
-             patch("server.resolve_ollama_url") as mock_url:
-            mock_url.return_value = "http://localhost:11434"
+             patch("server.resolve_embedding_url") as mock_url:
+            mock_url.return_value = "http://localhost:8080"
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             asyncio.run(search(query="test", alpha=1.0, query_properties=["title"], ctx=ctx))
 
@@ -899,8 +913,8 @@ class TestSearchTool:
         mock_client.collections.use.return_value = mock_col
 
         with patch("server.get_embedding_function") as mock_gef, \
-             patch("server.resolve_ollama_url") as mock_url:
-            mock_url.return_value = "http://localhost:11434"
+             patch("server.resolve_embedding_url") as mock_url:
+            mock_url.return_value = "http://localhost:8080"
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             asyncio.run(search(query="test", group_by_talk=True, results_per_talk=5, ctx=ctx))
 
@@ -910,16 +924,16 @@ class TestSearchTool:
         assert group_by.objects_per_group == 5
 
     def test_group_by_talk_without_embedding_returns_message(self):
-        """group_by_talk requires a vector; when Ollama is down it returns a clear message."""
+        """group_by_talk requires a vector; when the embedding server is down it returns a clear message."""
         from server import search
 
         ctx, mock_col = self._make_ctx_with_col()
 
-        # Ollama unavailable -> no query vector -> grouping cannot run
+        # Embedding server unavailable -> no query vector -> grouping cannot run
         with patch("server.get_embedding_function") as mock_gef, \
-             patch("server.resolve_ollama_url") as mock_url:
-            mock_url.return_value = "http://localhost:11434"
-            mock_gef.side_effect = RuntimeError("ollama down")
+             patch("server.resolve_embedding_url") as mock_url:
+            mock_url.return_value = "http://localhost:8080"
+            mock_gef.side_effect = RuntimeError("embedding server down")
             result = asyncio.run(search(query="test", group_by_talk=True, ctx=ctx))
 
         assert "group_by_talk requires semantic search" in result
@@ -932,8 +946,8 @@ class TestSearchTool:
         ctx, mock_col = self._make_ctx_with_col()
 
         with patch("server.get_embedding_function") as mock_gef, \
-             patch("server.resolve_ollama_url") as mock_url:
-            mock_url.return_value = "http://localhost:11434"
+             patch("server.resolve_embedding_url") as mock_url:
+            mock_url.return_value = "http://localhost:8080"
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             asyncio.run(search(query="test", offset=10, ctx=ctx))
 
@@ -947,8 +961,8 @@ class TestSearchTool:
         ctx, mock_col = self._make_ctx_with_col()
 
         with patch("server.get_embedding_function") as mock_gef, \
-             patch("server.resolve_ollama_url") as mock_url:
-            mock_url.return_value = "http://localhost:11434"
+             patch("server.resolve_embedding_url") as mock_url:
+            mock_url.return_value = "http://localhost:8080"
             mock_gef.return_value = lambda texts: [[0.1] * 10]
             asyncio.run(search(
                 query="test",
@@ -1135,25 +1149,27 @@ def test_get_talk_docstring_has_workflow_hint():
 
 
 # ---------------------------------------------------------------------------
-# OLLAMA_URL consolidation: _check_ollama passes resolved URL to get_embedding_function
+# EMBEDDING_URL consolidation: _check_embedding passes resolved URL to get_embedding_function
 # ---------------------------------------------------------------------------
 
 
-def test_check_ollama_passes_resolved_url(monkeypatch):
-    """_check_ollama passes resolve_ollama_url() result to get_embedding_function(url=...)."""
-    monkeypatch.setenv("OLLAMA_URL", "http://custom-host:9999")
+def test_check_embedding_passes_resolved_url(monkeypatch):
+    """_check_embedding passes resolve_embedding_url() result to get_embedding_function(url=..., task="query")."""
+    monkeypatch.setenv("EMBEDDING_URL", "http://custom-host:9999")
     captured_url = {}
 
-    def mock_get_ef(url=None):
+    def mock_get_ef(url=None, task="document"):
         captured_url["url"] = url
+        captured_url["task"] = task
         mock_ef = lambda texts: [[0.1] * 10]
         return mock_ef
 
     monkeypatch.setattr("server.get_embedding_function", mock_get_ef)
-    from server import _check_ollama
+    from server import _check_embedding
 
-    _check_ollama()
+    _check_embedding()
     assert captured_url["url"] == "http://custom-host:9999"
+    assert captured_url["task"] == "query"
 
 
 # ---------------------------------------------------------------------------
@@ -1173,7 +1189,7 @@ def test_no_stdio_references():
 
 
 def test_health_returns_200():
-    """GET /health returns 200 with ok status when both Ollama and Weaviate are reachable."""
+    """GET /health returns 200 with ok status when both the embedding server and Weaviate are reachable."""
     mock_ef = MagicMock(return_value=[[0.1] * 10])
     mock_weaviate_resp = MagicMock()
     mock_weaviate_resp.ok = True
@@ -1189,12 +1205,12 @@ def test_health_returns_200():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
-    assert data["ollama"] == "reachable"
+    assert data["embedding"] == "reachable"
     assert data["weaviate"] == "reachable"
 
 
-def test_health_ollama_down():
-    """GET /health returns degraded when Ollama is unreachable; weaviate is still reachable."""
+def test_health_embedding_down():
+    """GET /health returns degraded when the embedding server is unreachable; weaviate is still reachable."""
     mock_ef = MagicMock(side_effect=Exception("connection refused"))
     mock_weaviate_resp = MagicMock()
     mock_weaviate_resp.ok = True
@@ -1218,7 +1234,7 @@ def test_health_ollama_down():
 
 
 def _mock_startup():
-    """Return a mock AppContext for dispatcher tests (avoids real Weaviate/Ollama calls)."""
+    """Return a mock AppContext for dispatcher tests (avoids real Weaviate/embedding calls)."""
     from server import AppContext
     mock_client = MagicMock()
     return AppContext(client=mock_client)
@@ -1524,7 +1540,7 @@ class TestFindByScripture:
         assert result == "No talks found citing that scripture."
 
     def test_embedding_never_called(self):
-        """find_by_scripture must not call get_embedding_function (no Ollama dependency)."""
+        """find_by_scripture must not call get_embedding_function (no embedding dependency)."""
         from server import find_by_scripture
 
         ctx, _, _ = self._make_ctx(
@@ -1661,7 +1677,7 @@ class TestCorpusStats:
         # Weaviate must not have been called
         mock_client.collections.use.assert_not_called()
 
-    def test_no_ollama_calls(self):
+    def test_no_embedding_calls(self):
         """corpus_stats must never call get_embedding_function (no embedding needed)."""
         from server import corpus_stats
 

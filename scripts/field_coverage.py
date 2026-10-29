@@ -10,7 +10,7 @@ boosts / returned metadata.
 Motivation: filtering on a sparse or extraction-derived field silently drops
 relevant-but-untagged records. This script turns "I'm hesitant" into a number.
 
-What it does (no writes, no embeddings, works when Ollama is down):
+What it does (no writes, no embeddings, works when the embedding server is down):
   - talks collection: full paginated scan; exact populated/empty/zero rates,
     a few sample values per field, and an ISO-date sortability check on talk_date.
   - citations collection: aggregate-API counts for parse_success and book

@@ -363,8 +363,8 @@ Pure filter query — **no embedding / no Ollama** (works even when Ollama is do
   BEIR gated on a re-embed; bge-m3's win needs in-process serving.
 - **Late chunking** — true contextual optimum; blocked by Ollama serving path.
 - **Multi-model routing** — feasible, config-gated, YAGNI for v1.
-- **nomic task prefixes** (`search_document:`/`search_query:`) — pre-existing gap affecting
-  both corpora; higher-ROI than a model swap.
+- **nomic task prefixes** (`search_document:`/`search_query:`) — ✅ resolved 2026-10-28 in
+  `config/embedding.py` (llama-server embedder); scripture loading must use `task="document"`.
 
 ---
 

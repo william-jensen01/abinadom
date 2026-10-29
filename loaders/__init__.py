@@ -22,15 +22,21 @@ class BaseLoader(ABC):
         embed_fn:   Callable that accepts list[str] and returns list[list[float]].
                     Injected at constructor time; same function used for all .load() calls.
         batch_size: Number of records per write batch. Default 100.
+        query_embed_fn: Optional callable used by .query() to embed query text.
+                    Defaults to embed_fn. Pass a query-task embedder
+                    (config.embedding.get_embedding_function(task="query")) so queries
+                    get nomic's "search_query: " prefix instead of the document prefix.
     """
 
     def __init__(
         self,
         embed_fn: Callable[[list[str]], list[list[float]]],
         batch_size: int = 100,
+        query_embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
     ) -> None:
         self.embed_fn = embed_fn
         self.batch_size = batch_size
+        self.query_embed_fn = query_embed_fn or embed_fn
 
     def close(self) -> None:
         """Release any held connections. Default is no-op. Override when needed."""

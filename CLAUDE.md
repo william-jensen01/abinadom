@@ -109,6 +109,7 @@
 
 ### config/
 - `config/weaviate_client.py` — Shared Weaviate client factory (Phase 24)
+- `config/embedding.py` — llama-server embedder (nomic-embed-text, /v1/embeddings, batched; `task="document"|"query"` applies nomic task prefixes; env `EMBEDDING_URL`)
 - `config/pipeline_config.py` — Processing constants for all pipeline phases
 - `config/schemas.py` — Config/validation schemas
 - `config/audit_sample.json` — Talk IDs for bug audit sample (user-curated; populate before running run_audit.py)
@@ -143,6 +144,7 @@
 - `tests/test_server.py`
 - `tests/test_oauth.py`
 - `tests/test_auth.py`
+- `tests/test_embedding.py` — LlamaCppEmbedder unit tests (mocked HTTP) + live check
 
 ### infra/
 - `infra/docker-compose.yml` — Shared reverse-proxy Compose stack (Caddy + cloudflared)

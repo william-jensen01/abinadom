@@ -16,3 +16,5 @@ data/
 
 .env
 infra/.env
+# Local agent notes
+tasks/lessons.md

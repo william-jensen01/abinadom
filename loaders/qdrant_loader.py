@@ -67,8 +67,9 @@ class QdrantLoader(BaseLoader):
         client: QdrantClient,
         embed_fn: Callable[[list[str]], list[list[float]]],
         batch_size: int = 100,
+        query_embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
     ) -> None:
-        super().__init__(embed_fn, batch_size)
+        super().__init__(embed_fn, batch_size, query_embed_fn)
         self._client = client
         self._ensure_collections()
 
@@ -154,7 +155,7 @@ class QdrantLoader(BaseLoader):
         """
         from qdrant_client.models import Filter as QFilter, FieldCondition, MatchValue
 
-        query_embedding = self.embed_fn([query_text])[0]
+        query_embedding = self.query_embed_fn([query_text])[0]
 
         qdrant_filter = None
         if filter is not None:

@@ -48,8 +48,9 @@ class WeaviateLoader(BaseLoader):
         embed_fn: Callable[[list[str]], list[list[float]]],
         batch_size: int = 1000,
         buffered: bool = False,
+        query_embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
     ) -> None:
-        super().__init__(embed_fn, batch_size)
+        super().__init__(embed_fn, batch_size, query_embed_fn)
         self._client = client
         self._buffered = buffered
         self._buffers: dict[str, list[DataObject]] = {
@@ -305,7 +306,7 @@ class WeaviateLoader(BaseLoader):
                 f"{list(WEAVIATE_COLLECTION_NAMES.values())}"
             )
         col = self._client.collections.use(class_name)
-        query_embedding = self.embed_fn([query_text])[0]
+        query_embedding = self.query_embed_fn([query_text])[0]
 
         from weaviate.classes.query import Filter
 

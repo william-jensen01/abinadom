@@ -30,8 +30,8 @@ QDRANT_HOST = os.environ.get("BENCHMARK_QDRANT_HOST", "10.0.0.231")
 QDRANT_PORT = int(os.environ.get("BENCHMARK_QDRANT_PORT", "6333"))
 WEAVIATE_HOST = os.environ.get("BENCHMARK_WEAVIATE_HOST", "10.0.0.231")
 WEAVIATE_PORT = int(os.environ.get("BENCHMARK_WEAVIATE_PORT", "8051"))
-OLLAMA_HOST = os.environ.get("BENCHMARK_OLLAMA_HOST", "10.0.0.231")
-OLLAMA_PORT = int(os.environ.get("BENCHMARK_OLLAMA_PORT", "11434"))
+EMBEDDING_HOST = os.environ.get("BENCHMARK_EMBEDDING_HOST", "10.0.0.231")
+EMBEDDING_PORT = int(os.environ.get("BENCHMARK_EMBEDDING_PORT", "8080"))
 
 # ---------------------------------------------------------------------------
 # Port-check helpers (D-08)
@@ -67,10 +67,10 @@ def qdrant_available():
 
 
 @pytest.fixture(scope="session")
-def ollama_available():
-    """Skip test if Ollama is not reachable."""
-    if not _is_port_open(OLLAMA_HOST, OLLAMA_PORT):
-        pytest.skip(f"Ollama not reachable at {OLLAMA_HOST}:{OLLAMA_PORT}")
+def embedding_available():
+    """Skip test if the llama-server embedding endpoint is not reachable."""
+    if not _is_port_open(EMBEDDING_HOST, EMBEDDING_PORT):
+        pytest.skip(f"Embedding server not reachable at {EMBEDDING_HOST}:{EMBEDDING_PORT}")
 
 
 # ---------------------------------------------------------------------------

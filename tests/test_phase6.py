@@ -238,7 +238,7 @@ def _make_full_bundle(talk_id=8820, num_paragraphs=2, num_citations=1, num_footn
 
 
 def _mock_embed_fn(texts: list[str]) -> list[list[float]]:
-    """Return zero vectors of dimension 768 — no Ollama needed in unit tests."""
+    """Return zero vectors of dimension 768 — no embedding server needed in unit tests."""
     return [[0.0] * 768 for _ in texts]
 
 

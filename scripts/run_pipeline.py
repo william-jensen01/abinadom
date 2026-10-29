@@ -34,7 +34,7 @@ from tqdm import tqdm
 from db import content_db, core_db
 from config.schemas import PARAGRAPH_CONFIG
 from config.pipeline_config import WEAVIATE_BATCH_SIZE
-from config.ollama import get_embedding_function, resolve_ollama_url
+from config.embedding import get_embedding_function, resolve_embedding_url
 from extractors.pipeline import process_talk_pipeline
 from extractors.phase3_citation_extraction import fetch_all_books
 from extractors.phase5_validation import validate_talk
@@ -96,11 +96,16 @@ def main() -> None:
     start_time = time.time()
 
     book_cache = fetch_all_books(core_db)
-    embedding_fn = get_embedding_function(url=resolve_ollama_url())
+    embedding_url = resolve_embedding_url()
+    embedding_fn = get_embedding_function(url=embedding_url)
+    query_embedding_fn = get_embedding_function(url=embedding_url, task="query")
 
     client = get_weaviate_client()
     with WeaviateLoader(
-        client=client, embed_fn=embedding_fn, buffered=args.buffered
+        client=client,
+        embed_fn=embedding_fn,
+        buffered=args.buffered,
+        query_embed_fn=query_embedding_fn,
     ) as loader:
         all_talk_ids = _get_all_gc_talk_ids()
 

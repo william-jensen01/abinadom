@@ -37,6 +37,7 @@ from tqdm import tqdm
 
 from db import core_db
 from config.pipeline_config import CHROMADB_COLLECTION_NAMES
+from config.embedding import get_embedding_function
 
 
 def get_chromadb_client() -> chromadb.HttpClient:
@@ -46,19 +47,16 @@ def get_chromadb_client() -> chromadb.HttpClient:
     return chromadb.HttpClient(host=host, port=port)
 
 
-def get_embedding_function() -> Any:
+def get_query_embedder() -> Any:
     """
-    Return an OllamaEmbeddingFunction for nomic-embed-text, or None if unavailable.
+    Return a query-task embedder (llama-server, nomic-embed-text), or None if unavailable.
 
-    Ollama must be running locally with nomic-embed-text pulled for VER-02 to work.
-    VER-02 is skipped (not failed) when this returns None.
+    Probes the server with one text. VER-02 is skipped (not failed) when this returns None.
     """
     try:
-        from chromadb.utils.embedding_functions import OllamaEmbeddingFunction
-        return OllamaEmbeddingFunction(
-            model_name="nomic-embed-text",
-            url=os.environ.get("OLLAMA_URL", "http://localhost:11434") + "/api/embeddings",
-        )
+        ef = get_embedding_function(task="query")
+        ef(["test"])
+        return ef
     except Exception:
         return None
 
@@ -73,7 +71,7 @@ DEFAULT_REPORT_PATH = Path(__file__).parent.parent / "data" / "verification_repo
 # =============================================================================
 
 
-def check_counts(client: Any, ef: Any) -> Dict[str, Any]:
+def check_counts(client: Any) -> Dict[str, Any]:
     """
     VER-01: Verify record counts across all 4 ChromaDB collections.
 
@@ -98,19 +96,15 @@ def check_counts(client: Any, ef: Any) -> Dict[str, Any]:
     # Fetch ChromaDB collection counts (no embedding_function needed for count())
     talks_col = client.get_or_create_collection(
         name=CHROMADB_COLLECTION_NAMES["talks"],
-        embedding_function=ef,
     )
     paras_col = client.get_or_create_collection(
         name=CHROMADB_COLLECTION_NAMES["paragraphs"],
-        embedding_function=ef,
     )
     citations_col = client.get_or_create_collection(
         name=CHROMADB_COLLECTION_NAMES["citations"],
-        embedding_function=ef,
     )
     footnotes_col = client.get_or_create_collection(
         name=CHROMADB_COLLECTION_NAMES["footnotes"],
-        embedding_function=ef,
     )
 
     chroma_talk_count = talks_col.count()
@@ -188,12 +182,17 @@ def check_semantic_search(client: Any, ef: Any) -> Dict[str, Any]:
     conference_talk_paragraphs and print top 5 results each.
 
     Results are for manual review only. VER-02 is skipped (not failed) if
-    Ollama is unavailable.
+    the embedding server is unavailable.
 
     Returns:
         Dict with keys: skipped, reason (if skipped), or queries (list of result dicts)
     """
     print("VER-02: Semantic search ...")
+
+    if ef is None:
+        reason = "embedding server unavailable"
+        print(f"VER-02: Semantic search ... SKIPPED ({reason})")
+        return {"skipped": True, "reason": reason, "queries": []}
 
     queries = [
         "the Atonement of Jesus Christ forgiveness of sins",
@@ -204,22 +203,20 @@ def check_semantic_search(client: Any, ef: Any) -> Dict[str, Any]:
     ]
 
     try:
-        # Collections must be fetched WITH embedding_function for query()
         paras_col = client.get_or_create_collection(
             name=CHROMADB_COLLECTION_NAMES["paragraphs"],
-            embedding_function=ef,
         )
         talks_col = client.get_or_create_collection(
             name=CHROMADB_COLLECTION_NAMES["talks"],
-            embedding_function=ef,
         )
 
         query_results: List[Dict[str, Any]] = []
 
         for query in queries:
             print(f"\n  Query: \"{query}\"")
+            query_embedding = ef([query])[0]
             results = paras_col.query(
-                query_texts=[query],
+                query_embeddings=[query_embedding],
                 n_results=5,
                 include=["documents", "metadatas", "distances"],
             )
@@ -281,8 +278,8 @@ def check_semantic_search(client: Any, ef: Any) -> Dict[str, Any]:
         return {"skipped": False, "queries": query_results}
 
     except Exception as exc:
-        # Ollama unavailable or other connection error — skip, not fail
-        reason = f"Ollama unavailable or query error: {exc}"
+        # Embedding server unavailable or other connection error — skip, not fail
+        reason = f"embedding server unavailable or query error: {exc}"
         print(f"VER-02: Semantic search ... SKIPPED ({reason})")
         return {"skipped": True, "reason": reason, "queries": []}
 
@@ -292,7 +289,7 @@ def check_semantic_search(client: Any, ef: Any) -> Dict[str, Any]:
 # =============================================================================
 
 
-def check_metadata_filters(client: Any, ef: Any) -> Dict[str, Any]:
+def check_metadata_filters(client: Any) -> Dict[str, Any]:
     """
     VER-03: Verify metadata filtering on conference_talks collection.
 
@@ -306,11 +303,9 @@ def check_metadata_filters(client: Any, ef: Any) -> Dict[str, Any]:
 
     talks_col = client.get_or_create_collection(
         name=CHROMADB_COLLECTION_NAMES["talks"],
-        embedding_function=ef,
     )
     paras_col = client.get_or_create_collection(
         name=CHROMADB_COLLECTION_NAMES["paragraphs"],
-        embedding_function=ef,
     )
 
     filter_results: List[Dict[str, Any]] = []
@@ -471,7 +466,7 @@ def check_metadata_filters(client: Any, ef: Any) -> Dict[str, Any]:
 # =============================================================================
 
 
-def check_fk_integrity(client: Any, ef: Any) -> Dict[str, Any]:
+def check_fk_integrity(client: Any) -> Dict[str, Any]:
     """
     VER-04: Full FK scan across all 4 ChromaDB collections.
 
@@ -492,19 +487,15 @@ def check_fk_integrity(client: Any, ef: Any) -> Dict[str, Any]:
     # --- Build reference sets (IDs only — no include= param needed) ---
     talks_col = client.get_or_create_collection(
         name=CHROMADB_COLLECTION_NAMES["talks"],
-        embedding_function=ef,
     )
     paras_col = client.get_or_create_collection(
         name=CHROMADB_COLLECTION_NAMES["paragraphs"],
-        embedding_function=ef,
     )
     citations_col = client.get_or_create_collection(
         name=CHROMADB_COLLECTION_NAMES["citations"],
-        embedding_function=ef,
     )
     footnotes_col = client.get_or_create_collection(
         name=CHROMADB_COLLECTION_NAMES["footnotes"],
-        embedding_function=ef,
     )
 
     print("  Building reference ID sets ...")
@@ -666,7 +657,7 @@ def check_fk_integrity(client: Any, ef: Any) -> Dict[str, Any]:
 # =============================================================================
 
 
-def check_topics(client: Any, ef: Any) -> Dict[str, Any]:
+def check_topics(client: Any) -> Dict[str, Any]:
     """
     VER-05: Verify topics metadata flows through to ChromaDB.
 
@@ -680,7 +671,6 @@ def check_topics(client: Any, ef: Any) -> Dict[str, Any]:
 
     talks_col = client.get_or_create_collection(
         name=CHROMADB_COLLECTION_NAMES["talks"],
-        embedding_function=ef,
     )
 
     # Pull talk IDs from SQLite — source of truth for which talks have topics
@@ -779,7 +769,7 @@ def check_topics(client: Any, ef: Any) -> Dict[str, Any]:
     }
 
 
-def check_paragraph_enrichment(client: Any, ef: Any) -> Dict[str, Any]:
+def check_paragraph_enrichment(client: Any) -> Dict[str, Any]:
     """
     VER-06: Verify paragraph metadata enrichment.
 
@@ -796,11 +786,9 @@ def check_paragraph_enrichment(client: Any, ef: Any) -> Dict[str, Any]:
 
     paras_col = client.get_or_create_collection(
         name=CHROMADB_COLLECTION_NAMES["paragraphs"],
-        embedding_function=ef,
     )
     talks_col = client.get_or_create_collection(
         name=CHROMADB_COLLECTION_NAMES["talks"],
-        embedding_function=ef,
     )
 
     total_paragraphs = paras_col.count()
@@ -904,20 +892,20 @@ def main() -> None:
 
     # Initialize ChromaDB client and embedding function
     client = get_chromadb_client()
-    ef = get_embedding_function()
+    ef = get_query_embedder()
 
     # Run all checks
-    ver01_result = check_counts(client, ef)
+    ver01_result = check_counts(client)
     print()
     ver02_result = check_semantic_search(client, ef)
     print()
-    ver03_result = check_metadata_filters(client, ef)
+    ver03_result = check_metadata_filters(client)
     print()
-    ver04_result = check_fk_integrity(client, ef)
+    ver04_result = check_fk_integrity(client)
     print()
-    ver05_result = check_topics(client, ef)
+    ver05_result = check_topics(client)
     print()
-    ver06_result = check_paragraph_enrichment(client, ef)
+    ver06_result = check_paragraph_enrichment(client)
     print()
 
     # Overall pass: VER-01, VER-03, VER-04, VER-05, VER-06 are automated; VER-02 is manual review

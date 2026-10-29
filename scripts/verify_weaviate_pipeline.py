@@ -36,6 +36,7 @@ from tqdm import tqdm
 
 from db import core_db
 from config.pipeline_config import WEAVIATE_COLLECTION_NAMES
+from config.embedding import get_embedding_function
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +160,7 @@ def check_semantic_search(client: weaviate.WeaviateClient, ef: Any) -> Dict[str,
     print("VER-02: Semantic search ...")
 
     if ef is None:
-        reason = "Ollama required — run with --embedding to enable"
+        reason = "embedding server required — run with --embedding to enable"
         print(f"VER-02: Semantic search ... SKIPPED ({reason})")
         return {"skipped": True, "reason": reason, "queries": []}
 
@@ -216,7 +217,7 @@ def check_semantic_search(client: weaviate.WeaviateClient, ef: Any) -> Dict[str,
         return {"skipped": False, "queries": query_results}
 
     except Exception as exc:
-        reason = f"Ollama unavailable or query error: {exc}"
+        reason = f"embedding server unavailable or query error: {exc}"
         print(f"VER-02: Semantic search ... SKIPPED ({reason})")
         return {"skipped": True, "reason": reason, "queries": []}
 
@@ -545,7 +546,7 @@ def main() -> None:
         "--embedding",
         action="store_true",
         default=False,
-        help="Enable VER-02 semantic search via Ollama (requires Ollama running with nomic-embed-text)",
+        help="Enable VER-02 semantic search via the embedding server (requires llama-server with nomic-embed-text; see EMBEDDING_URL)",
     )
     args = parser.parse_args()
 
@@ -572,31 +573,12 @@ def main() -> None:
     ef: Any = None
     if args.embedding:
         try:
-            import requests
-            resp = requests.post(
-                os.environ.get("OLLAMA_URL", "http://localhost:11434") + "/api/embeddings",
-                json={"model": "nomic-embed-text", "prompt": "test"},
-                timeout=5,
-            )
-            resp.raise_for_status()
-            embedding_data = resp.json()
-
-            def _ollama_ef(texts: List[str]) -> List[List[float]]:
-                results = []
-                for text in texts:
-                    r = requests.post(
-                        os.environ.get("OLLAMA_URL", "http://localhost:11434") + "/api/embeddings",
-                        json={"model": "nomic-embed-text", "prompt": text},
-                        timeout=30,
-                    )
-                    r.raise_for_status()
-                    results.append(r.json()["embedding"])
-                return results
-
-            ef = _ollama_ef
-            print("Ollama embedding function initialized (nomic-embed-text).")
+            # VER-02 embeds search queries, so use the query task prefix.
+            ef = get_embedding_function(task="query")
+            ef(["test"])  # reachability probe
+            print("Embedding server initialized (nomic-embed-text, query task).")
         except Exception as exc:
-            print(f"WARNING: --embedding requested but Ollama unavailable: {exc}")
+            print(f"WARNING: --embedding requested but embedding server unavailable: {exc}")
             print("         VER-02 will be skipped.")
             ef = None
 

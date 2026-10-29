@@ -144,9 +144,7 @@ overall avg):**
 nice-to-haves gated on a re-embed; bge-m3's win needs an in-process serving change whose
 benefit is mostly reachable by hybrid tuning. **Highest-ROI embedding work is not a model
 swap — it's (a) hybrid/BM25 tuning and (b) adding nomic's `search_document:` /
-`search_query:` task prefixes** (currently the embedder sends raw text for both index and
-query — internally consistent, so retrieval works, but suboptimal; both corpora inherit
-this). API models (Voyage-3, OpenAI `text-embedding-3-large`, Cohere v3) are top-tier but
+`search_query:` task prefixes** (✅ done 2026-10-28: `config/embedding.py` applies them; requires a full re-embed). API models (Voyage-3, OpenAI `text-embedding-3-large`, Cohere v3) are top-tier but
 break the self-hosted/local-data posture and add per-query cost — out on architecture
 grounds, not quality.
 

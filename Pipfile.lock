@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "c0159844901da0546023d4f7926e496492d79739b541b551008181b9658e36b4"
+            "sha256": "8e358d41e205a532967a9ba503812e88e01fdd570125a9a335c9be884fa8d6f0"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -787,15 +787,6 @@
             ],
             "markers": "python_version >= '3.11'",
             "version": "==11.2.1"
-        },
-        "ollama": {
-            "hashes": [
-                "sha256:41fc49a8095c4a75939c4c1f8582e4d0671692fb6eac2a5a7ede8c9872b67096",
-                "sha256:6a20bc42c1a5f889295d7ec490d35e5132fc31f339561530f43a8abd4dbfe508"
-            ],
-            "index": "pypi",
-            "markers": "python_version >= '3.8'",
-            "version": "==0.6.3"
         },
         "openapi-pydantic": {
             "hashes": [
