@@ -10,7 +10,7 @@ log = logging.getLogger("sci-db")
 PARENT_DIR = os.path.dirname(os.path.dirname(__file__))  # sci/
 CURRENT_DIR = os.path.join(PARENT_DIR, "db")
 # SCI release number: db/core.<N>.db and db/content.<N>.db. Override with SCI_DB_VERSION.
-SCI_DB_VERSION = os.environ.get("SCI_DB_VERSION", "53")
+SCI_DB_VERSION = os.environ.get("SCI_DB_VERSION", "55")
 CORE_DB_PATH = os.path.join(CURRENT_DIR, f"core.{SCI_DB_VERSION}.db")
 CONTENT_DB_PATH = os.path.join(CURRENT_DIR, f"content.{SCI_DB_VERSION}.db")
 
