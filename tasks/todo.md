@@ -42,6 +42,7 @@ Order: fetch side first (it's what makes the JSON), then build side, then the sp
 - Topics: the API now returns `author` and `translatedTopic` on every entry. Two new topics. 16 report entries were untagged upstream. `values` is listed in the index but its page is 404, so its 11 old entries are kept.
 - Build .53 after fetch 2026-04: 4041/4050 G talks matched (99.8%, 18 via corrections). Unmatched: 9 Ensign-only talks; 3 Church URIs (2 sustainings, 1 audit report). No duplicates, no stale corrections. All 35 April 2026 talks have data_aid, role, preview and URI. Build takes about 9 minutes.
 - Tests: 526 passed, 2 failed, 2 skipped. The 2 failures (`test_metrics` John filter, `test_server` tools list 404) don't touch the fetch/build code. Replaced the snapshot topic counts (333/16162) in test_phase1 with counts derived from the JSON.
+- .55 (2026-10-29): first SCI release with Oct 2026. 4078/4087 matched; all 37 Oct 2026 talks complete; no renumbering .53→.55 (34 Oct 2020 talks re-dated, still match). Default `SCI_DB_VERSION` → 55. Match report now splits expected/unexpected (all 0 unexpected on .55); step 3 skips blank URLs (was 2219 warnings).
 - Still open: the `.52` comparison (the `db/core.52.db` provided is the raw release), and `run_pipeline.py` + `verify_weaviate_pipeline.py` (operator step).
 
 

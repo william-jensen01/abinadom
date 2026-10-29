@@ -152,6 +152,7 @@
 - `tests/test_server.py`
 - `tests/test_oauth.py`
 - `tests/test_auth.py`
+- `tests/test_build.py` — build.py match-report classification (expected vs unexpected unmatched items)
 - `tests/test_fetch.py` — fetch-side unit tests (JSON helpers, fetch functions; no network)
 - `tests/test_embedding.py` — LlamaCppEmbedder unit tests (mocked HTTP) + live check
 

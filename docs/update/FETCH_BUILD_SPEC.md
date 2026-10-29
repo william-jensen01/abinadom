@@ -127,9 +127,13 @@ Reads the raw release from `db/sci/core.53.db` and `db/sci/content.53.db`, copie
 - Corrections whose original `uri` no longer matches the SCI talk with that ID. This guards against SCI renumbering talks; 26/26 checkable corrections were stable from `.52` to `.53`.
 - Any Church URI claimed by two SCI talks.
 
+Each unmatched list is split into **expected** (counted per category) and **unexpected** (listed in full), so a new surprise isn't buried in routine items:
+- SCI talks: expected if a `gc: false` correction marks them as Ensign-only.
+- Church URIs and topic entries with no SCI talk: expected by title (sustaining, solemn assembly, statistical report, audit/finance report, welfare services, video, Music and the Spoken Word) or by a short list of known one-off URIs (`EXPECTED_CHURCH_TITLES` / `EXPECTED_CHURCH_URIS` in `scripts/build.py`; categories from `docs/backfill/UNMATCHED_TALKS_ANALYSIS.md`).
+
 ## Changes to existing scripts
 
-- [x] `db/__init__.py`: `SCI_DB_VERSION` setting (default `53`, env override).
+- [x] `db/__init__.py`: `SCI_DB_VERSION` setting (default `55` since 2026-10-29, env override).
 - [x] `talk_corrections.json`: titles for the five 1992 "A Worldwide Sisterhood" splits.
 - [x] `extract_talk_metadata.py`: take a list of URIs instead of reading the SCI DB; key output by URI; remove the "uncached → return None" gate; accept a session; no import-time cache.
 - [x] `api/fetch_talk_previews.py`: expose talk-URI and preview functions that take a session; key output by URI; drop the SCI DB lookup; no import-time cache.

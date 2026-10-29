@@ -20,7 +20,7 @@ import sqlite3
 import sys
 import time
 from collections import Counter
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MIGRATION_DIR = os.path.join(ROOT_DIR, "db", "one-off-migration")
@@ -47,6 +47,25 @@ TOPICS_PATH = os.path.join(MIGRATION_DIR, "conference_topics.json")
 CORRECTIONS_PATH = os.path.join(MIGRATION_DIR, "talk_corrections.json")
 REPORT_SHOWN = 20  # list items printed per report section; the saved report has all
 
+# Church items that never have an SCI talk (see docs/backfill/UNMATCHED_TALKS_ANALYSIS.md).
+# Matched on the lowercased title; only applied to URIs that found no SCI talk.
+EXPECTED_CHURCH_TITLES = [
+    ("sustaining", "sustaining of"),  # incl. "The Sustaining of Church Officers"
+    ("sustaining", "solemn assembly"),
+    ("statistical report", "statistical report"),
+    ("audit/finance report", "audit"),  # Audit Report, Audit Committee, Auditing Department
+    ("audit/finance report", "finance committee report"),
+    ("welfare services", "welfare services"),
+    ("video", "video"),
+    ("broadcast", "music and the spoken word"),
+]
+EXPECTED_CHURCH_URIS = {  # one-offs whose titles don't say what they are
+    "/general-conference/1976/04/regional-representatives-announcement": "one-off",
+    "/general-conference/1976/10/the-reconstitution-of-the-first-quorum-of-the-seventy": "one-off",
+    "/general-conference/1977/04/presentation-of-scouting-award": "one-off",
+    "/general-conference/1995/10/the-family-a-proclamation-to-the-world": "one-off",
+}
+
 
 def read_json(path: str) -> List[Dict]:
     with open(path, encoding="utf-8") as f:
@@ -62,15 +81,40 @@ def step(number, title):
 # ---------------------------------------------------------------------------
 # Step 4: match report
 # ---------------------------------------------------------------------------
+def expected_church_category(uri: str, title: str) -> Optional[str]:
+    """Category of a Church item that is expected to have no SCI talk, else None."""
+    if uri in EXPECTED_CHURCH_URIS:
+        return EXPECTED_CHURCH_URIS[uri]
+    lowered = (title or "").lower()
+    for category, needle in EXPECTED_CHURCH_TITLES:
+        if needle in lowered:
+            return category
+    return None
+
+
+def bucket_church_items(items: Dict[str, str]) -> Dict:
+    """Split {uri: title} into expected (by category) and unexpected."""
+    expected: Dict[str, List[str]] = {}
+    unexpected = []
+    for uri, title in sorted(items.items()):
+        category = expected_church_category(uri, title)
+        if category:
+            expected.setdefault(category, []).append(uri)
+        else:
+            unexpected.append({"uri": uri, "title": title})
+    return {"expected": expected, "unexpected": unexpected}
+
+
 def match_report(core_db_path: str) -> Dict:
     """How SCI conference talks and Church URIs match up (after step 3)."""
     db = Database(core_db_path, timeout=60)
     index = load_talk_uri_index(db)
-    church_uris = {r["uri"] for r in read_json(METADATA_PATH)} | {
-        r["uri"] for r in read_json(PREVIEWS_PATH)
-    }
+    church_titles = {r["uri"]: r.get("title") for r in read_json(PREVIEWS_PATH)}
+    church_titles.update({r["uri"]: r.get("title") for r in read_json(METADATA_PATH)})
+    church_uris = set(church_titles)
     corrections = read_json(CORRECTIONS_PATH)
     corrected_ids = {c["TalkID"] for c in corrections}
+    ensign_ids = {c["TalkID"] for c in corrections if not c.get("gc")}
 
     sci_talks = db.select(
         """
@@ -81,17 +125,29 @@ def match_report(core_db_path: str) -> Dict:
          ORDER BY t.ID
         """
     )
-    matched, by_correction, sci_unmatched = 0, 0, []
+    matched, by_correction = 0, 0
+    sci_unmatched = {"expected_ensign": [], "unexpected": []}
     for t in sci_talks:
         if t["uri_gc"] in church_uris or t["uri_l"] in church_uris:
             matched += 1
             by_correction += t["ID"] in corrected_ids
         else:
-            sci_unmatched.append(
+            bucket = "expected_ensign" if t["ID"] in ensign_ids else "unexpected"
+            sci_unmatched[bucket].append(
                 {"talk_id": t["ID"], "date": t["Date"], "title": t["Title"], "uri_gc": t["uri_gc"]}
             )
 
-    church_unmatched = sorted(u for u in church_uris if u not in index)
+    church_unmatched = bucket_church_items(
+        {u: church_titles[u] for u in church_uris if u not in index}
+    )
+    topic_unmatched = bucket_church_items(
+        {
+            e["uri"]: e.get("title")
+            for t in read_json(TOPICS_PATH)
+            for e in t["entries"]
+            if e["uri"] not in index
+        }
+    )
 
     duplicates = {
         uri: sorted(ids) for uri, ids in duplicate_uris(index).items() if uri in church_uris
@@ -116,6 +172,7 @@ def match_report(core_db_path: str) -> Dict:
         "matched_via_correction": by_correction,
         "sci_talks_without_church_data": sci_unmatched,
         "church_uris_without_sci_talk": church_unmatched,
+        "topic_entries_without_sci_talk": topic_unmatched,
         "church_uris_claimed_by_several_talks": duplicates,
         "stale_corrections": stale_corrections,
     }
@@ -131,20 +188,29 @@ def print_match_report(report: Dict) -> None:
     print(f"    via a correction:     {report['matched_via_correction']}")
 
     sci = report["sci_talks_without_church_data"]
-    print(f"\nSCI talks with no Church data: {len(sci)}")
-    by_year = Counter((t["date"] or "?")[:4] for t in sci)
-    print("  by year: " + ", ".join(f"{y}: {n}" for y, n in sorted(by_year.items())))
-    for t in sci[:REPORT_SHOWN]:
+    print(
+        f"\nSCI talks with no Church data: {len(sci['unexpected'])} unexpected"
+        f" ({len(sci['expected_ensign'])} expected: Ensign-only, gc=false correction)"
+    )
+    by_year = Counter((t["date"] or "?")[:4] for t in sci["unexpected"])
+    if by_year:
+        print("  by year: " + ", ".join(f"{y}: {n}" for y, n in sorted(by_year.items())))
+    for t in sci["unexpected"][:REPORT_SHOWN]:
         print(f"  {t['talk_id']:>6} {t['date']} {t['title']}  ({t['uri_gc']})")
-    if len(sci) > REPORT_SHOWN:
-        print(f"  ... {len(sci) - REPORT_SHOWN} more in the saved report")
+    if len(sci["unexpected"]) > REPORT_SHOWN:
+        print(f"  ... {len(sci['unexpected']) - REPORT_SHOWN} more in the saved report")
 
-    church = report["church_uris_without_sci_talk"]
-    print(f"\nChurch URIs with no SCI talk: {len(church)}")
-    for u in church[:REPORT_SHOWN]:
-        print(f"  {u}")
-    if len(church) > REPORT_SHOWN:
-        print(f"  ... {len(church) - REPORT_SHOWN} more in the saved report")
+    for key, label in (
+        ("church_uris_without_sci_talk", "Church URIs with no SCI talk"),
+        ("topic_entries_without_sci_talk", "Topic entries with no SCI talk"),
+    ):
+        buckets = report[key]
+        expected = ", ".join(f"{c}: {len(u)}" for c, u in sorted(buckets["expected"].items()))
+        print(f"\n{label}: {len(buckets['unexpected'])} unexpected (expected: {expected or 'none'})")
+        for item in buckets["unexpected"][:REPORT_SHOWN]:
+            print(f"  {item['uri']}  {item['title']}")
+        if len(buckets["unexpected"]) > REPORT_SHOWN:
+            print(f"  ... {len(buckets['unexpected']) - REPORT_SHOWN} more in the saved report")
 
     dups = report["church_uris_claimed_by_several_talks"]
     print(f"\nChurch URIs claimed by several SCI talks: {len(dups)}")

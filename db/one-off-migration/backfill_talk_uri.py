@@ -152,7 +152,8 @@ def generate_uris(db: Database):
     print("-" * 80)
 
     # Get all talks with URLs
-    talks = db.select("SELECT ID, URL FROM talk WHERE URL IS NOT NULL")
+    # Most non-conference talks have an empty URL; skip them rather than warn.
+    talks = db.select("SELECT ID, URL FROM talk WHERE TRIM(COALESCE(URL, '')) != ''")
     print(f"Found {len(talks)} talks with URLs")
 
     updated_count = 0
