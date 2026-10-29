@@ -144,13 +144,13 @@ Reads the raw release from `db/sci/core.53.db` and `db/sci/content.53.db`, copie
 
 - `scripts/UPDATE.py` and `gc.db`. Their job is now `fetch` + `build`. `docs/update/Update_GC_PLAN.md` is superseded by this spec.
 - `content.talkbody.TextPreview`: only `UPDATE.py` wrote it and nothing reads it.
-- `api/sessions.json`: only `UPDATE.py` reads it. The pipeline gets sessions from SCI's `conf_session`.
 - Dead and unused scripts (`_pg`/`_h1` variants, `fetch_talk_topics_*`, `process_entries.py`, `process_all.py`, `process_talkbody.py`, `migrate_topics.py`, `verify_uri.py`, and their outputs) are left for a later cleanup.
 
 ## Out of scope
 
 - Ensign and other non-conference Church content. SCI talks published only in the Ensign keep their SCI data and get no Church data.
 - Pre-1971 talks (Corpus `E`): the Church API doesn't have them.
+- `api/sessions.json` stays as it is. `api/extract_conference_sections.py` made it (every conference's `toc` entries, sessions flattened); once `UPDATE.py` is retired nothing reads or updates it. It's the only saved copy of `toc` speaking order.
 - Weaviate loading. `run_pipeline.py` and `verify_weaviate_pipeline.py` run after `build`, unchanged.
 
 ## Verification
@@ -163,7 +163,6 @@ Reads the raw release from `db/sci/core.53.db` and `db/sci/content.53.db`, copie
 - [ ] Integration tests in `tests/test_pipeline_integration.py` and `tests/test_phase1.py` pass against the built `.53`.
 - [ ] `run_pipeline.py` + `verify_weaviate_pipeline.py` pass.
 
-## Decisions to confirm
+## Decisions
 
-1. **Raw vs built location:** raw releases in `db/sci/`, built copies in `db/` (what `SCI_DB_VERSION` points at).
-2. **Drop `api/sessions.json`**, since nothing in the build or app reads it.
+- **Raw vs built location** (decided 2026-10-29): raw releases in `db/sci/`, built copies in `db/` (what `SCI_DB_VERSION` points at).
