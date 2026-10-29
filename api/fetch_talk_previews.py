@@ -8,7 +8,7 @@ Two-level fetch pattern:
 
 Usage:
   pipenv run py api/fetch_talk_previews.py --dry-run
-  pipenv run py api/fetch_talk_previews.py --db db/core.52.db --output db/one-off-migration/talk_previews.json
+  pipenv run py api/fetch_talk_previews.py --output db/one-off-migration/talk_previews.json
 """
 
 import argparse
@@ -34,16 +34,11 @@ OUTPUT_PATH = os.path.join(
     "talk_previews.json",
 )
 
-# Default DB path – import from db package if available, else construct manually
-try:
-    sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-    from db import CORE_DB_PATH
+# Default DB path follows SCI_DB_VERSION via the db package
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from db import CORE_DB_PATH
 
-    DEFAULT_DB_PATH = CORE_DB_PATH
-except ImportError:
-    DEFAULT_DB_PATH = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)), "db", "core.52.db"
-    )
+DEFAULT_DB_PATH = CORE_DB_PATH
 
 # ---------------------------------------------------------------------------
 # Cache setup (matches extract_conference_sections.py pattern)
@@ -202,7 +197,7 @@ def main():
     parser.add_argument(
         "--db",
         default=DEFAULT_DB_PATH,
-        help="Path to core.52.db (default: %(default)s)",
+        help="Path to core DB (default: %(default)s)",
     )
     parser.add_argument(
         "--output",

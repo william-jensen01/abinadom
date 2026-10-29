@@ -91,7 +91,8 @@
 - `docs/pipeline/phase-4-footnote/IMPLEMENTATION_SUMMARY_INTERVIEW.md`
 - `docs/pipeline/phase-4-footnote/PLAN_PHASE_4.md`
 - `docs/pipeline/phase-5-validation/PLAN_PHASE_5.md`
-- `docs/update/Update_GC_PLAN.md`
+- `docs/update/FETCH_BUILD_SPEC.md` — Spec: `fetch` (Church API → committed JSON) and `build` (raw SCI release + JSON → finished DB); replaces UPDATE.py/gc.db
+- `docs/update/Update_GC_PLAN.md` — Superseded by FETCH_BUILD_SPEC.md (original UPDATE.py plan)
 
 ### extractors/
 - `extractors/html_parsing_utils.py` — Shared HTML parsing utilities

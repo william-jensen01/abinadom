@@ -57,25 +57,29 @@
 		"uri": "/general-conference/1992/04/a-worldwide-sisterhood",
 		"TalkID": 5263,
 		"gc": false,
-		"correct_uri": "/ensign/1992/05/a-worldwide-sisterhood/bless-the-individual-woman"
+		"correct_uri": "/ensign/1992/05/a-worldwide-sisterhood/bless-the-individual-woman",
+		"title": "Bless the Individual Woman"
 	},
 	{
 		"uri": "/general-conference/1992/04/a-worldwide-sisterhood",
 		"TalkID": 5264,
 		"gc": false,
-		"correct_uri": "/ensign/1992/05/a-worldwide-sisterhood/strengthen-families"
+		"correct_uri": "/ensign/1992/05/a-worldwide-sisterhood/strengthen-families",
+		"title": "Strengthen Families"
 	},
 	{
 		"uri": "/general-conference/1992/04/a-worldwide-sisterhood",
 		"TalkID": 5265,
 		"gc": false,
-		"correct_uri": "/ensign/1992/05/a-worldwide-sisterhood/develop-and-exercise-charity"
+		"correct_uri": "/ensign/1992/05/a-worldwide-sisterhood/develop-and-exercise-charity",
+		"title": "Develop and Exercise Charity"
 	},
 	{
 		"uri": "/general-conference/1992/04/a-worldwide-sisterhood",
 		"TalkID": 5266,
 		"gc": false,
-		"correct_uri": "/ensign/1992/05/a-worldwide-sisterhood/enjoy-a-unified-sisterhood"
+		"correct_uri": "/ensign/1992/05/a-worldwide-sisterhood/enjoy-a-unified-sisterhood",
+		"title": "Enjoy a Unified Sisterhood"
 	},
 	{
 		"uri": "/general-conference/1993/04/behold-the-enemy-is-combined-dc-3812",
@@ -141,7 +145,8 @@
 		"uri": "/general-conference/1992/04/a-worldwide-sisterhood",
 		"TalkID": 7625,
 		"gc": false,
-		"correct_uri": "/ensign/1992/05/a-worldwide-sisterhood/build-personal-testimony"
+		"correct_uri": "/ensign/1992/05/a-worldwide-sisterhood/build-personal-testimony",
+		"title": "Build Personal Testimony"
 	},
 	{
 		"uri": "/general-conference/2012/04/abide-in-the-lords-territory!",
