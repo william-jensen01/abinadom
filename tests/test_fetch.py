@@ -139,6 +139,14 @@ class TestTopics:
         page = {"collection": {"sections": [{"entries": [{"type": "search", "items": items}]}]}}
         assert fetch_topics_index(_session({"/general-conference/topics": page})) == items
 
+    def test_topics_index_drops_duplicate_uris(self):
+        items = [
+            {"type": "collection", "title": "general conference", "uri": "/t/general-conference"},
+            {"type": "collection", "title": "General Conference", "uri": "/t/general-conference"},
+        ]
+        page = {"collection": {"sections": [{"entries": [{"type": "search", "items": items}]}]}}
+        assert fetch_topics_index(_session({"/general-conference/topics": page})) == items[:1]
+
     def test_entries_sorted_uri_descending(self):
         page = {"collection": {"sections": [
             {"entries": [{"uri": "/gc/2019/04/21b"}, {"uri": "/gc/2025/10/11a"}]},

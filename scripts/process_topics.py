@@ -30,13 +30,22 @@ OUTPUT_FILE = os.path.join(ROOT_DIR, "db", "one-off-migration", "conference_topi
 def fetch_topics_index(session: requests.Session) -> List[Dict]:
     """Fetch every topic ({type, title, uri}) from the topics index page.
 
-    Reads the page's "Find by topic" filter, which lists every topic once.
+    Reads the page's "Find by topic" filter. A URI listed twice is kept once
+    (first title wins): on 2026-10-29 the API briefly listed
+    general-conference as both "general conference" and "General Conference",
+    which would give two topics with the same slug.
     """
     data = get_json(session, TOPICS_INDEX_URI)
     for section in data.get("collection", {}).get("sections", []):
         for entry in section.get("entries", []):
             if entry.get("type") == "search" and entry.get("items"):
-                return entry["items"]
+                topics = {}
+                for item in entry["items"]:
+                    if item["uri"] in topics:
+                        print(f"  ⚠️  Topic listed twice, kept first: {item['uri']} ({item['title']!r})")
+                        continue
+                    topics[item["uri"]] = item
+                return list(topics.values())
     raise ValueError(f"No topic list found on {TOPICS_INDEX_URI}")
 
 
