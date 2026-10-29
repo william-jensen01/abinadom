@@ -39,7 +39,7 @@ All are committed. Talk files are keyed by **Church URI**, not SCI talk ID, so `
 | `db/one-off-migration/conference_topics.json` | topic → its talk entries | `scripts/process_topics.py` |
 | `db/one-off-migration/talk_corrections.json` | TalkID, original uri, correct_uri, gc, optional title | by hand |
 
-Existing entries keep their `talkID` field; it is ignored.
+The normalize commit drops the old `talkID` field from every entry: `fetch` can't produce it (no SCI DB), nothing reads it once lookups go by URI, and it goes stale if SCI renumbers. `build` derives URI → talk ID on every run (step 4 saves it).
 
 ## `fetch`
 
@@ -54,7 +54,8 @@ Existing entries keep their `talkID` field; it is ignored.
 | 5 | Every topic page (~335) | `scripts/process_topics.py` | `conference_topics.json` | **always fresh** |
 
 - Steps 4-5 re-fetch every topic each run, which catches new topics, new talks in old topics, and re-tagging.
-- Merges are by URI: new entries are added, existing entries are replaced.
+- Merges are by URI: new entries are added, existing entries are replaced, so the file mirrors the API exactly (a field the API drops shows up in the diff).
+- A topic page that still fails after one retry stops `fetch` before it writes anything. Writing `"entries": []` would silently delete that topic from the committed file.
 - Ends with a summary: talks fetched, talks missing a title, role, `data_aid` or preview, and new topics.
 
 ### Caching rule
@@ -137,6 +138,8 @@ Reads the raw release from `db/sci/core.53.db` and `db/sci/content.53.db`, copie
 - [ ] Shared `find_talk_by_uri()` helper (in `create_talk_metadata_table.py`, next to `upsert_talk_metadata`).
 - [ ] `backfill_talk_metadata.py`, `backfill_talk_preview.py`: look up talks by URI via the helper.
 - [ ] `backfill_topics.py`: use the helper instead of `talk.URI_GC`; default input stays `conference_topics.json`.
+- [ ] `backfill_talk_metadata_role_extraction.py`: "skip existing" reads `talk_metadata.speaker_role_id`. Since `97fed0e` it read `talk.speaker_role_id`, which nothing writes, so step 6 overwrote every Church role it could parse from HTML.
+- [ ] Stop adding the dead `talk` columns (`URI_L`, `URI_GC`, `speaker_role_id`, `data_aid`); since `97fed0e` all writes go to `talk_metadata`.
 - [ ] All backfills: accept `--core-db` / `--content-db` paths so `build` can point them at the copy.
 - [ ] New `scripts/fetch.py` and `scripts/build.py`.
 
@@ -165,4 +168,5 @@ Reads the raw release from `db/sci/core.53.db` and `db/sci/content.53.db`, copie
 
 ## Decisions
 
+- **Drop `talkID`, replace on merge** (decided 2026-10-29): see Stored files.
 - **Raw vs built location** (decided 2026-10-29): raw releases in `db/sci/`, built copies in `db/` (what `SCI_DB_VERSION` points at).
