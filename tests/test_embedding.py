@@ -14,7 +14,7 @@ from config.embedding import (
     get_embedding_function,
     resolve_embedding_url,
 )
-from tests.conftest import EMBEDDING_HOST, EMBEDDING_PORT
+from tests.conftest import EMBEDDING_URL
 
 
 def _response(indices_and_vectors):
@@ -110,6 +110,6 @@ def test_get_embedding_function_trailing_slash():
 
 
 def test_embed_live(embedding_available):
-    vectors = get_embedding_function(url=f"http://{EMBEDDING_HOST}:{EMBEDDING_PORT}")(["hello"])
+    vectors = get_embedding_function(url=EMBEDDING_URL)(["hello"])
     assert len(vectors) == 1
     assert len(vectors[0]) == 768

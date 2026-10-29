@@ -8,6 +8,7 @@ import os
 import socket
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -18,6 +19,7 @@ from models.citation_data import CitationData, TalkCitations
 from models.footnote_data import FootnoteData, TalkFootnotes
 from models.validation_report import ValidationReport
 from loaders.shared_transforms import TalkBundle
+from config.embedding import resolve_embedding_url
 
 
 # ---------------------------------------------------------------------------
@@ -30,8 +32,9 @@ QDRANT_HOST = os.environ.get("BENCHMARK_QDRANT_HOST", "10.0.0.231")
 QDRANT_PORT = int(os.environ.get("BENCHMARK_QDRANT_PORT", "6333"))
 WEAVIATE_HOST = os.environ.get("BENCHMARK_WEAVIATE_HOST", "10.0.0.231")
 WEAVIATE_PORT = int(os.environ.get("BENCHMARK_WEAVIATE_PORT", "8051"))
-EMBEDDING_HOST = os.environ.get("BENCHMARK_EMBEDDING_HOST", "10.0.0.231")
-EMBEDDING_PORT = int(os.environ.get("BENCHMARK_EMBEDDING_PORT", "8080"))
+EMBEDDING_URL = resolve_embedding_url()
+EMBEDDING_HOST = urlparse(EMBEDDING_URL).hostname
+EMBEDDING_PORT = urlparse(EMBEDDING_URL).port or 80
 
 # ---------------------------------------------------------------------------
 # Port-check helpers (D-08)

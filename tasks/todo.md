@@ -12,11 +12,13 @@ Contract: `config/embedding.py` — `get_embedding_function(url=None, task="docu
 - [x] benchmark/runner.py port; delete loaders/embeddings.py + tests/test_embeddings.py; conftest fixture; new tests/test_embedding.py
 - [x] CLAUDE.md index, backlog/spec notes
 - [x] Full test suite green
+- [x] Live check against llama-server on truenas:8090 (2026-10-29): 768-dim, batching/order OK, `/health` ok
+- [x] Live test reads `EMBEDDING_URL` (was the stale `BENCHMARK_EMBEDDING_*` vars)
 - [ ] Re-embed all talks: `run_pipeline.py --force` against llama-server (operator step)
 
 ### Review
 - Full suite: 464 passed / 5 failed / 47 skipped — the 5 failures are pre-existing (identical on stashed baseline: 455 passed / 5 failed).
-- Not verified live: no llama-server reachable from dev box; `test_embed_live` skips. First real check = `pytest tests/test_embedding.py` with `BENCHMARK_EMBEDDING_HOST` set, then `/health`.
+- Verified live 2026-10-29 (via Tailscale IP 100.90.131.107 — `truenas` doesn't resolve on this box, MagicDNS is off): query "what is faith" scores 0.82 vs a faith doc and 0.40 vs a flour recipe; the prefix changes the vector (cos 0.78 with vs without); 150 texts in 3 sub-batches take 4.4s and come back in order; `/health` → `{"status":"ok","embedding":"reachable","weaviate":"reachable"}`.
 - Root cause of missing prefixes: Phase 24-07 ported chromadb's OllamaEmbeddingFunction 1:1 (raw text, one request per text).
 - verify_chromadb_pipeline.py: chromadb 1.5 rejects non-chromadb embedding functions, so collections are opened without one and VER-02 passes `query_embeddings`.
 - Removed `ollama` from Pipfile/Pipfile.lock (no remaining imports).
