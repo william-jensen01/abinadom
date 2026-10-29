@@ -123,15 +123,22 @@
 - `models/validation_report.py` — Phase 5 data model
 
 ### scripts/
+- `scripts/fetch.py` — `fetch`: Church API → committed JSON (talk_metadata, talk_previews, topics, conference_topics); `--conference YYYY-MM` or `--all`
+- `scripts/build.py` — `build`: raw SCI release (`db/sci/`) + JSON → finished `db/core.N.db`/`content.N.db`; `--version N [--force]`; saves `db/build_report.N.json`
 - `scripts/db_schema_extractor.py` — Database schema inspection utility (use with specific arguments)
 - `scripts/field_coverage.py` — Read-only Weaviate field-coverage audit (populated %/verdict per candidate filter field; decides safe hard-filter vs boost-only)
 - `scripts/UPDATE.py` — Conference database synchronization script (gc.db to core db)
 - `scripts/process_all.py` — Batch topic and talk processing script (threaded API fetcher)
-- `scripts/process_topics.py` — Topic data fetcher (topics.json → Church API → entries)
+- `scripts/process_topics.py` — Topics index → `topics.json`, every topic page → `conference_topics.json` (used by fetch)
 - `scripts/run_audit.py` — Bug audit driver script (runs phases 1-5 per talk_id in config/audit_sample.json)
 - `scripts/run_pipeline.py` — Full pipeline orchestrator (Phases 1-6, per-talk streaming, resume, --force)
 - `scripts/verify_chromadb_pipeline.py` — Post-pipeline verification (ChromaDB instances, VER-01 through VER-06, JSON report)
 - `scripts/verify_weaviate_pipeline.py` — Post-pipeline verification (Weaviate instances, VER-01 through VER-05, JSON report)
+
+### utils/
+- `utils/json_io.py` — `write_json` (stable sorted UTF-8 output), `read_json`, `merge_by_key`
+- `utils/church_api.py` — Church API URL, `cached_session`/`fresh_session`, `get_json` (one retry)
+- `utils/validators.py`
 
 ### tests/
 - `tests/test_html_parsing_utils.py`
@@ -145,6 +152,7 @@
 - `tests/test_server.py`
 - `tests/test_oauth.py`
 - `tests/test_auth.py`
+- `tests/test_fetch.py` — fetch-side unit tests (JSON helpers, fetch functions; no network)
 - `tests/test_embedding.py` — LlamaCppEmbedder unit tests (mocked HTTP) + live check
 
 ### infra/

@@ -3,16 +3,13 @@
 Backfill talk metadata from talk_metadata.json.
 
 This script will:
-1. Create a speaker_role table with id, role, and role_slug columns
-2. Extract unique speaker roles from metadata and populate the speaker_role table
-3. Add speaker_role_id and data_aid columns to the talk table
-4. Update the talk table with title, speaker_role_id, and data_aid for each talk
+1. Create a speaker_role table with id, role, and slug columns
+2. Find each record's SCI talk by Church URI (talk_metadata.uri_gc / uri_l,
+   so backfill_talk_uri.py must run first)
+3. Update talk.Title and talk_metadata speaker_role_id / data_aid
 
 Usage:
-    python backfill_talk_metadata.py <db_path> <metadata_json_path>
-
-Example:
-    python backfill_talk_metadata.py ../test/test.core.52.db talk_metadata.json
+    pipenv run python db/one-off-migration/backfill_talk_metadata.py [--core-db PATH] [--metadata PATH]
 """
 
 import argparse
@@ -32,7 +29,9 @@ from db import Database, CORE_DB_PATH
 
 migration_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, migration_dir)
-from create_talk_metadata_table import upsert_talk_metadata
+from create_talk_metadata_table import find_talk_by_uri, load_talk_uri_index, upsert_talk_metadata
+
+METADATA_PATH = os.path.join(migration_dir, "talk_metadata.json")
 
 
 def title_case_role(text: str) -> str:
@@ -155,31 +154,6 @@ def create_speaker_role_table(db: Database):
         raise
 
 
-def add_talk_columns(db: Database):
-    """
-    Add speaker_role_id and data_aid columns to talk table if they don't exist.
-
-    Args:
-        db: Database instance (must be writable)
-    """
-    print("\nStep 2: Adding metadata columns to talk table...")
-
-    columns_to_add = [("speaker_role_id", "INTEGER"), ("data_aid", "TEXT")]
-
-    for col_name, col_type in columns_to_add:
-        try:
-            db.execute(f"ALTER TABLE talk ADD COLUMN {col_name} {col_type}")
-            print(f"  ✓ Added column: {col_name}")
-        except Exception as e:
-            if "duplicate column name" in str(e).lower():
-                print(f"  ℹ Column {col_name} already exists")
-            else:
-                raise
-
-    # Add foreign key constraint note (SQLite doesn't enforce FK on ALTER TABLE)
-    print("  ℹ Note: speaker_role_id references speaker_role(id)")
-
-
 def load_metadata(metadata_path: str) -> List[Dict[str, Any]]:
     """
     Load metadata from JSON file.
@@ -193,7 +167,7 @@ def load_metadata(metadata_path: str) -> List[Dict[str, Any]]:
     if not os.path.exists(metadata_path):
         raise FileNotFoundError(f"Metadata file not found: {metadata_path}")
 
-    print(f"\nStep 3: Loading metadata from {metadata_path}...")
+    print(f"\nStep 2: Loading metadata from {metadata_path}...")
 
     with open(metadata_path, "r", encoding="utf-8") as f:
         metadata = json.load(f)
@@ -284,9 +258,10 @@ def apply_metadata(db: Database, metadata: List[Dict[str, Any]]):
     Returns:
         Dict with update statistics
     """
-    print("\nStep 4: Applying metadata to talk table...")
+    print("\nStep 3: Applying metadata to talk table...")
     print("-" * 80)
 
+    uri_index = load_talk_uri_index(db)
     role_map: Dict[str, int] = {}  # normalized_role → speaker_role.id cache
     updated_count = 0
     title_updates = 0
@@ -296,20 +271,19 @@ def apply_metadata(db: Database, metadata: List[Dict[str, Any]]):
     errors = []
 
     for idx, record in enumerate(metadata, start=1):
-        talk_id = record.get("talkID")
+        uri = record.get("uri")
         title = record.get("title")
         speaker_role = record.get("speaker_role")
         data_aid = record.get("data_aid")
 
-        if not talk_id:
-            errors.append(f"Record {idx}: missing talkID")
+        if not uri:
+            errors.append(f"Record {idx}: missing uri")
             continue
 
-        # Check if talk exists
-        existing = db.select_one("SELECT ID FROM talk WHERE ID = ?", (talk_id,))
-
-        if not existing:
-            not_found.append(talk_id)
+        # Church URIs with no SCI talk (reports, sustainings, ...) are expected
+        talk_id = find_talk_by_uri(uri_index, uri)
+        if talk_id is None:
+            not_found.append(uri)
             continue
 
         # Title stays on talks table; enrichment fields go to talk_metadata
@@ -361,13 +335,13 @@ def apply_metadata(db: Database, metadata: List[Dict[str, Any]]):
     print(f"  Title updates: {title_updates}")
     print(f"  Speaker role updates: {speaker_role_updates}")
     print(f"  Data aid updates: {data_aid_updates}")
-    print(f"  Talks not found: {len(not_found)}")
+    print(f"  URIs with no SCI talk: {len(not_found)}")
     print(f"  Errors: {len(errors)}")
 
     if not_found:
-        print(f"\n⚠️  First 10 talk IDs not found in database:")
-        for talk_id in not_found[:10]:
-            print(f"    TalkID {talk_id}")
+        print(f"\nℹ First 10 URIs with no SCI talk (see build's match report):")
+        for uri in not_found[:10]:
+            print(f"    {uri}")
         if len(not_found) > 10:
             print(f"    ... and {len(not_found) - 10} more")
 
@@ -397,40 +371,30 @@ def verify_sample(db: Database, sample_ids: List[int] = None):
         db: Database instance
         sample_ids: Optional list of specific talk IDs to verify
     """
-    print("\nStep 5: Verifying updates (sample)...")
+    print("\nStep 4: Verifying updates (sample)...")
     print("-" * 80)
 
+    query = """
+        SELECT
+            t.ID,
+            t.Title,
+            sr.role as speaker_role,
+            sr.slug as Speaker_Role_Slug,
+            tm.data_aid
+        FROM talk t
+        JOIN talk_metadata tm ON tm.talk_id = t.ID
+        LEFT JOIN speaker_role sr ON tm.speaker_role_id = sr.id
+        WHERE {where}
+        ORDER BY t.ID
+        LIMIT 10
+    """
     if sample_ids:
         placeholders = ",".join(["?"] * len(sample_ids))
-        query = f"""
-            SELECT
-                t.ID,
-                t.Title,
-                sr.role as speaker_role,
-                sr.slug as Speaker_Role_Slug, 
-                t.data_aid
-            FROM talk t
-            LEFT JOIN speaker_role sr ON t.speaker_role_id = sr.id
-            WHERE t.ID IN ({placeholders})
-            ORDER BY t.ID
-            LIMIT 10
-        """
-        sample = db.select(query, sample_ids)
+        sample = db.select(query.format(where=f"t.ID IN ({placeholders})"), sample_ids)
     else:
-        query = """
-            SELECT
-                t.ID,
-                t.Title,
-                sr.role as speaker_role,
-                sr.slug as Speaker_Role_Slug, 
-                t.data_aid
-            FROM talk t
-            LEFT JOIN speaker_role sr ON t.speaker_role_id = sr.id
-            WHERE t.speaker_role_id IS NOT NULL OR t.data_aid IS NOT NULL
-            ORDER BY t.ID
-            LIMIT 10
-        """
-        sample = db.select(query)
+        sample = db.select(
+            query.format(where="tm.speaker_role_id IS NOT NULL OR tm.data_aid IS NOT NULL")
+        )
 
     if sample:
         print(f"\nSample of {len(sample)} updated talks:")
@@ -453,82 +417,52 @@ def verify_sample(db: Database, sample_ids: List[int] = None):
 
 def parse_args():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Backfill conference topics and references into core.db"
-    )
+    parser = argparse.ArgumentParser(description="Backfill Church talk metadata into the core DB")
     parser.add_argument(
+        "--core-db",
         "--db",
-        default=f"{CORE_DB_PATH}",
-        help="Path to core.db (default: uses CORE_DB_PATH from db module)",
+        dest="core_db",
+        default=CORE_DB_PATH,
+        help="Path to core DB (default: uses CORE_DB_PATH from db module)",
     )
     parser.add_argument(
         "--metadata",
-        default="./db/one-off-migration/talk_metadata.json",
-        help="Path to talk_metadata.json (default: ./talk_metadata.json)",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Do not write changes; only report what would be done",
+        default=METADATA_PATH,
+        help="Path to talk_metadata.json (default: %(default)s)",
     )
     return parser.parse_args()
+
+
+def run(core_db_path: str, metadata_path: str = METADATA_PATH) -> Dict[str, Any]:
+    db = Database(core_db_path, read_only=False)
+    create_speaker_role_table(db)
+    stats = apply_metadata(db, load_metadata(metadata_path))
+    verify_sample(db)
+    return stats
 
 
 def main():
     args = parse_args()
 
-    db_path = args.db
-    metadata_path = args.metadata
-
     print("=" * 80)
     print("Backfill Talk Metadata")
     print("=" * 80)
-    print(f"Database: {db_path}")
-    print(f"Metadata: {metadata_path}")
+    print(f"Database: {args.core_db}")
+    print(f"Metadata: {args.metadata}")
     print("=" * 80)
 
-    # Create writable database instance
-    db = Database(db_path, read_only=False)
+    stats = run(args.core_db, args.metadata)
 
-    # Step 1: Create speaker_role table
-    create_speaker_role_table(db)
-
-    # Step 2: Add columns to talk table
-    add_talk_columns(db)
-
-    # Step 3: Load metadata
-    metadata = load_metadata(metadata_path)
-
-    # Step 4: Apply metadata to talk table (roles inserted on demand)
-    stats = apply_metadata(db, metadata)
-
-    # Step 5: Verify with sample
-    # Get first few talkIDs from metadata for verification
-    sample_ids = [m.get("talkID") for m in metadata[:5] if m.get("talkID")]
-    verify_sample(db, sample_ids)
-
-    # Final summary
     print("\n" + "=" * 80)
     print("FINAL SUMMARY")
     print("=" * 80)
-    print(f"Database Schema:")
-    print(f"  speaker_role table: id, role, role_slug")
-    print(f"  talk table additions: speaker_role_id (FK), data_aid")
-    print(f"\nData Updates:")
     print(f"  Total metadata records: {stats['total']}")
     print(f"  Talks updated: {stats['updated']}")
     print(f"    - Title updates: {stats['title_updates']}")
     print(f"    - Speaker role updates: {stats['speaker_role_updates']}")
     print(f"    - Data aid updates: {stats['data_aid_updates']}")
-    print(f"  Talks not found: {stats['not_found']}")
+    print(f"  URIs with no SCI talk: {stats['not_found']}")
     print(f"  Errors: {stats['errors']}")
-
-    if stats["updated"] > 0:
-        success_rate = (stats["updated"] / stats["total"]) * 100
-        print(f"\nSuccess rate: {success_rate:.1f}%")
-
-    print("=" * 80)
-    print("\n✓ Backfill completed successfully!")
     print("=" * 80)
 
 

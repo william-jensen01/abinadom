@@ -18,3 +18,5 @@ data/
 infra/.env
 # Local agent notes
 tasks/lessons.md
+db/build_report.*.json
+*.building

@@ -55,7 +55,8 @@ The normalize commit drops the old `talkID` field from every entry: `fetch` can'
 
 - Steps 4-5 re-fetch every topic each run, which catches new topics, new talks in old topics, and re-tagging.
 - Merges are by URI: new entries are added, existing entries are replaced, so the file mirrors the API exactly (a field the API drops shows up in the diff).
-- A topic page that still fails after one retry stops `fetch` before it writes anything. Writing `"entries": []` would silently delete that topic from the committed file.
+- A topic page that still fails after one retry stops `fetch` before it writes anything. Writing `"entries": []` would silently delete that topic from the committed file. Exception: a topic the index lists but whose page is 404 keeps its old entries and is named in the summary (`values` has been 404 upstream since at least 2026-10-29).
+- A talk page that fails keeps its old entry (the failure is listed in the summary); it is never overwritten with empty fields.
 - Ends with a summary: talks fetched, talks missing a title, role, `data_aid` or preview, and new topics.
 
 ### Caching rule
@@ -130,18 +131,18 @@ Reads the raw release from `db/sci/core.53.db` and `db/sci/content.53.db`, copie
 
 - [x] `db/__init__.py`: `SCI_DB_VERSION` setting (default `53`, env override).
 - [x] `talk_corrections.json`: titles for the five 1992 "A Worldwide Sisterhood" splits.
-- [ ] `extract_talk_metadata.py`: take a list of URIs instead of reading the SCI DB; key output by URI; remove the "uncached → return None" gate; accept a session; no import-time cache.
-- [ ] `api/fetch_talk_previews.py`: expose talk-URI and preview functions that take a session; key output by URI; drop the SCI DB lookup; no import-time cache.
-- [ ] `scripts/process_topics.py`: accept a session, topics list and output path as arguments.
-- [ ] New topics-index function (in `process_topics.py`): fetch `/general-conference/topics` and write `topics.json`. Right now this adds `atonement-of-jesus-christ` and `callings`.
-- [ ] Shared `write_json()` helper (see Stable output rule); `extract_talk_metadata.py`, `api/fetch_talk_previews.py`, `scripts/process_topics.py` and the topics-index step write through it.
-- [ ] Shared `find_talk_by_uri()` helper (in `create_talk_metadata_table.py`, next to `upsert_talk_metadata`).
-- [ ] `backfill_talk_metadata.py`, `backfill_talk_preview.py`: look up talks by URI via the helper.
-- [ ] `backfill_topics.py`: use the helper instead of `talk.URI_GC`; default input stays `conference_topics.json`.
-- [ ] `backfill_talk_metadata_role_extraction.py`: "skip existing" reads `talk_metadata.speaker_role_id`. Since `97fed0e` it read `talk.speaker_role_id`, which nothing writes, so step 6 overwrote every Church role it could parse from HTML.
-- [ ] Stop adding the dead `talk` columns (`URI_L`, `URI_GC`, `speaker_role_id`, `data_aid`); since `97fed0e` all writes go to `talk_metadata`.
-- [ ] All backfills: accept `--core-db` / `--content-db` paths so `build` can point them at the copy.
-- [ ] New `scripts/fetch.py` and `scripts/build.py`.
+- [x] `extract_talk_metadata.py`: take a list of URIs instead of reading the SCI DB; key output by URI; remove the "uncached → return None" gate; accept a session; no import-time cache.
+- [x] `api/fetch_talk_previews.py`: expose talk-URI and preview functions that take a session; key output by URI; drop the SCI DB lookup; no import-time cache.
+- [x] `scripts/process_topics.py`: accept a session, topics list and output path as arguments.
+- [x] New topics-index function (in `process_topics.py`): fetch `/general-conference/topics` and write `topics.json`. Right now this adds `atonement-of-jesus-christ` and `callings`.
+- [x] Shared `write_json()` helper (see Stable output rule); `extract_talk_metadata.py`, `api/fetch_talk_previews.py`, `scripts/process_topics.py` and the topics-index step write through it.
+- [x] Shared `find_talk_by_uri()` helper (in `create_talk_metadata_table.py`, next to `upsert_talk_metadata`).
+- [x] `backfill_talk_metadata.py`, `backfill_talk_preview.py`: look up talks by URI via the helper.
+- [x] `backfill_topics.py`: use the helper instead of `talk.URI_GC`; default input stays `conference_topics.json`.
+- [x] `backfill_talk_metadata_role_extraction.py`: "skip existing" reads `talk_metadata.speaker_role_id`. Since `97fed0e` it read `talk.speaker_role_id`, which nothing writes, so step 6 overwrote every Church role it could parse from HTML.
+- [x] Stop adding the dead `talk` columns (`URI_L`, `URI_GC`, `speaker_role_id`, `data_aid`); since `97fed0e` all writes go to `talk_metadata`.
+- [x] All backfills: accept `--core-db` / `--content-db` paths so `build` can point them at the copy.
+- [x] New `scripts/fetch.py` and `scripts/build.py`.
 
 ## Retired
 
@@ -159,10 +160,10 @@ Reads the raw release from `db/sci/core.53.db` and `db/sci/content.53.db`, copie
 ## Verification
 
 - [ ] **Build reproduces `.52` contents.** Build `.53` from the current JSON and compare it field by field with what the `.52` backfills produced (talk_metadata, titles, roles, kickers, previews, topics). Every difference is explained by April 2026 being new or by a correction.
-- [ ] **Fetch reproduces the JSON.** `fetch --conference 2025-10` against the API produces the same Oct 2025 entries already in the JSON files (they came from `gc.db`).
-- [ ] **Fetch is stable.** After the normalize commit, run `fetch --conference 2025-10` twice; `git diff` on the JSON files is empty after both runs.
+- [x] **Fetch reproduces the JSON.** `fetch --conference 2025-10` against the API produces the same Oct 2025 entries already in the JSON files (they came from `gc.db`).
+- [x] **Fetch is stable.** After the normalize commit, run `fetch --conference 2025-10` twice; `git diff` on the JSON files is empty after both runs.
 - [ ] **New conference.** `fetch --conference 2026-04` + `build` gives the 35 April 2026 talks full Church data.
-- [ ] **Match report.** Its unmatched lists contain only the expected categories above.
+- [x] **Match report.** Its unmatched lists contain only the expected categories above.
 - [ ] Integration tests in `tests/test_pipeline_integration.py` and `tests/test_phase1.py` pass against the built `.53`.
 - [ ] `run_pipeline.py` + `verify_weaviate_pipeline.py` pass.
 

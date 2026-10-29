@@ -2,15 +2,16 @@
 """
 Backfill speaker_role for general conference talks by extracting it from HTML.
 
-Targets all rows in core.52.db where talk.Corpus is 'G' (General Conference)
-or 'E', whose speaker_role_id is not yet set. HTML is sourced from
-content.52.db talkbody.TextRaw.
+Targets all talks in the core DB where talk.Corpus is 'G' (General Conference)
+or 'E' whose talk_metadata.speaker_role_id is not yet set (e.g. by
+backfill_talk_metadata.py from the Church API). HTML is sourced from the
+content DB's talkbody.TextRaw.
 
-1. Ensures the speaker_role table and talk.speaker_role_id column exist
-2. Queries core.52.db for GC talks lacking a speaker role
-3. Fetches TextRaw HTML from content.52.db for each talk
+1. Ensures the speaker_role table exists
+2. Queries the core DB for GC talks lacking a speaker role
+3. Fetches TextRaw HTML from the content DB for each talk
 4. Extracts speaker role using several HTML patterns
-5. Inserts new roles into speaker_role and updates talk.speaker_role_id
+5. Inserts new roles into speaker_role and upserts talk_metadata.speaker_role_id
 
 Extraction patterns (tried in order):
   - <p class="author-role">
@@ -192,19 +193,6 @@ def ensure_speaker_role_table(db: Database):
     print("  ✓ speaker_role table ready")
 
 
-def ensure_talk_columns(db: Database):
-    """Add speaker_role_id column to talk table if it doesn't exist."""
-    print("\nStep 2: Ensuring talk.speaker_role_id column exists...")
-    try:
-        db.execute("ALTER TABLE talk ADD COLUMN speaker_role_id INTEGER")
-        print("  ✓ Added column: speaker_role_id")
-    except Exception as e:
-        if "duplicate column name" in str(e).lower():
-            print("  ℹ Column speaker_role_id already exists")
-        else:
-            raise
-
-
 # ---------------------------------------------------------------------------
 # Role table helpers
 # ---------------------------------------------------------------------------
@@ -277,29 +265,22 @@ def get_or_create_role(
 
 def load_gc_talks(core_db: Database, skip_existing: bool) -> List[Dict]:
     """
-    Load general conference talks (Corpus 'G' or 'E') from core.52.db.
+    Load general conference talks (Corpus 'G' or 'E') from the core DB.
 
-    If skip_existing is True, only returns talks where speaker_role_id IS NULL.
+    If skip_existing is True, only returns talks whose
+    talk_metadata.speaker_role_id IS NULL (no row counts as NULL).
     """
-    if skip_existing:
-        return core_db.select(
-            """
-            SELECT ID, speaker_role_id
-              FROM talk
-             WHERE Corpus IN ('G', 'E')
-               AND speaker_role_id IS NULL
-             ORDER BY ID
-            """
-        )
-    else:
-        return core_db.select(
-            """
-            SELECT ID, speaker_role_id
-              FROM talk
-             WHERE Corpus IN ('G', 'E')
-             ORDER BY ID
-            """
-        )
+    where = "AND tm.speaker_role_id IS NULL" if skip_existing else ""
+    return core_db.select(
+        f"""
+        SELECT t.ID, tm.speaker_role_id
+          FROM talk t
+          LEFT JOIN talk_metadata tm ON tm.talk_id = t.ID
+         WHERE t.Corpus IN ('G', 'E')
+           {where}
+         ORDER BY t.ID
+        """
+    )
 
 
 def extract_and_apply_roles(
@@ -421,7 +402,8 @@ def verify_sample(core_db: Database):
         """
         SELECT t.ID, t.Title, sr.role AS speaker_role, sr.slug AS speaker_role_slug
           FROM talk t
-          JOIN speaker_role sr ON t.speaker_role_id = sr.id
+          JOIN talk_metadata tm ON tm.talk_id = t.ID
+          JOIN speaker_role sr ON tm.speaker_role_id = sr.id
          WHERE t.Corpus IN ('G', 'E')
          ORDER BY t.ID
          LIMIT 10
@@ -452,7 +434,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description=(
             "Backfill speaker_role for talks by extracting it from HTML "
-            "in content.52.db talkbody.TextRaw"
+            "in the content DB's talkbody.TextRaw"
         )
     )
     parser.add_argument(
@@ -478,10 +460,29 @@ def parse_args():
     return parser.parse_args()
 
 
+def run(
+    core_db_path: str, content_db_path: str, overwrite: bool = False, dry_run: bool = False
+):
+    core_db = Database(core_db_path, read_only=dry_run)
+    content_db = Database(content_db_path, read_only=True)
+
+    if not dry_run:
+        ensure_speaker_role_table(core_db)
+
+    stats = extract_and_apply_roles(
+        core_db=core_db,
+        content_db=content_db,
+        skip_existing=not overwrite,
+        dry_run=dry_run,
+    )
+
+    if not dry_run and stats and stats["updated"] > 0:
+        verify_sample(core_db)
+    return stats
+
+
 def main():
     args = parse_args()
-
-    skip_existing = not args.overwrite
 
     print("=" * 80)
     print("Backfill Talk Speaker Roles (HTML Extraction)")
@@ -489,26 +490,11 @@ def main():
     print(f"Core DB:       {args.core_db}")
     print(f"Content DB:    {args.content_db}")
     print(f"Corpus filter: G, E")
-    print(f"Skip existing: {skip_existing}")
+    print(f"Skip existing: {not args.overwrite}")
     print(f"Dry run:       {args.dry_run}")
     print("=" * 80)
 
-    core_db = Database(args.core_db, read_only=args.dry_run)
-    content_db = Database(args.content_db, read_only=True)
-
-    if not args.dry_run:
-        ensure_speaker_role_table(core_db)
-        ensure_talk_columns(core_db)
-
-    stats = extract_and_apply_roles(
-        core_db=core_db,
-        content_db=content_db,
-        skip_existing=skip_existing,
-        dry_run=args.dry_run,
-    )
-
-    if not args.dry_run and stats and stats["updated"] > 0:
-        verify_sample(core_db)
+    run(args.core_db, args.content_db, overwrite=args.overwrite, dry_run=args.dry_run)
 
     print("\n" + "=" * 80)
     print("COMPLETE")

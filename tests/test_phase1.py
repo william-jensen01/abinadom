@@ -595,33 +595,47 @@ class TestEnrichedFields(unittest.TestCase):
 
 
 class TestTopicTablesUnchanged(unittest.TestCase):
-    """Topic table smoke tests -- verify backfills did not alter topic data."""
+    """Topic table smoke tests -- the built DB holds exactly what conference_topics.json says."""
 
     @classmethod
     def setUpClass(cls):
-        """Load DB counts once for the class."""
+        """Load DB counts and the expected counts from the JSON once for the class."""
         try:
+            import json
+            import os
+            import sys
             from db import Database, CORE_DB_PATH
+            migration_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "db", "one-off-migration")
+            sys.path.insert(0, migration_dir)
+            from create_talk_metadata_table import find_talk_by_uri, load_talk_uri_index
+
             db = Database(CORE_DB_PATH)
             cls.conference_topic_count = db.scalar("SELECT COUNT(*) FROM conference_topic")
             cls.talk_topic_count = db.scalar("SELECT COUNT(*) FROM talk_topic")
+            with open(os.path.join(migration_dir, "conference_topics.json"), encoding="utf-8") as f:
+                topics = json.load(f)
+            index = load_talk_uri_index(db)
+            cls.expected_topics = len(topics)
+            cls.expected_links = sum(
+                len({e["uri"] for e in t["entries"] if find_talk_by_uri(index, e["uri"])})
+                for t in topics
+            )
             cls.db_available = True
         except Exception:
             cls.db_available = False
 
     def test_conference_topic_count_unchanged(self):
-        """conference_topic row count should not change after backfills."""
+        """One conference_topic row per topic in conference_topics.json."""
         if not self.db_available:
             self.skipTest("Database not available")
-        self.assertEqual(self.conference_topic_count, 333,
-                         f"Expected 333, got {self.conference_topic_count}")
+        self.assertEqual(self.conference_topic_count, self.expected_topics)
 
     def test_talk_topic_count_unchanged(self):
-        """talk_topic row count should not change after backfills."""
+        """One talk_topic row per topic entry whose URI resolves to an SCI talk."""
         if not self.db_available:
             self.skipTest("Database not available")
-        self.assertEqual(self.talk_topic_count, 16162,
-                         f"Expected 16162, got {self.talk_topic_count}")
+        self.assertGreater(self.talk_topic_count, 0)
+        self.assertEqual(self.talk_topic_count, self.expected_links)
 
 
 class TestTopicsField(unittest.TestCase):

@@ -4,17 +4,15 @@ Backfill script for populating talk previews.
 
 This script migrates talk preview data from JSON file into the core.db database. It will:
 
-- Populate talk_metadata.talk_preview in core.52.db from JSON data
-- Use UPSERT statements to safely handle re-runs
+- Find each record's SCI talk by Church URI (talk_metadata.uri_gc / uri_l,
+  so backfill_talk_uri.py must run first)
+- Populate talk_metadata.talk_preview, using UPSERT so re-runs are safe
 
 Usage:
-  pipenv run py db/one-off-migration/backfill_talk_preview.py [--db ./db/core.52.db] [--input talk_previews.json] [--dry-run]
+  pipenv run python db/one-off-migration/backfill_talk_preview.py [--core-db PATH] [--input PATH] [--dry-run]
 
 Notes:
-- This script is idempotent and safe to re-run
-- Writes to core.52.db talk_metadata.talk_preview (NOT content.52.db talkbody.TextPreview)
-- Expects JSON format: [{"TalkID": 123, "preview": "text..."}, ...]
-  or {"123": "preview text...", "456": "preview text..."}
+- Expects JSON format: [{"uri": "/general-conference/...", "preview": "text..."}, ...]
 """
 
 from __future__ import annotations
@@ -41,7 +39,9 @@ migration_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, migration_dir)
 
 from db import Database, CORE_DB_PATH
-from create_talk_metadata_table import upsert_talk_metadata
+from create_talk_metadata_table import find_talk_by_uri, load_talk_uri_index, upsert_talk_metadata
+
+PREVIEWS_PATH = os.path.join(migration_dir, "talk_previews.json")
 
 
 def ensure_talk_metadata_table(db: Database) -> None:
@@ -50,79 +50,63 @@ def ensure_talk_metadata_table(db: Database) -> None:
     create_table(db)
 
 
-def load_json_data(file_path: str) -> List[Dict[str, Union[int, str]]]:
-    """
-    Load talk preview data from JSON file.
-
-    Supports two formats:
-    1. Array of objects: [{"TalkID": 123, "preview": "text..."}, ...]
-    2. Object with TalkID keys: {"123": "preview text...", "456": "preview text..."}
-
-    Args:
-        file_path: Path to JSON file
-
-    Returns:
-        List of dictionaries with TalkID and preview keys
-    """
+def load_json_data(file_path: str) -> List[Dict[str, str]]:
+    """Load talk preview records ([{"uri": ..., "preview": ...}, ...])."""
     with open(file_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    # Handle different JSON formats
-    if isinstance(data, list):
-        # Already in correct format
-        return data
-    elif isinstance(data, dict):
-        # Convert object format to list format
-        return [{"TalkID": int(talk_id), "preview": preview}
-                for talk_id, preview in data.items()]
-    else:
-        raise ValueError(f"Unexpected JSON format: {type(data)}")
+        return json.load(f)
 
 
 def populate_previews(
     db: Database, previews_data: List[Dict], dry_run: bool = False
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     """
-    Write talk previews to core.52.db talk_metadata.talk_preview.
+    Write talk previews to talk_metadata.talk_preview.
 
     Args:
-        db:            Writable Database instance (core.52.db).
+        db:            Database instance (writable unless dry_run).
         previews_data: List of preview dicts from JSON.
         dry_run:       If True, don't write changes.
 
     Returns:
-        Tuple of (previews_inserted, previews_failed)
+        Tuple of (previews_inserted, previews_failed, uris_without_sci_talk)
     """
+    uri_index = load_talk_uri_index(db)
     previews_inserted = 0
     previews_failed = 0
+    no_talk = 0
     total = len(previews_data)
 
     print(f"\nProcessing {total} talk previews...")
 
     for i, preview_data in enumerate(previews_data, 1):
-        talk_id = preview_data.get("TalkID") or preview_data.get("talkID")
+        uri = preview_data.get("uri")
         preview = preview_data.get("preview")
 
-        if talk_id is None or preview is None:
-            print(f"  ⚠️  [{i}/{total}] Missing TalkID or preview in entry")
+        if uri is None or preview is None:
+            print(f"  ⚠️  [{i}/{total}] Missing uri or preview in entry")
             previews_failed += 1
             continue
 
+        # Church URIs with no SCI talk (reports, sustainings, ...) are expected
+        talk_id = find_talk_by_uri(uri_index, uri)
+        if talk_id is None:
+            no_talk += 1
+            continue
+
         if dry_run:
-            print(f"  [{i}/{total}] [DRY-RUN] Would upsert talk_preview for TalkID {talk_id}")
             previews_inserted += 1
             continue
 
         try:
             upsert_talk_metadata(db, talk_id, talk_preview=preview)
             previews_inserted += 1
-            if i % 100 == 0 or i == total:
+            if i % 500 == 0 or i == total:
                 print(f"  Progress: {i}/{total} ({(i/total)*100:.1f}%)")
         except Exception as e:
             print(f"  ⚠️  Error upserting TalkID {talk_id}: {e}")
             previews_failed += 1
 
-    return previews_inserted, previews_failed
+    return previews_inserted, previews_failed, no_talk
 
 
 def print_statistics(db: Database) -> None:
@@ -159,18 +143,20 @@ def print_statistics(db: Database) -> None:
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Backfill talk previews into core.52.db talk_metadata table"
+        description="Backfill talk previews into talk_metadata"
     )
     parser.add_argument(
+        "--core-db",
         "--db",
+        dest="core_db",
         default=CORE_DB_PATH,
-        help="Path to core.52.db (default: CORE_DB_PATH from db module)",
+        help="Path to core DB (default: CORE_DB_PATH from db module)",
     )
     parser.add_argument(
         "--input",
         "-i",
-        default="talk_previews.json",
-        help="Path to JSON file with talk previews (default: ./talk_previews.json)",
+        default=PREVIEWS_PATH,
+        help="Path to JSON file with talk previews (default: %(default)s)",
     )
     parser.add_argument(
         "--dry-run",
@@ -180,76 +166,43 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def run(core_db_path: str, previews_path: str = PREVIEWS_PATH, dry_run: bool = False) -> dict:
+    previews_data = load_json_data(previews_path)
+    print(f"✓ Loaded {len(previews_data)} talk previews")
+
+    db = Database(core_db_path, timeout=60, read_only=dry_run)
+    if not dry_run:
+        ensure_talk_metadata_table(db)
+
+    inserted, failed, no_talk = populate_previews(db, previews_data, dry_run=dry_run)
+    print(f"Previews inserted/updated: {inserted}")
+    print(f"Previews failed: {failed}")
+    print(f"URIs with no SCI talk: {no_talk}")
+    if not dry_run:
+        print_statistics(db)
+    return {"inserted": inserted, "failed": failed, "no_talk": no_talk}
+
+
 def main() -> None:
     """Main execution function."""
     args = parse_args()
 
-    db_path = args.db
-
-    # Resolve input path relative to script location
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    input_path = os.path.join(script_dir, args.input)
-
     print("=" * 60)
     print("Talk Preview Backfill Migration")
     print("=" * 60)
-    print(f"Database: {db_path}")
-    print(f"Input: {input_path}")
+    print(f"Database: {args.core_db}")
+    print(f"Input: {args.input}")
     print(f"Mode: {'DRY-RUN' if args.dry_run else 'WRITE'}")
     print("=" * 60)
 
-    if not os.path.exists(db_path):
-        print(f"\n❌ Error: Database not found at {db_path}")
-        sys.exit(1)
-
-    if not os.path.exists(input_path):
-        print(f"\n❌ Error: Input file not found at {input_path}")
-        sys.exit(1)
+    for path in (args.core_db, args.input):
+        if not os.path.exists(path):
+            print(f"\n❌ Error: not found: {path}")
+            sys.exit(1)
 
     start_time = time.time()
-
-    try:
-        print(f"\nLoading data from {input_path}...")
-        previews_data = load_json_data(input_path)
-        print(f"✓ Loaded {len(previews_data)} talk previews")
-
-        db = Database(db_path, timeout=60, read_only=args.dry_run)
-
-        if not args.dry_run:
-            ensure_talk_metadata_table(db)
-
-        if args.dry_run:
-            print("\n[DRY-RUN MODE] No changes will be written")
-
-        print("\n" + "=" * 60)
-        print("Writing talk_preview to talk_metadata...")
-        print("=" * 60)
-
-        inserted, failed = populate_previews(db, previews_data, dry_run=args.dry_run)
-
-        elapsed = time.time() - start_time
-        print("\n" + "=" * 60)
-        print("MIGRATION COMPLETE")
-        print("=" * 60)
-        print(f"Previews inserted/updated: {inserted}")
-        print(f"Previews failed/skipped: {failed}")
-        print(f"Elapsed time: {elapsed:.2f}s")
-
-        if not args.dry_run:
-            print_statistics(db)
-            print("\n✓ Migration complete!")
-        else:
-            print("\n[DRY-RUN] No changes were written to database")
-
-    except FileNotFoundError as e:
-        print(f"\n❌ Error: {e}")
-        sys.exit(1)
-    except json.JSONDecodeError as e:
-        print(f"\n❌ Error: Invalid JSON in input file: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\n❌ Unexpected error: {e}")
-        raise
+    run(args.core_db, args.input, dry_run=args.dry_run)
+    print(f"Elapsed time: {time.time() - start_time:.2f}s")
 
 
 if __name__ == "__main__":

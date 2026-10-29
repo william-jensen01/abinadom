@@ -284,12 +284,102 @@ def ensure_columns_exist(conn: sqlite3.Connection, columns: Iterable[str]) -> No
             raise ValueError(f"Unsupported column request: {col}")
 
 
+def backfill_all(conn: sqlite3.Connection, batch: int = 1000) -> tuple[int, int]:
+    """Recompute TextRaw/Simple/Minimal/Enhanced for every talkbody row."""
+    processed = 0
+    updated = 0
+    # Normal mode
+    # Per request: always clear the four columns at the start of each run
+    # so repeated test runs recompute from scratch.
+    conn.execute("BEGIN")
+    try:
+        cur = conn.execute(
+            """
+            UPDATE talkbody
+               SET TextRaw = NULL,
+                   TextSimple = NULL,
+                   TextMinimal = NULL,
+                   TextEnhanced = NULL
+            """
+        )
+    finally:
+        conn.execute("COMMIT")
+    print(
+        f"Cleared existing projection columns for {cur.rowcount if hasattr(cur, 'rowcount') else 'N'} rows. Recomputing…"
+    )
+
+    last_id = 0
+    while True:
+        rows = conn.execute(
+            """
+                SELECT TalkID, Text
+                FROM talkbody
+                WHERE TalkID > ?
+                AND (TextRaw IS NULL OR TextSimple IS NULL OR TextMinimal IS NULL OR TextEnhanced IS NULL)
+            ORDER BY TalkID
+                LIMIT ?
+                """,
+            (last_id, batch),
+        ).fetchall()
+        if not rows:
+            break
+
+        conn.execute("BEGIN")
+        try:
+            for talk_id, blob in rows:
+                processed += 1
+                try:
+                    raw = decompress_talk_content(blob) or ""
+                except Exception:
+                    raw = ""
+
+                mainish = extract_main_html(raw) if is_html(raw) else raw
+                simple = to_text_simple(mainish)
+                minimal = to_text_minimal(simple)
+                enhanced = to_text_enhanced(raw)
+
+                cur = conn.execute(
+                    """
+                    UPDATE talkbody
+                       SET TextRaw      = COALESCE(TextRaw, ?),
+                           TextSimple   = COALESCE(TextSimple, ?),
+                           TextMinimal  = COALESCE(TextMinimal, ?),
+                           TextEnhanced = COALESCE(TextEnhanced, ?)
+                     WHERE TalkID = ?
+                    """,
+                    (raw, simple, minimal, enhanced, talk_id),
+                )
+                if cur.rowcount:
+                    updated += 1
+                last_id = talk_id
+                # Progress indicator every 50 records
+                if processed % 50 == 0:
+                    print(f"Progress: processed={processed}, updated={updated}")
+        finally:
+            conn.execute("COMMIT")
+
+
+    return processed, updated
+
+
+def run(content_db_path: str, batch: int = 1000) -> tuple[int, int]:
+    """Add the text columns if needed and fill them for every talk."""
+    start = time.time()
+    with sqlite3.connect(content_db_path) as conn:
+        ensure_columns_exist(conn, ["TextRaw", "TextSimple", "TextMinimal", "TextEnhanced"])
+        processed, updated = backfill_all(conn, batch)
+    print(f"Backfill complete. Processed: {processed}, Updated: {updated}, Elapsed: {time.time() - start:.2f}s")
+    return processed, updated
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Backfill talk text projections.")
     parser.add_argument(
+        "--content-db",
         "--db",
-        default=f"{CONTENT_DB_PATH}",
-        help="Path to SQLite DB",
+        dest="content_db",
+        default=CONTENT_DB_PATH,
+        help="Path to content DB (default: CONTENT_DB_PATH)",
     )
     parser.add_argument(
         "--batch",
@@ -313,7 +403,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    db_path = args.db
+    db_path = args.content_db
     batch = max(1, args.batch)
 
     start = time.time()
@@ -428,75 +518,7 @@ def main() -> None:
             print(f"\nSample complete. Processed: {processed}, Elapsed: {elapsed:.2f}s")
             return
 
-        # Normal mode
-        # Per request: always clear the four columns at the start of each run
-        # so repeated test runs recompute from scratch.
-        conn.execute("BEGIN")
-        try:
-            cur = conn.execute(
-                """
-                UPDATE talkbody
-                   SET TextRaw = NULL,
-                       TextSimple = NULL,
-                       TextMinimal = NULL,
-                       TextEnhanced = NULL
-                """
-            )
-        finally:
-            conn.execute("COMMIT")
-        print(
-            f"Cleared existing projection columns for {cur.rowcount if hasattr(cur, 'rowcount') else 'N'} rows. Recomputing…"
-        )
-
-        last_id = 0
-        while True:
-            rows = conn.execute(
-                """
-                    SELECT TalkID, Text
-                    FROM talkbody
-                    WHERE TalkID > ?
-                    AND (TextRaw IS NULL OR TextSimple IS NULL OR TextMinimal IS NULL OR TextEnhanced IS NULL)
-                ORDER BY TalkID
-                    LIMIT ?
-                    """,
-                (last_id, batch),
-            ).fetchall()
-            if not rows:
-                break
-
-            conn.execute("BEGIN")
-            try:
-                for talk_id, blob in rows:
-                    processed += 1
-                    try:
-                        raw = decompress_talk_content(blob) or ""
-                    except Exception:
-                        raw = ""
-
-                    mainish = extract_main_html(raw) if is_html(raw) else raw
-                    simple = to_text_simple(mainish)
-                    minimal = to_text_minimal(simple)
-                    enhanced = to_text_enhanced(raw)
-
-                    cur = conn.execute(
-                        """
-                        UPDATE talkbody
-                           SET TextRaw      = COALESCE(TextRaw, ?),
-                               TextSimple   = COALESCE(TextSimple, ?),
-                               TextMinimal  = COALESCE(TextMinimal, ?),
-                               TextEnhanced = COALESCE(TextEnhanced, ?)
-                         WHERE TalkID = ?
-                        """,
-                        (raw, simple, minimal, enhanced, talk_id),
-                    )
-                    if cur.rowcount:
-                        updated += 1
-                    last_id = talk_id
-                    # Progress indicator every 50 records
-                    if processed % 50 == 0:
-                        print(f"Progress: processed={processed}, updated={updated}")
-            finally:
-                conn.execute("COMMIT")
+        processed, updated = backfill_all(conn, batch)
 
     elapsed = time.time() - start
     print(

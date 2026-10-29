@@ -6,20 +6,15 @@ This script migrates topic data from JSON files into the core.db database. It wi
 
 - Create two tables if they don't exist:
   - conference_topic: stores topic names and slugs
-  - talk_topic: links talks to topic via data-aid identifiers
+  - talk_topic: links talks to topics (content_identifier = Church URI)
 
-- Populate tables from JSON data containing topics and their associated data-aids
+- Populate tables from conference_topics.json ([{"topic": ..., "entries": [{"uri": ...}]}])
+- Find each entry's SCI talk by Church URI (talk_metadata.uri_gc / uri_l,
+  so backfill_talk_uri.py must run first)
 - Use idempotent inserts (ON CONFLICT DO NOTHING) to safely handle re-runs
-- Support both data_aids format and entries/uri format
 
 Usage:
-  python backfill_topics.py [--db ./core.db] [--input ../process_topic_talks/ALL_data_aids.json] [--dry-run]
-
-Notes:
-- This script is idempotent and safe to re-run
-- Uses ON CONFLICT DO NOTHING to avoid duplicate inserts
-- Will create tables if they don't exist
-- Supports looking up talk_id from talk table using data-aid identifiers
+  pipenv run python db/one-off-migration/backfill_topics.py [--core-db PATH] [--input PATH] [--dry-run]
 """
 
 from __future__ import annotations
@@ -30,7 +25,7 @@ import os
 import sqlite3
 import sys
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
 # Add parent directory to path for importing Database
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -38,6 +33,12 @@ root_dir = os.path.dirname(parent_dir)
 sys.path.insert(0, root_dir)
 
 from db import Database, CORE_DB_PATH
+
+migration_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, migration_dir)
+from create_talk_metadata_table import find_talk_by_uri, load_talk_uri_index
+
+TOPICS_PATH = os.path.join(migration_dir, "conference_topics.json")
 
 
 def generate_topic_slug(topic_name: str) -> str:
@@ -138,33 +139,6 @@ def ensure_tables_exist(conn: sqlite3.Connection) -> None:
     print("  ✓ Indexes created/verified")
 
 
-def lookup_talk_id(conn: sqlite3.Connection, uri: str) -> Optional[int]:
-    """
-    Look up TalkID from talk table using URI_GC.
-
-    Args:
-        conn: SQLite connection
-        uri: URI to look up
-
-    Returns:
-        TalkID if found, None otherwise
-    """
-    try:
-        cursor = conn.execute(
-            """
-                SELECT ID FROM talk WHERE URI_GC = ?
-            """,
-            (uri,),
-        )
-        result = cursor.fetchone()
-        if result:
-            return result[0]
-    except sqlite3.OperationalError:
-        pass
-
-    return None
-
-
 def insert_topic(conn: sqlite3.Connection, topic_name: str) -> int:
     """
     Insert a topic or return existing ID (idempotent).
@@ -247,7 +221,10 @@ def load_json_data(file_path: str) -> List[Dict]:
 
 
 def populate_topics(
-    conn: sqlite3.Connection, topics_data: List[Dict], dry_run: bool = False
+    conn: sqlite3.Connection,
+    topics_data: List[Dict],
+    uri_index: Dict[str, Set[int]],
+    dry_run: bool = False,
 ) -> tuple[int, int, int, int]:
     """
     Populate conference_topic and talk_topic tables.
@@ -255,6 +232,7 @@ def populate_topics(
     Args:
         conn: SQLite connection
         topics_data: List of topic dictionaries from JSON
+        uri_index: load_talk_uri_index() result
         dry_run: If True, don't write changes
 
     Returns:
@@ -269,8 +247,6 @@ def populate_topics(
         topic_name = topic_data.get("topic", "Unknown")
         entries = topic_data.get("entries", [])
 
-        print(f"\nProcessing: {topic_name}")
-        print(f"  Entries: {len(entries)}")
 
         if dry_run:
             topics_processed += 1
@@ -297,7 +273,7 @@ def populate_topics(
             uri = entry.get("uri", "")
 
             # Look up talk ID
-            talk_id = lookup_talk_id(conn, uri)
+            talk_id = find_talk_by_uri(uri_index, uri)
             if talk_id:
                 local_with_talk += 1
                 references_with_talk_id += 1
@@ -310,10 +286,7 @@ def populate_topics(
                 local_failed += 1
                 references_failed += 1
 
-        print(f"  ✓ Inserted {local_success}/{len(entries)} references")
-        print(f"  ✓ Found talk_id for {local_with_talk}/{len(entries)} entries")
-        if local_failed > 0:
-            print(f"  ⚠️  Failed/skipped {local_failed} references")
+        print(f"  {topic_name}: {local_success}/{len(entries)} entries linked to a talk")
 
     if not dry_run:
         conn.commit()
@@ -373,18 +346,20 @@ def print_statistics(conn: sqlite3.Connection) -> None:
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Backfill conference topics and references into core.db"
+        description="Backfill conference topics and references into the core DB"
     )
     parser.add_argument(
+        "--core-db",
         "--db",
-        default=None,
-        help="Path to core.db (default: uses CORE_DB_PATH from db module)",
+        dest="core_db",
+        default=CORE_DB_PATH,
+        help="Path to core DB (default: uses CORE_DB_PATH from db module)",
     )
     parser.add_argument(
         "--input",
         "-i",
-        default="conference_topics.json",
-        help="Path to JSON file with topics (default: ./conference_topics.json)",
+        default=TOPICS_PATH,
+        help="Path to JSON file with topics (default: %(default)s)",
     )
     parser.add_argument(
         "--dry-run",
@@ -394,96 +369,47 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def run(core_db_path: str, topics_path: str = TOPICS_PATH, dry_run: bool = False) -> dict:
+    topics_data = load_json_data(topics_path)
+    print(f"✓ Loaded {len(topics_data)} topics")
+    uri_index = load_talk_uri_index(Database(core_db_path))
+
+    conn = sqlite3.connect(core_db_path)
+    try:
+        ensure_tables_exist(conn)
+        topics, refs, refs_with_talk, refs_failed = populate_topics(
+            conn, topics_data, uri_index, dry_run=dry_run
+        )
+        print(f"Topics processed: {topics}")
+        print(f"References inserted: {refs}")
+        print(f"References with no SCI talk/skipped: {refs_failed}")
+        if not dry_run:
+            print_statistics(conn)
+    finally:
+        conn.close()
+    return {"topics": topics, "references": refs, "skipped": refs_failed}
+
+
 def main() -> None:
     """Main execution function."""
     args = parse_args()
 
-    # Use CORE_DB_PATH from db module or custom path if provided
-    db_path = args.db if args.db else CORE_DB_PATH
-
-    # Resolve input path relative to script location
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    input_path = os.path.join(script_dir, args.input)
-
     print("=" * 60)
     print("Conference Topics Backfill Migration")
     print("=" * 60)
-    print(f"Database: {db_path}")
-    print(f"Input: {input_path}")
+    print(f"Database: {args.core_db}")
+    print(f"Input: {args.input}")
     print(f"Mode: {'DRY-RUN' if args.dry_run else 'WRITE'}")
     print("=" * 60)
 
-    # Check if database exists
-    if not os.path.exists(db_path):
-        print(f"\n❌ Error: Database not found at {db_path}")
-        sys.exit(1)
-
-    # Check if input file exists
-    if not os.path.exists(input_path):
-        print(f"\n❌ Error: Input file not found at {input_path}")
-        sys.exit(1)
+    for path in (args.core_db, args.input):
+        if not os.path.exists(path):
+            print(f"\n❌ Error: not found: {path}")
+            sys.exit(1)
 
     start_time = time.time()
-
-    try:
-        # Load JSON data
-        print(f"\nLoading data from {input_path}...")
-        topics_data = load_json_data(input_path)
-        print(f"✓ Loaded {len(topics_data)} topics")
-
-        # Create writable Database instance (disable read-only mode for migration)
-        # Note: We use raw sqlite3 connection for schema operations
-        # since the Database class is optimized for queries, not schema changes
-        with sqlite3.connect(db_path) as conn:
-            # Enable WAL mode for better concurrency
-            conn.execute("PRAGMA journal_mode=WAL;")
-            conn.execute("PRAGMA synchronous=NORMAL;")
-
-            # Ensure tables exist
-            ensure_tables_exist(conn)
-
-            if args.dry_run:
-                print("\n[DRY-RUN MODE] No changes will be written")
-
-            # Populate tables
-            print("\n" + "=" * 60)
-            print("Populating tables...")
-            print("=" * 60)
-
-            topics, refs, refs_with_talk, refs_failed = populate_topics(
-                conn, topics_data, dry_run=args.dry_run
-            )
-
-            # Print results
-            elapsed = time.time() - start_time
-            print("\n" + "=" * 60)
-            print("MIGRATION COMPLETE")
-            print("=" * 60)
-            print(f"Topics processed: {topics}")
-            print(f"References inserted: {refs}")
-            print(f"References with talk_id: {refs_with_talk}")
-            print(f"References failed/skipped: {refs_failed}")
-            print(f"Elapsed time: {elapsed:.2f}s")
-
-            if not args.dry_run:
-                # Print statistics
-                print_statistics(conn)
-                print("\n✓ Migration complete!")
-            else:
-                print("\n[DRY-RUN] No changes were written to database")
-
-    except FileNotFoundError as e:
-        print(f"\n❌ Error: {e}")
-        sys.exit(1)
-    except json.JSONDecodeError as e:
-        print(f"\n❌ Error: Invalid JSON in input file: {e}")
-        sys.exit(1)
-    except sqlite3.Error as e:
-        print(f"\n❌ Database error: {e}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"\n❌ Unexpected error: {e}")
-        raise
+    run(args.core_db, args.input, dry_run=args.dry_run)
+    print(f"Elapsed time: {time.time() - start_time:.2f}s")
 
 
 if __name__ == "__main__":
