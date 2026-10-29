@@ -64,6 +64,38 @@ Today `fetch_talk_previews.py`, `extract_conference_sections.py` and `extract_ta
 - `fetch` creates one `CachedSession` and passes it to the scripts. Topics and the named conference's contents page use a plain, uncached session.
 - No script calls `install_cache` at import. Standalone runs create their own session in `main()`.
 
+### Stable output rule
+
+Running `fetch` twice in a row, with nothing changed upstream, must leave `git diff` empty. A real upstream change shows up as only the lines that changed.
+
+Today's writers break this in several ways:
+- `extract_talk_metadata.py` saves results in thread-completion order (`as_completed`), so record order changes every run.
+- `ensure_ascii` is set differently per writer (`fetch_talk_previews.py` passes `False`, `extract_talk_metadata.py` uses the default). A writer that switches rewrites every accented name.
+- `open(path, "w")` has no `encoding=`, so the bytes depend on the OS (cp1252 on Windows, UTF-8 on Linux).
+- No trailing newline, so any editor that adds one creates a diff.
+
+Every JSON file `fetch` writes goes through one shared helper:
+
+```python
+def write_json(path, records, key="uri"):
+    records = sorted(records, key=lambda r: r[key])
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(records, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+```
+
+- Talk files and `topics.json` sort by `uri`. `conference_topics.json` sorts topics by `topic`, and each topic's `entries` by `uri` descending. That's the API's own order: the topic page groups talks into year sections, newest first, and within a conference by slug descending. All 333 saved topics follow it exactly, and so did live re-fetches. Sorting ourselves keeps it stable if the API ever reshuffles; whether the API sorts `210soares` as text or as a number is unchecked, and doesn't matter for stability.
+
+Within a conference this is **not** speaking order:
+- From 2019-04 on, slugs are `<slot><position><name>`. The slot is one digit per session type and can skip: 1 Saturday morning, 2 Saturday afternoon, 3 Saturday evening/priesthood (unused from 2026-04, which has only 4 sessions), 4 Sunday morning, 5 Sunday afternoon. Position starts at 1 and can reach two digits (`210soares` = slot 2, position 10). Sorting by (slot, position) as numbers gives speaking order; a text sort doesn't (`210soares` < `21christofferson`).
+- Before 2019-04, slugs are title words (`born-of-god`), so the order is reverse alphabetical.
+
+Speaking order only comes from the conference contents page (`toc`) or SCI sessions. Never use a `toc` session's index as its slot. The helper only sorts the top level, so `process_topics.py` sorts each topic's `entries` (`sorted(entries, key=lambda e: e["uri"], reverse=True)`) before calling `write_json(path, results, key="topic")`.
+- Merges happen in memory, keyed by URI. Sorting once when writing means an updated entry keeps its position.
+- All API fields are kept, even ones `build` doesn't read, so the files show what data is available for later use.
+- `talk_corrections.json` is edited by hand and isn't written by `fetch`.
+- Commit the first run with the helper on its own ("normalize JSON formatting"), so the one-time reorder doesn't hide real data changes.
+
 ## `build`
 
 `scripts/build.py --version 53`
@@ -101,6 +133,7 @@ Reads the raw release from `db/sci/core.53.db` and `db/sci/content.53.db`, copie
 - [ ] `api/fetch_talk_previews.py`: expose talk-URI and preview functions that take a session; key output by URI; drop the SCI DB lookup; no import-time cache.
 - [ ] `scripts/process_topics.py`: accept a session, topics list and output path as arguments.
 - [ ] New topics-index function (in `process_topics.py`): fetch `/general-conference/topics` and write `topics.json`. Right now this adds `atonement-of-jesus-christ` and `callings`.
+- [ ] Shared `write_json()` helper (see Stable output rule); `extract_talk_metadata.py`, `api/fetch_talk_previews.py`, `scripts/process_topics.py` and the topics-index step write through it.
 - [ ] Shared `find_talk_by_uri()` helper (in `create_talk_metadata_table.py`, next to `upsert_talk_metadata`).
 - [ ] `backfill_talk_metadata.py`, `backfill_talk_preview.py`: look up talks by URI via the helper.
 - [ ] `backfill_topics.py`: use the helper instead of `talk.URI_GC`; default input stays `conference_topics.json`.
@@ -124,6 +157,7 @@ Reads the raw release from `db/sci/core.53.db` and `db/sci/content.53.db`, copie
 
 - [ ] **Build reproduces `.52` contents.** Build `.53` from the current JSON and compare it field by field with what the `.52` backfills produced (talk_metadata, titles, roles, kickers, previews, topics). Every difference is explained by April 2026 being new or by a correction.
 - [ ] **Fetch reproduces the JSON.** `fetch --conference 2025-10` against the API produces the same Oct 2025 entries already in the JSON files (they came from `gc.db`).
+- [ ] **Fetch is stable.** After the normalize commit, run `fetch --conference 2025-10` twice; `git diff` on the JSON files is empty after both runs.
 - [ ] **New conference.** `fetch --conference 2026-04` + `build` gives the 35 April 2026 talks full Church data.
 - [ ] **Match report.** Its unmatched lists contain only the expected categories above.
 - [ ] Integration tests in `tests/test_pipeline_integration.py` and `tests/test_phase1.py` pass against the built `.53`.
