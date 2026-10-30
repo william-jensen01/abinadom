@@ -72,6 +72,9 @@ class TestPoliteness:
         church_api.get_json(session, "/b")
         assert time.monotonic() - start >= 0.2
 
+    def test_user_agent_is_a_valid_header(self):
+        church_api.USER_AGENT.encode("latin-1")  # http.client rejects anything else
+
     def test_sessions_send_user_agent(self, tmp_path):
         assert church_api.fresh_session().headers["User-Agent"] == church_api.USER_AGENT
         assert church_api.cached_session(str(tmp_path / "c")).headers["User-Agent"] == church_api.USER_AGENT

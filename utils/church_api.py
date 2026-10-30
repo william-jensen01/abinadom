@@ -20,12 +20,12 @@ import requests
 import requests_cache
 
 API_BASE_URL = "https://www.churchofjesuschrist.org/study/api/v3/language-pages/type/dynamic?lang=eng&uri="
-REQUEST_TIMEOUT = 30
+REQUEST_TIMEOUT = (5, 30)  # (connect, read): a dead address (e.g. broken IPv6) costs 5s, not 30s
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CACHE_PATH = os.path.join(ROOT_DIR, "http_cache")  # requests_cache adds .sqlite
 MIN_INTERVAL = 0.5  # seconds between network requests (≤ 2/s)
 RETRY_DELAY = 5.0  # seconds before retrying a failed request
-USER_AGENT = "lds-sci-mcp-fetch/1.0 (conference metadata sync; sequential, ≤2 req/s)"
+USER_AGENT = "lds-sci-mcp-fetch/1.0 (conference metadata sync; sequential, max 2 req/s)"
 
 _throttle_lock = threading.Lock()
 _last_network_request = 0.0
