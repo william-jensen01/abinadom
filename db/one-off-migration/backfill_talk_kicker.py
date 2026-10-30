@@ -41,19 +41,7 @@ from db import Database, CONTENT_DB_PATH, CORE_DB_PATH
 
 migration_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, migration_dir)
-from create_talk_metadata_table import upsert_talk_metadata
-
-
-def ensure_kicker_column_exists(core_db: Database) -> None:
-    """Add Kicker column to talk table in core.52.db if not present. Idempotent."""
-    try:
-        core_db.execute("ALTER TABLE talk ADD COLUMN Kicker TEXT")
-        print("  ✓ Kicker column added to talk table in core.52.db")
-    except Exception as e:
-        if "duplicate column name" in str(e).lower():
-            print("  ✓ Kicker column already exists in talk table")
-        else:
-            raise
+from create_talk_metadata_table import create_table, upsert_talk_metadata
 
 
 def fetch_eligible_talk_ids(
@@ -259,7 +247,7 @@ def print_statistics(core_db: Database) -> None:
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Backfill kicker text into core.52.db talk table"
+        description="Backfill kicker text into talk_metadata"
     )
     parser.add_argument(
         "--content-db",
@@ -297,31 +285,21 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
-    args = parse_args()
+def run(
+    core_db_path: str,
+    content_db_path: str,
+    batch_size: int = 500,
+    dry_run: bool = False,
+    force: bool = False,
+    talk_ids: list[int] | None = None,
+) -> dict:
+    core_db = Database(core_db_path, read_only=False)
+    create_table(core_db)
 
-    print("=" * 80)
-    print("Backfill Talk Kicker")
-    print("=" * 80)
-    print(f"Content DB: {args.content_db}")
-    print(f"Core DB:    {args.core_db}")
-    print(f"Mode:       {'DRY-RUN' if args.dry_run else 'WRITE'}")
-    print("=" * 80)
-
-    if args.force:
-        print("  ⚠️  --force mode: existing Kicker values will be overwritten")
-
-    # Open core.52.db (writable)
-    core_db = Database(args.core_db, read_only=False)
-
-    # Ensure schema
-    ensure_kicker_column_exists(core_db)
-
-    # Fetch eligible IDs
-    ids = fetch_eligible_talk_ids(core_db, args.talk_ids)
+    ids = fetch_eligible_talk_ids(core_db, talk_ids)
     print(
         f"  ✓ Fetched {len(ids)} eligible talk IDs"
-        + (" (Corpus IN ('E','G'))" if not args.talk_ids else " (--talk-ids)")
+        + (" (Corpus IN ('E','G'))" if not talk_ids else " (--talk-ids)")
     )
 
     stats: dict = {
@@ -340,42 +318,60 @@ def main() -> None:
         },
     }
 
-    # Open content.52.db (read-only)
-    content_conn = sqlite3.connect(f"file:{args.content_db}?mode=ro", uri=True)
-    content_conn.execute("PRAGMA journal_mode=WAL;")
-
-    print(f"\nProcessing {len(ids)} talks (batch size: {args.batch})...")
-
+    content_conn = sqlite3.connect(f"file:{content_db_path}?mode=ro", uri=True)
+    print(f"\nProcessing {len(ids)} talks (batch size: {batch_size})...")
     try:
         process_talks(
             core_db=core_db,
             content_conn=content_conn,
             ids=ids,
-            batch_size=args.batch,
-            dry_run=args.dry_run,
-            force=args.force,
+            batch_size=batch_size,
+            dry_run=dry_run,
+            force=force,
             stats=stats,
         )
     finally:
         content_conn.close()
 
+    print_pattern_distribution(stats)
+    if not dry_run:
+        print_statistics(core_db)
+    stats["eligible"] = len(ids)
+    return stats
+
+
+def main() -> None:
+    args = parse_args()
+
+    print("=" * 80)
+    print("Backfill Talk Kicker")
+    print("=" * 80)
+    print(f"Content DB: {args.content_db}")
+    print(f"Core DB:    {args.core_db}")
+    print(f"Mode:       {'DRY-RUN' if args.dry_run else 'WRITE'}")
+    print("=" * 80)
+
+    if args.force:
+        print("  ⚠️  --force mode: existing Kicker values will be overwritten")
+
+    stats = run(
+        args.core_db,
+        args.content_db,
+        batch_size=args.batch,
+        dry_run=args.dry_run,
+        force=args.force,
+        talk_ids=args.talk_ids,
+    )
+
     print("\n" + "=" * 80)
     print("FINAL SUMMARY")
     print("=" * 80)
-    print(f"  Total eligible:  {len(ids)}")
+    print(f"  Total eligible:  {stats['eligible']}")
     print(f"  Kickers found:   {stats['found']}")
     print(f"  Not found:       {stats['not_found']}")
     print(f"  Skipped:         {stats['skipped']}")
     print(f"  Errors:          {stats['errors']}")
     print(f"  Written:         {stats['written']}")
-
-    print_pattern_distribution(stats)
-
-    if not args.dry_run:
-        print_statistics(core_db)
-
-    print("\n" + "=" * 80)
-    print("✓ Backfill completed successfully!")
     print("=" * 80)
 
 

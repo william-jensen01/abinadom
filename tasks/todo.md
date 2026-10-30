@@ -1,3 +1,51 @@
+## Fetch & Build (2026-10-29) — spec: `docs/update/FETCH_BUILD_SPEC.md`
+
+Order: fetch side first (it's what makes the JSON), then build side, then the spec's Verification list.
+
+### A. Shared helpers
+- [x] `utils/json_io.py`: `write_json(path, records, key="uri", reverse=False)` per spec, plus `merge_by_key(existing, new, key)` (new entries replace old)
+- [x] `utils/church_api.py`: `API_BASE_URL`, `REQUEST_TIMEOUT`, `cached_session()` / `fresh_session()` (one place instead of four copies)
+
+### B. Fetch-side scripts (no import-time `install_cache`, session passed in, keyed by URI, no SCI DB)
+- [x] `api/fetch_talk_previews.py`: `fetch_conference_talk_uris(year, month, session)`, `fetch_talk_preview(uri, session)`; `main()` takes `--conference YYYY-MM | --all`, merges into `talk_previews.json` via `write_json`; drop `get_conferences` / `get_uri_gc_lookup`
+- [x] `process_topic_talks/extract_talk_metadata.py`: `fetch_talk_metadata(uri, session)`; drop DB read, `talkID`, the `from_cache` gate and `print`; results in input order (no `as_completed`)
+- [x] `scripts/process_topics.py`: `fetch_topics_index(session)` → `topics.json`; `process_topics(topics, session)`; entries sorted `uri` desc; a failed topic aborts instead of writing `[]` (decision 3)
+- [x] `scripts/fetch.py`: steps 1–5, one cached + one fresh session, summary (talks fetched, missing title/role/data_aid/preview, new topics)
+- [x] Normalize commit: rewrite the 4 JSON files through `write_json`, dropping `talkID`, no other data change; commit alone
+
+### C. Build-side scripts
+- [x] `create_talk_metadata_table.py`: `talk_uri_lookup(db)` → `{uri: talk_id}` from `uri_gc` + `uri_l`, plus `find_talk_by_uri(lookup, uri)`; collisions reported
+- [x] `backfill_talk_metadata.py`, `backfill_talk_preview.py`, `backfill_topics.py`: look up by URI; ignore `talkID`; `backfill_topics` stops reading `talk.URI_GC`
+- [x] `backfill_talk_metadata_role_extraction.py`: "skip existing" reads `talk_metadata.speaker_role_id` (decision 2)
+- [x] Stop adding dead columns to `talk` (`URI_L`, `URI_GC`, `speaker_role_id`, `data_aid`): nothing outside the migration scripts reads them
+- [x] All backfills: `--core-db` / `--content-db`; each exposes a `run(core_db_path, content_db_path, ...)` that `build.py` calls
+- [x] `scripts/build.py --version N [--force]`: steps 0–11; match report printed and saved to `db/build_report.N.json` (gitignored like the DBs)
+- [x] Update CLAUDE.md index (new files) and the spec's checklist
+
+### D. Verification (spec list)
+- [ ] Build `.53` vs `.52` backfill output, every diff explained (blocked: `db/core.52.db` provided is the raw release, need the enriched copy)
+- [x] `fetch --conference 2025-10` reproduces the JSON; run twice → empty `git diff`
+- [x] `fetch --conference 2026-04` + `build` → 35 April 2026 talks with full data
+- [x] Match report shows only expected categories
+- [x] `tests/test_pipeline_integration.py`, `tests/test_phase1.py` pass on built `.53`; unit tests for `write_json`, merge, URI lookup
+- [ ] `run_pipeline.py` + `verify_weaviate_pipeline.py` (operator step if it needs Weaviate)
+
+### Decisions (proposed)
+1. **Drop `talkID` in the normalize commit, replace on merge** (approved 2026-10-29). Nothing reads it after the change; fetch can't produce it.
+2. **Fix role extraction's skip filter** (approved). It checks `talk.speaker_role_id`, which nothing writes any more (step 5 writes `talk_metadata`), so step 6 would overwrite every Church role with the HTML one.
+3. **Topic fetch errors abort `fetch`** (approved; retry once first) before any write; today one failure writes `"entries": []` and would silently wipe that topic from the committed file.
+4. `db/core.53.db` is currently a 0-byte file; `build` will treat it as an existing build and need `--force` (or delete it).
+
+### Review (2026-10-29)
+- Commits: `ec68663` normalize JSON (data identical to HEAD with talkID ignored), `e954e78` fetch code, `2eab025` data 2025-10 + topics refresh, then build code and data 2026-04.
+- Fetch 2025-10: the 34 existing entries are unchanged, `11eyring` (sustaining) added. A second run left `git diff` empty.
+- Topics: the API now returns `author` and `translatedTopic` on every entry. Two new topics. 16 report entries were untagged upstream. `values` is listed in the index but its page is 404, so its 11 old entries are kept.
+- Build .53 after fetch 2026-04: 4041/4050 G talks matched (99.8%, 18 via corrections). Unmatched: 9 Ensign-only talks; 3 Church URIs (2 sustainings, 1 audit report). No duplicates, no stale corrections. All 35 April 2026 talks have data_aid, role, preview and URI. Build takes about 9 minutes.
+- Tests: 526 passed, 2 failed, 2 skipped. The 2 failures (`test_metrics` John filter, `test_server` tools list 404) don't touch the fetch/build code. Replaced the snapshot topic counts (333/16162) in test_phase1 with counts derived from the JSON.
+- .55 (2026-10-29): first SCI release with Oct 2026. 4078/4087 matched; all 37 Oct 2026 talks complete; no renumbering .53→.55 (34 Oct 2020 talks re-dated, still match). Default `SCI_DB_VERSION` → 55. Match report now splits expected/unexpected (all 0 unexpected on .55); step 3 skips blank URLs (was 2219 warnings).
+- Still open: the `.52` comparison (the `db/core.52.db` provided is the raw release), and `run_pipeline.py` + `verify_weaviate_pipeline.py` (operator step).
+
+
 ## Embedding: Ollama → llama-server + nomic task prefixes (2026-10-28)
 
 Contract: `config/embedding.py` — `get_embedding_function(url=None, task="document"|"query")`,

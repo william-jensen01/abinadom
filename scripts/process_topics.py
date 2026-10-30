@@ -1,120 +1,133 @@
 """
 Topic data fetcher.
 
-Loads topic URIs from topics.json, fetches each topic's data from the
-Church of Jesus Christ API, and extracts talk entries with metadata.
+Fetches the topics index (/general-conference/topics) into topics.json, then
+fetches each topic page and extracts its talk entries into
+conference_topics.json. Topic pages are always fetched fresh.
 
 Usage:
-    pipenv run py scripts/process_topics.py
+    pipenv run python scripts/process_topics.py
 """
 
-import json
+import argparse
+import os
+import sys
+from typing import Any, Dict, List, Optional, Tuple
+
 import requests
-from typing import List, Dict, Any
+
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT_DIR)
+
+from utils.church_api import fresh_session, get_json
+from utils.json_io import read_json, write_json
+
+TOPICS_INDEX_URI = "/general-conference/topics"
+TOPICS_FILE = os.path.join(ROOT_DIR, "topics.json")
+OUTPUT_FILE = os.path.join(ROOT_DIR, "db", "one-off-migration", "conference_topics.json")
 
 
-def load_topics(filename: str = 'topics.json') -> List[Dict]:
-    """Load topics from JSON file."""
-    with open(filename, 'r') as f:
-        return json.load(f)
+def fetch_topics_index(session: requests.Session) -> List[Dict]:
+    """Fetch every topic ({type, title, uri}) from the topics index page.
 
-
-def fetch_topic_data(base_url: str, uri: str) -> Dict[str, Any]:
-    """Fetch data from API for a given topic URI."""
-    url = f"{base_url}{uri}"
-    response = requests.get(url)
-    response.raise_for_status()  # Raise an error for bad status codes
-    return response.json()
+    Reads the page's "Find by topic" filter. A URI listed twice is kept once
+    (first title wins): on 2026-10-29 the API briefly listed
+    general-conference as both "general conference" and "General Conference",
+    which would give two topics with the same slug.
+    """
+    data = get_json(session, TOPICS_INDEX_URI)
+    for section in data.get("collection", {}).get("sections", []):
+        for entry in section.get("entries", []):
+            if entry.get("type") == "search" and entry.get("items"):
+                topics = {}
+                for item in entry["items"]:
+                    if item["uri"] in topics:
+                        print(f"  ⚠️  Topic listed twice, kept first: {item['uri']} ({item['title']!r})")
+                        continue
+                    topics[item["uri"]] = item
+                return list(topics.values())
+    raise ValueError(f"No topic list found on {TOPICS_INDEX_URI}")
 
 
 def extract_entries(api_data: Dict[str, Any]) -> List[Dict]:
     """Extract all entries from collection.sections in API response."""
     entries = []
-    
-    # Navigate to collection.sections
-    if 'collection' in api_data and 'sections' in api_data['collection']:
-        sections = api_data['collection']['sections']
-        
-        # Loop through each section and collect entries
-        for section in sections:
-            if 'entries' in section:
-                entries.extend(section['entries'])
-    
+    for section in api_data.get("collection", {}).get("sections", []):
+        entries.extend(section.get("entries", []))
     return entries
 
 
-def process_topics(topics: List[Dict], base_url: str) -> List[Dict[str, Any]]:
+def process_topics(
+    topics: List[Dict], session: requests.Session, previous: Optional[Dict[str, List[Dict]]] = None
+) -> Tuple[List[Dict[str, Any]], List[Dict]]:
     """
-    Process all topics and return a list of dictionaries with topic titles and their entries.
-    
-    Args:
-        topics: List of topic dictionaries from topics.json
-        base_url: Base API URL to append the URI to
-    
+    Fetch every topic page and return its talk entries.
+
+    A topic the index lists but whose page is 404 (e.g. "values", 2026-10)
+    keeps its entries from `previous` (topic title → entries) and is returned
+    in the second list. Any other failure raises (after get_json's retry), so
+    a partial result is never written: an empty topic would delete its talks
+    from the saved file.
+
     Returns:
-        List of dictionaries with format: {'topic': title, 'entries': [list of entry objects]}
+        (results, missing_pages). results: [{'topic': title, 'entries': [... uri descending]}]
     """
+    previous = previous or {}
     results = []
-    
+    missing_pages = []
     for topic in topics:
-        topic_title = topic.get('title', 'Unknown')
-        topic_uri = topic.get('uri', '')
-        
-        print(f"Processing topic: {topic_title}")
-        
         try:
-            # Fetch API data for this topic
-            api_data = fetch_topic_data(base_url, topic_uri)
-            
-            # Extract entries from sections
-            entries = extract_entries(api_data)
-            
-            # Add to results
-            results.append({
-                'topic': topic_title,
-                'entries': entries
-            })
-            
-            print(f"  Found {len(entries)} entries")
-            
-        except Exception as e:
-            print(f"  Error processing {topic_title}: {str(e)}")
-            results.append({
-                'topic': topic_title,
-                'entries': []
-            })
-    
-    return results
+            entries = extract_entries(get_json(session, topic["uri"]))
+        except requests.exceptions.HTTPError as e:
+            if e.response is None or e.response.status_code != 404:
+                raise
+            missing_pages.append(topic)
+            entries = previous.get(topic["title"], [])
+            print(f"  {topic['title']}: page 404, kept {len(entries)} old entries")
+        else:
+            print(f"  {topic['title']}: {len(entries)} entries")
+        results.append(
+            {
+                "topic": topic["title"],
+                "entries": sorted(entries, key=lambda e: e["uri"], reverse=True),
+            }
+        )
+    return results, missing_pages
 
 
-def save_results(results: List[Dict], output_file: str = 'results.json'):
-    """Save results to a JSON file."""
-    with open(output_file, 'w') as f:
-        json.dump(results, f, indent=2)
-    print(f"\nResults saved to {output_file}")
+def load_previous(path: str = OUTPUT_FILE) -> Dict[str, List[Dict]]:
+    """Saved topic entries, by topic title."""
+    return {t["topic"]: t["entries"] for t in read_json(path)}
+
+
+def save_topics_index(topics: List[Dict], path: str = TOPICS_FILE) -> None:
+    write_json(path, topics, key="uri")
+
+
+def save_results(results: List[Dict], path: str = OUTPUT_FILE) -> None:
+    write_json(path, results, key="topic")
 
 
 def main():
-    # Configuration
-    BASE_URL = "https://www.churchofjesuschrist.org/study/api/v3/language-pages/type/dynamic?lang=eng&uri=/general-conference/topics"  # Replace with your actual base URL
-    TOPICS_FILE = "topics.json"
-    OUTPUT_FILE = "results.json"
-    
-    # Load topics
-    print("Loading topics...")
-    topics = load_topics(TOPICS_FILE)
-    print(f"Loaded {len(topics)} topics\n")
-    
-    # Process all topics
-    results = process_topics(topics, BASE_URL)
-    
-    # Save results
-    save_results(results, OUTPUT_FILE)
-    
-    # Print summary
-    print("\nSummary:")
-    for result in results:
-        print(f"  {result['topic']}: {len(result['entries'])} entries")
+    parser = argparse.ArgumentParser(description="Fetch conference topics from the Church API.")
+    parser.add_argument("--topics", default=TOPICS_FILE, help="topics index output (default: %(default)s)")
+    parser.add_argument("--output", default=OUTPUT_FILE, help="topic entries output (default: %(default)s)")
+    args = parser.parse_args()
+
+    session = fresh_session()
+
+    print("Fetching topics index...")
+    topics = fetch_topics_index(session)
+    print(f"Found {len(topics)} topics\n")
+
+    results, missing_pages = process_topics(topics, session, load_previous(args.output))
+
+    # Write only after every topic succeeded.
+    save_topics_index(topics, args.topics)
+    save_results(results, args.output)
+    print(f"\nSaved {args.topics} and {args.output}")
+    for t in missing_pages:
+        print(f"Topic page 404, old entries kept: {t['title']} ({t['uri']})")
 
 
 if __name__ == "__main__":

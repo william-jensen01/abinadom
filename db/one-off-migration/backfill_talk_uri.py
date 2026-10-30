@@ -18,7 +18,9 @@ from db import Database, CORE_DB_PATH
 
 migration_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, migration_dir)
-from create_talk_metadata_table import upsert_talk_metadata
+from create_talk_metadata_table import create_table, upsert_talk_metadata
+
+CORRECTIONS_PATH = os.path.join(migration_dir, "talk_corrections.json")
 
 
 def normalize_month_for_gc(month, year):
@@ -136,28 +138,6 @@ def extract_uri_gc(url):
         return None
 
 
-def add_uri_columns(db: Database):
-    """
-    Add URI_L, and URI_GC columns to talk table if they don't exist.
-
-    Args:
-        db: Database instance (must be writable)
-    """
-    print("\nStep 1: Adding URI columns to talk table...")
-
-    columns_to_add = [("URI_L", "TEXT"), ("URI_GC", "TEXT")]
-
-    for col_name, col_type in columns_to_add:
-        try:
-            db.execute(f"ALTER TABLE talk ADD COLUMN {col_name} {col_type}")
-            print(f"  ✓ Added column: {col_name}")
-        except Exception as e:
-            if "duplicate column name" in str(e).lower():
-                print(f"  ℹ Column {col_name} already exists")
-            else:
-                raise
-
-
 def generate_uris(db: Database):
     """
     Generate URI_L and URI_GC variants for all talks with URLs.
@@ -168,11 +148,12 @@ def generate_uris(db: Database):
     Returns:
         Dict with generation statistics
     """
-    print("\nStep 2: Generating URI variants from talk URLs...")
+    print("\nStep 1: Generating URI variants from talk URLs...")
     print("-" * 80)
 
     # Get all talks with URLs
-    talks = db.select("SELECT ID, URL FROM talk WHERE URL IS NOT NULL")
+    # Most non-conference talks have an empty URL; skip them rather than warn.
+    talks = db.select("SELECT ID, URL FROM talk WHERE TRIM(COALESCE(URL, '')) != ''")
     print(f"Found {len(talks)} talks with URLs")
 
     updated_count = 0
@@ -262,7 +243,7 @@ def apply_corrections(db: Database, corrections: List[Dict[str, Any]]):
             "gc_nullified": 0,
         }
 
-    print("\nStep 3: Applying corrections from JSON...")
+    print("\nStep 2: Applying corrections from JSON...")
     print("-" * 80)
 
     gc_updates = 0
@@ -310,45 +291,39 @@ def apply_corrections(db: Database, corrections: List[Dict[str, Any]]):
 
 def parse_args():
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Backfill URI variants into core.db")
+    parser = argparse.ArgumentParser(description="Backfill URI variants into talk_metadata")
     parser.add_argument(
+        "--core-db",
         "--db",
-        default=f"{CORE_DB_PATH}",
-        help="Path to core.db (default: uses CORE_DB_PATH from db module)",
+        dest="core_db",
+        default=CORE_DB_PATH,
+        help="Path to core DB (default: CORE_DB_PATH from db module)",
     )
-    parser.add_argument(
-        "--corrections",
-        default="./db/one-off-migration/talk_corrections.json",
-    )
+    parser.add_argument("--corrections", default=CORRECTIONS_PATH)
     return parser.parse_args()
+
+
+def run(core_db_path: str, corrections_path: str = CORRECTIONS_PATH) -> Dict[str, Any]:
+    """Generate uri_l/uri_gc for every talk with a URL, then apply corrections."""
+    db = Database(core_db_path, read_only=False)
+    create_table(db)
+    gen_stats = generate_uris(db)
+    corr_stats = apply_corrections(db, load_corrections(corrections_path))
+    return {"generate": gen_stats, "corrections": corr_stats}
 
 
 def main():
     args = parse_args()
 
-    # db_path = args.db if args.db else CORE_DB_PATH
-    db_path = args.db
-    corrections_path = args.corrections
-
     print("=" * 80)
-    print("Backfill Talk Corrections")
+    print("Backfill Talk URIs and Corrections")
     print("=" * 80)
-    print(f"Database: {db_path}")
-    print(f"Corrections: {corrections_path}")
+    print(f"Database: {args.core_db}")
+    print(f"Corrections: {args.corrections}")
     print("=" * 80)
 
-    # Create writable database instance
-    db = Database(db_path, read_only=False)
-
-    # Step 1: Add columns
-    add_uri_columns(db)
-
-    # Step 2: Generate URIs
-    gen_stats = generate_uris(db)
-
-    # Step 3: Load and apply corrections
-    corrections = load_corrections(corrections_path)
-    corr_stats = apply_corrections(db, corrections)
+    stats = run(args.core_db, args.corrections)
+    gen_stats, corr_stats = stats["generate"], stats["corrections"]
 
     # Final summary
     print("\n" + "=" * 80)
@@ -364,8 +339,6 @@ def main():
     print(f"  URI_GC updated: {corr_stats['gc_updates']}")
     print(f"  URI_L updated: {corr_stats['l_updates']}")
     print(f"  URI_GC nullified: {corr_stats['gc_nullified']}")
-    print("=" * 80)
-    print("\n✓ Backfill completed successfully!")
     print("=" * 80)
 
 

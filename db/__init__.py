@@ -9,8 +9,10 @@ log = logging.getLogger("sci-db")
 
 PARENT_DIR = os.path.dirname(os.path.dirname(__file__))  # sci/
 CURRENT_DIR = os.path.join(PARENT_DIR, "db")
-CORE_DB_PATH = os.path.join(CURRENT_DIR, "core.52.db")
-CONTENT_DB_PATH = os.path.join(CURRENT_DIR, "content.52.db")
+# SCI release number: db/core.<N>.db and db/content.<N>.db. Override with SCI_DB_VERSION.
+SCI_DB_VERSION = os.environ.get("SCI_DB_VERSION", "55")
+CORE_DB_PATH = os.path.join(CURRENT_DIR, f"core.{SCI_DB_VERSION}.db")
+CONTENT_DB_PATH = os.path.join(CURRENT_DIR, f"content.{SCI_DB_VERSION}.db")
 
 DEFAULT_TIMEOUT = 5  # seconds
 
@@ -191,6 +193,6 @@ class Database:
 
 # Global shared instances
 core_db = Database(CORE_DB_PATH)
-core_db.set_expected_schema(EXPECTED_CORE_TABLES, "core.52.db")
+core_db.set_expected_schema(EXPECTED_CORE_TABLES, os.path.basename(CORE_DB_PATH))
 content_db = Database(CONTENT_DB_PATH)
-content_db.set_expected_schema(EXPECTED_CONTENT_TABLES, "content.52.db")
+content_db.set_expected_schema(EXPECTED_CONTENT_TABLES, os.path.basename(CONTENT_DB_PATH))
