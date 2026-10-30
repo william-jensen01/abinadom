@@ -15,6 +15,7 @@ class TestExpectedChurchItems:
             "The Sustaining of Church Officers": "sustaining",
             "The Solemn Assembly": "sustaining",
             "Statistical Report, 2016": "statistical report",
+            "The Annual Report of the Church": "statistical report",
             "Church Auditing Department Report, 2025": "audit/finance report",
             "Church Audit Committee Report": "audit/finance report",
             "Church Finance Committee Report": "audit/finance report",

@@ -53,6 +53,7 @@ EXPECTED_CHURCH_TITLES = [
     ("sustaining", "sustaining of"),  # incl. "The Sustaining of Church Officers"
     ("sustaining", "solemn assembly"),
     ("statistical report", "statistical report"),
+    ("statistical report", "annual report of the church"),  # 1972-04: the 1971 statistical report
     ("audit/finance report", "audit"),  # Audit Report, Audit Committee, Auditing Department
     ("audit/finance report", "finance committee report"),
     ("welfare services", "welfare services"),
