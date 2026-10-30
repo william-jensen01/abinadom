@@ -1,4 +1,8 @@
-# LDS Scripture Citation Index — MCP Server
+# Abinadom
+
+> And behold, the record of this people is engraven upon plates which is had by the kings, according to the generations; and I know of no revelation save that which has been written, neither prophecy; wherefore, that which is sufficient is written. And I make an end.
+>
+> — Omni 1:11
 
 An MCP (Model Context Protocol) server that exposes the BYU Scripture Citation Index as a hybrid semantic + keyword search tool. Built on Weaviate vector embeddings (Ollama `nomic-embed-text`) of 5,838 General Conference talks (1942–present), covering talks, paragraphs, citations, and footnotes. Connect from Claude.ai, Claude Desktop, or any MCP-compatible client.
 
