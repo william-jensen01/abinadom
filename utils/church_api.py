@@ -6,9 +6,14 @@ global cache: talk pages may come from the cache, but topic pages and the
 named conference's contents page must always be fresh (FETCH_BUILD_SPEC.md,
 "Caching rule").
 
-Politeness: requests are sequential, at most one network request every
-MIN_INTERVAL seconds (cache hits aren't throttled), retries wait RETRY_DELAY
-seconds, and sessions send a User-Agent naming the project.
+Politeness: requests are sequential, network requests start at least
+MIN_INTERVAL seconds apart (cache hits aren't throttled), retries wait
+RETRY_DELAY seconds, and sessions send a User-Agent naming the project.
+
+Cache keys: the API answers with "Vary: Accept-Encoding", and requests_cache
+honours it, so sessions pin Accept-Encoding. Otherwise the cache only works in
+environments whose urllib3 offers the same encodings (a March cache built with
+"gzip, deflate, zstd" was entirely missed by "gzip, deflate").
 """
 
 import os
@@ -26,6 +31,7 @@ CACHE_PATH = os.path.join(ROOT_DIR, "http_cache")  # requests_cache adds .sqlite
 MIN_INTERVAL = 0.5  # seconds between network requests (≤ 2/s)
 RETRY_DELAY = 5.0  # seconds before retrying a failed request
 USER_AGENT = "lds-sci-mcp-fetch/1.0 (conference metadata sync; sequential, max 2 req/s)"
+HEADERS = {"User-Agent": USER_AGENT, "Accept-Encoding": "gzip, deflate"}
 
 _throttle_lock = threading.Lock()
 _last_network_request = 0.0
@@ -36,27 +42,28 @@ def cached_session(cache_path: str = CACHE_PATH) -> requests.Session:
     session = requests_cache.CachedSession(
         cache_path, backend="sqlite", expire_after=requests_cache.NEVER_EXPIRE
     )
-    session.headers["User-Agent"] = USER_AGENT
+    session.headers.update(HEADERS)
     return session
 
 
 def fresh_session() -> requests.Session:
     """Plain, uncached session (topics, the named conference's contents page)."""
     session = requests.Session()
-    session.headers["User-Agent"] = USER_AGENT
+    session.headers.update(HEADERS)
     return session
 
 
 def _get(session: requests.Session, url: str) -> requests.Response:
-    """session.get, spaced so network requests are at least MIN_INTERVAL apart."""
+    """session.get, so network requests start at least MIN_INTERVAL apart."""
     global _last_network_request
     with _throttle_lock:
         wait = MIN_INTERVAL - (time.monotonic() - _last_network_request)
         if wait > 0:
             time.sleep(wait)
+        started = time.monotonic()
         response = session.get(url, timeout=REQUEST_TIMEOUT)
         if not getattr(response, "from_cache", False):
-            _last_network_request = time.monotonic()
+            _last_network_request = started
         return response
 
 

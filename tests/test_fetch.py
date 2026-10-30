@@ -19,6 +19,7 @@ from utils.json_io import merge_by_key, read_json, write_json
 def no_throttle(monkeypatch):
     monkeypatch.setattr(church_api, "MIN_INTERVAL", 0)
     monkeypatch.setattr(church_api, "RETRY_DELAY", 0)
+    monkeypatch.setattr(church_api, "_last_network_request", 0.0)
 
 
 def _response(payload=None, status=200):
@@ -75,9 +76,25 @@ class TestPoliteness:
     def test_user_agent_is_a_valid_header(self):
         church_api.USER_AGENT.encode("latin-1")  # http.client rejects anything else
 
-    def test_sessions_send_user_agent(self, tmp_path):
-        assert church_api.fresh_session().headers["User-Agent"] == church_api.USER_AGENT
-        assert church_api.cached_session(str(tmp_path / "c")).headers["User-Agent"] == church_api.USER_AGENT
+    def test_sessions_send_fixed_headers(self, tmp_path):
+        for session in (church_api.fresh_session(), church_api.cached_session(str(tmp_path / "c"))):
+            assert session.headers["User-Agent"] == church_api.USER_AGENT
+            # pinned: the API varies on Accept-Encoding, so this is part of the cache key
+            assert session.headers["Accept-Encoding"] == "gzip, deflate"
+
+    def test_slow_requests_are_not_delayed_further(self, monkeypatch):
+        monkeypatch.setattr(church_api, "MIN_INTERVAL", 0.2)
+        session = MagicMock()
+
+        def slow_get(url, timeout):
+            time.sleep(0.2)
+            return MagicMock(from_cache=False, json=lambda: {})
+
+        session.get.side_effect = slow_get
+        start = time.monotonic()
+        church_api.get_json(session, "/a")
+        church_api.get_json(session, "/b")
+        assert time.monotonic() - start < 0.5  # ~0.4s: two 0.2s requests, no extra 0.2s wait (was ~0.6s)
 
 
 class TestJsonIo:
