@@ -2,6 +2,7 @@
 
 import datetime
 import json
+import time
 from unittest.mock import MagicMock
 
 import pytest
@@ -10,7 +11,14 @@ import requests
 from api.fetch_talk_previews import all_conferences, fetch_previews, fetch_talk_list, parse_conference
 from process_topic_talks.extract_talk_metadata import fetch_all_metadata
 from scripts.process_topics import fetch_topics_index, process_topics
+import utils.church_api as church_api
 from utils.json_io import merge_by_key, read_json, write_json
+
+
+@pytest.fixture(autouse=True)
+def no_throttle(monkeypatch):
+    monkeypatch.setattr(church_api, "MIN_INTERVAL", 0)
+    monkeypatch.setattr(church_api, "RETRY_DELAY", 0)
 
 
 def _response(payload=None, status=200):
@@ -54,6 +62,21 @@ def _talk_page(title="T", aid="1", role="Apostle", preview="P"):
 # ---------------------------------------------------------------------------
 # utils/json_io
 # ---------------------------------------------------------------------------
+class TestPoliteness:
+    def test_network_requests_are_spaced(self, monkeypatch):
+        monkeypatch.setattr(church_api, "MIN_INTERVAL", 0.2)
+        session = _session({"/a": {"ok": 1}, "/b": {"ok": 2}})
+        session.get.side_effect = lambda url, timeout: MagicMock(from_cache=False, json=lambda: {})
+        start = time.monotonic()
+        church_api.get_json(session, "/a")
+        church_api.get_json(session, "/b")
+        assert time.monotonic() - start >= 0.2
+
+    def test_sessions_send_user_agent(self, tmp_path):
+        assert church_api.fresh_session().headers["User-Agent"] == church_api.USER_AGENT
+        assert church_api.cached_session(str(tmp_path / "c")).headers["User-Agent"] == church_api.USER_AGENT
+
+
 class TestJsonIo:
     def test_write_json_is_sorted_utf8_with_trailing_newline(self, tmp_path):
         path = tmp_path / "out.json"
