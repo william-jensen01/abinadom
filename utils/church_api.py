@@ -3,8 +3,8 @@ Church API access shared by the fetch scripts.
 
 Sessions are created by the caller and passed in. Nothing here installs a
 global cache: talk pages may come from the cache, but topic pages and the
-named conference's contents page must always be fresh (FETCH_BUILD_SPEC.md,
-"Caching rule").
+named conference's contents page must always be fresh, since they are what
+change.
 
 Politeness: requests are sequential, network requests start at least
 MIN_INTERVAL seconds apart (cache hits aren't throttled), retries wait

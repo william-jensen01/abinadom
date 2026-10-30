@@ -2,8 +2,8 @@
 Stable JSON writing for committed data files.
 
 Every file `fetch` writes goes through write_json(), so running it twice with
-nothing changed upstream leaves `git diff` empty (see FETCH_BUILD_SPEC.md,
-"Stable output rule").
+nothing changed upstream leaves `git diff` empty, and a real upstream change
+shows up as only the lines that changed.
 """
 
 import json

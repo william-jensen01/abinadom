@@ -5,8 +5,8 @@ build: raw SCI release + committed JSON → finished database.
 Runs offline. Copies db/sci/core.N.db and db/sci/content.N.db, enriches the
 copy by calling the backfill scripts' run() functions in order, and only then
 moves it to db/core.N.db and db/content.N.db. The raw release is never
-modified, and a failed build leaves no output. See
-docs/update/FETCH_BUILD_SPEC.md.
+modified, and a failed build leaves no output. Overview:
+docs/update/HOW_UPDATES_WORK.md.
 
 Usage:
     pipenv run python scripts/build.py --version 53 [--force]

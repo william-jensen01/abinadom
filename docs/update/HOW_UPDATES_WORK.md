@@ -1,0 +1,113 @@
+# How Updates Work
+
+A plain-language guide to keeping the database current. The details live in the code: `scripts/fetch.py`, `scripts/build.py` and the backfill scripts in `db/one-off-migration/`.
+
+## The short version
+
+The database is built from two sources:
+
+- **The Scripture Citation Index (SCI)** from BYU. It has every talk's text, the scripture citations, speakers and sessions. BYU releases a new version a while after each conference, because linking every citation takes time.
+- **The Church's website API.** It has the Church's own data for each conference talk: the official title, the speaker's calling, a short preview, and the topics it's tagged with. It's available within days of a conference.
+
+Two commands keep them in step:
+
+| Command | What it does | Talks to the internet? |
+|---|---|---|
+| **`fetch`** | Downloads the Church's data and saves it as JSON files in the repo | Yes, and it's the only thing that does |
+| **`build`** | Takes a raw SCI release plus those JSON files and produces the finished database | No, it runs entirely offline |
+
+## What to run when
+
+| Situation | Run |
+|---|---|
+| **A new conference happened** | `fetch --conference YYYY-MM`, then commit the JSON |
+| **BYU released a new SCI version** | Put the raw files in `db/sci/`, run `build --version N`, then reload Weaviate |
+| **You changed a correction or the JSON** | `build --version N --force`, then reload Weaviate |
+| **Starting from nothing** | `fetch --all`, then `build --version N` |
+
+All commands run as `pipenv run python scripts/<name>.py ...`.
+
+A typical cycle looks like this:
+
+1. **Conference weekend passes.** Run `fetch --conference 2026-10`. Look over the summary and the JSON diff, then commit. The Church data for the new talks is now saved, even though SCI doesn't have those talks yet.
+2. **A few weeks later, re-run the same fetch.** The Church keeps adjusting topic tags for a while after a conference, and this picks up the settled tags.
+3. **BYU releases the next SCI version** (e.g. `.55`). Copy `core.55.db` and `content.55.db` into `db/sci/` and run `build --version 55`. Check the match report (see below). Point the app at it with `SCI_DB_VERSION`.
+4. **Reload Weaviate** with `run_pipeline.py --force`, then run `verify_weaviate_pipeline.py`.
+
+## How it fits together
+
+```
+ Church API ──fetch──▶ JSON files (committed) ─┐
+                                               ├──build──▶ db/core.N.db
+ BYU SCI release ──▶ db/sci/core.N.db (raw) ───┘           db/content.N.db
+                                                               │
+                                               run_pipeline ──▶ Weaviate
+```
+
+`build` does these steps, in order:
+1. Copies the raw release, so the original in `db/sci/` is never changed.
+2. Extracts clean talk text.
+3. Works out each talk's Church web address (its URI) from the SCI data, applying any hand corrections.
+4. Prints a match report.
+5. Fills in the Church data: titles, callings, previews and topics.
+6. Fills gaps from the SCI's own HTML: missing callings and kickers.
+7. Applies title corrections, then checks the result.
+
+## Why it works this way
+
+**Only `fetch` touches the network.** Building is repeatable and safe. You can rebuild as often as you like, with no internet, without bothering the Church's servers, and get the same result every time. If the Church's site is down or changes, existing builds aren't affected.
+
+**The Church data is saved as JSON in the repo.** That gives three things a database file can't:
+- **History.** Every change the Church makes, such as a corrected title, a re-tagged topic, or a new talk, shows up as a readable diff in git.
+- **Review before it lands.** You see exactly what changed before it reaches the database.
+- **Reproducibility.** Anyone can rebuild the same database from the same commit.
+
+`fetch` writes the files in a fixed order and format, so running it twice with nothing new upstream changes nothing. When something does show up in the diff, it's a real change.
+
+**Talks are matched by their Church web address, not SCI's talk number.** SCI talk numbers belong to SCI and can change between releases. The Church's address for a talk (e.g. `/general-conference/2026/10/12gong`) doesn't change. Matching on it means:
+- `fetch` doesn't need the SCI database at all,
+- Church data for a new conference can be saved before SCI has that conference,
+- an SCI release that renumbers talks doesn't break anything.
+
+**The raw SCI release is kept untouched in `db/sci/`.** `build` works on a copy and only replaces the finished database at the very end. A failed build leaves nothing half-done, and you can always start over from the original.
+
+**SCI comes first; the Church data adds to it.** SCI is the backbone because it has what makes this project useful: the scripture citations. Church data adds official titles, callings, previews and topics. Where the Church has nothing, SCI's own data is kept. That covers pre-1971 talks and items the Church published only in the Ensign.
+
+**Hand corrections live in one small file.** `db/one-off-migration/talk_corrections.json` lists the few talks whose SCI web address doesn't line up with the Church's: punctuation differences, and items published under `/ensign/` instead of `/general-conference/`. It also holds a few title fixes. `build` applies them last, so they always win.
+
+**This replaces `UPDATE.py` and `gc.db`.** The old process copied Church data into a hand-maintained intermediate database (`gc.db`) and patched the main database from it. When we compared, the Church API gave exactly the same data as `gc.db`, so the middle step only added a file to keep in sync. `fetch` and `build` do the same job with fewer moving parts and a visible history.
+
+## Reading the match report
+
+Every build prints a match report and saves it to `db/build_report.N.json`. It answers one question: did every SCI conference talk find its Church data, and is anything left over?
+
+Some items never match, and that's expected:
+- **SCI talks with no Church data.** These are items SCI files under a conference but the Church published only in the Ensign, like the 1992 "A Worldwide Sisterhood" sessions.
+- **Church items with no SCI talk.** These are procedural items SCI doesn't include: sustainings, statistical and audit reports, welfare-services addresses, videos, Music and the Spoken Word, and a few one-offs like the Family Proclamation.
+
+The report counts expected items by kind, and lists only the **unexpected** ones in full. On a healthy build, every unexpected list is empty. If something shows up there, either it's a new kind of item that needs adding to the expected list at the top of `scripts/build.py`, or it's a real talk that failed to match and needs a correction.
+
+## Being polite to the Church's servers
+
+`fetch` sends one request at a time, at most two per second, and names itself in its User-Agent. Talk pages are cached locally (`http_cache.sqlite`), so a talk is downloaded once and then reused. Topic pages and conference contents are always downloaded fresh, because those are what change.
+
+A run for one conference takes a few minutes, mostly for re-reading the ~335 topic pages. `fetch --all` takes longer the first time on a machine without the cache.
+
+## Things to watch for
+
+- **Fetch failures in the summary.** An occasional timeout or server error is normal. The old entry is kept and the summary names the talk. Re-run the fetch.
+- **Topics shift after a conference.** Expect the topic diffs for a new conference to keep changing for a few weeks.
+- **The "values" topic** is listed by the Church but its page currently returns an error. `fetch` keeps its old entries and notes it in the summary.
+- **Weaviate needs a reload after a build.** A plain `run_pipeline.py` only adds talks it hasn't seen. Use `--force` to refresh everything after a new build.
+
+## Where things live
+
+| What | Where |
+|---|---|
+| Raw SCI releases (never edited) | `db/sci/core.N.db`, `db/sci/content.N.db` |
+| Finished databases (what the app reads) | `db/core.N.db`, `db/content.N.db` |
+| Build report | `db/build_report.N.json` |
+| Church data | `db/one-off-migration/talk_metadata.json`, `talk_previews.json`, `conference_topics.json`, and `topics.json` |
+| Hand corrections | `db/one-off-migration/talk_corrections.json` |
+| Which version the app uses | `SCI_DB_VERSION` in `.env` (default in `db/__init__.py`) |
+| The commands | `scripts/fetch.py`, `scripts/build.py` |

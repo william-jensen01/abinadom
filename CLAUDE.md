@@ -91,8 +91,7 @@
 - `docs/pipeline/phase-4-footnote/IMPLEMENTATION_SUMMARY_INTERVIEW.md`
 - `docs/pipeline/phase-4-footnote/PLAN_PHASE_4.md`
 - `docs/pipeline/phase-5-validation/PLAN_PHASE_5.md`
-- `docs/update/FETCH_BUILD_SPEC.md` — Spec: `fetch` (Church API → committed JSON) and `build` (raw SCI release + JSON → finished DB); replaces UPDATE.py/gc.db
-- `docs/update/Update_GC_PLAN.md` — Superseded by FETCH_BUILD_SPEC.md (original UPDATE.py plan)
+- `docs/update/HOW_UPDATES_WORK.md` — Plain-language guide: how fetch/build updates work, what to run when, and why
 
 ### extractors/
 - `extractors/html_parsing_utils.py` — Shared HTML parsing utilities

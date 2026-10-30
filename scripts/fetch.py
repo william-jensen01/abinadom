@@ -3,7 +3,7 @@
 fetch: Church API → committed JSON files.
 
 The only step that talks to the network. Calls the existing scripts'
-functions in order (see docs/update/FETCH_BUILD_SPEC.md):
+functions in order (overview: docs/update/HOW_UPDATES_WORK.md):
 
   1. Conference contents page → talk URIs         (fresh)
   2. Each talk page → talk_metadata.json          (cached)
