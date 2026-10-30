@@ -92,6 +92,7 @@
 - `docs/pipeline/phase-4-footnote/PLAN_PHASE_4.md`
 - `docs/pipeline/phase-5-validation/PLAN_PHASE_5.md`
 - `docs/update/HOW_UPDATES_WORK.md` — Plain-language guide: how fetch/build updates work, what to run when, and why
+- `docs/update/SCI_SITE_ROUTES.md` — scriptures.byu.edu routes: `sci.N.zip` release probing, Android `/sci/` page, website API (`talks_ajax`, `sync_sci`/`sync_scrip`) and what each is good for
 
 ### extractors/
 - `extractors/html_parsing_utils.py` — Shared HTML parsing utilities
