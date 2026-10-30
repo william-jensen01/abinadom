@@ -20,3 +20,6 @@ infra/.env
 tasks/lessons.md
 db/build_report.*.json
 *.building
+
+# Unused 165 MB debug dump (purged from history; over GitHub limit)
+talkbody_decoded.txt
