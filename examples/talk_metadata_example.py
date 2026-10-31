@@ -1,7 +1,7 @@
 """
-Phase 1 Example: Extract Talk Metadata
+Talk Metadata Example: Extract Talk Metadata
 
-This example demonstrates how to use Phase 1 extraction to prepare
+This example demonstrates how to use talk metadata extraction to prepare
 talk metadata for ChromaDB insertion.
 """
 
@@ -41,7 +41,7 @@ def example_extraction_stats():
     print("Example 2: Extraction Statistics")
     print("=" * 60)
 
-    from extractors.phase1_talk_metadata import extract_all_talk_metadata
+    from extractors.talk_metadata import extract_all_talk_metadata
 
     # Extract metadata (without ChromaDB preparation)
     metadata_list = extract_all_talk_metadata(core_db, limit=100)
@@ -64,7 +64,7 @@ def example_single_talk():
     print("Example 3: Single Talk Extraction")
     print("=" * 60)
 
-    from extractors.phase1_talk_metadata import fetch_talk_by_id, extract_talk_metadata
+    from extractors.talk_metadata import fetch_talk_by_id, extract_talk_metadata
 
     talk_id = 8820  # Example talk ID
 
@@ -124,7 +124,7 @@ def example_chromadb_integration():
 def main():
     """Run all examples."""
     print("\n" + "=" * 60)
-    print("Phase 1: Talk Metadata Extraction Examples")
+    print("Talk Metadata Extraction Examples")
     print("=" * 60)
 
     try:
@@ -136,7 +136,7 @@ def main():
         print("\n" + "=" * 60)
         print("[SUCCESS] All examples completed successfully!")
         print("=" * 60)
-        print("\nFor more information, see PHASE1_README.md")
+        print("\nFor more information, see docs/pipeline/metadata/PHASE1_README.md")
 
     except Exception as e:
         print(f"\n[ERROR] Error running examples: {e}")

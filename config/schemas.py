@@ -285,7 +285,7 @@ def get_default_value(schema: Dict[str, Dict[str, Any]], field_name: str) -> Any
 
 
 # =============================================================================
-# PHASE 2: Paragraph Extraction Configuration
+# Paragraph Extraction Configuration
 # =============================================================================
 
 PARAGRAPH_CONFIG = {
@@ -394,7 +394,7 @@ PARAGRAPH_DATA_SCHEMA: Dict[str, Dict[str, Any]] = {
 
 
 # =============================================================================
-# PHASE 3: Citation Extraction Configuration
+# Citation Extraction Configuration
 # =============================================================================
 
 CITATION_CONFIG = {
@@ -569,7 +569,7 @@ CITATION_DATA_SCHEMA: Dict[str, Dict[str, Any]] = {
 
 
 # =============================================================================
-# PHASE 4: Footnote Extraction Configuration
+# Footnote Extraction Configuration
 # =============================================================================
 
 FOOTNOTE_CONFIG = {

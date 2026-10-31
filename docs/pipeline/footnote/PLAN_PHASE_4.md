@@ -45,9 +45,9 @@ Phase 4 extracts footnotes from General Conference talk HTML as "see also" marke
 | File | Purpose |
 |------|---------|
 | `models/footnote_data.py` | FootnoteData + TalkFootnotes dataclasses |
-| `extractors/phase4_footnote_extraction.py` | 3-layer extractor |
-| `tests/test_phase4.py` | Unit + integration tests |
-| `examples/phase4_example.py` | Runnable example against real DB |
+| `extractors/footnotes.py` | 3-layer extractor |
+| `tests/test_footnotes.py` | Unit + integration tests |
+| `examples/footnotes_example.py` | Runnable example against real DB |
 
 ## Files to Modify
 
@@ -107,7 +107,7 @@ Metadata:
 
 Mirror TalkCitations: talk_id, footnotes list, total_footnotes, extraction_success, extraction_errors. Validate count match in `__post_init__`.
 
-## Step 3: Extractor (`extractors/phase4_footnote_extraction.py`)
+## Step 3: Extractor (`extractors/footnotes.py`)
 
 3-layer architecture. No Layer 1 (no DB access needed — footnotes are entirely in HTML).
 
@@ -206,7 +206,7 @@ Uses `apply_context_window` from shared utilities — no duplicated logic.
 | `apply_context_window` | `extractors.html_parsing_utils` | Full context window extraction from filtered text |
 | `ValidationResult` | `models.paragraph_data` | Import for validation return type |
 
-## Step 4: Tests (`tests/test_phase4.py`)
+## Step 4: Tests (`tests/test_footnotes.py`)
 
 ### Test Classes
 
@@ -255,8 +255,8 @@ Uses `apply_context_window` from shared utilities — no duplicated logic.
 
 ## Verification
 
-1. Run `pipenv run py -m pytest tests/test_phase4.py -v` — all tests pass
-2. Run `pipenv run py examples/phase4_example.py` against real DB to inspect output on known talks
+1. Run `pipenv run py -m pytest tests/test_footnotes.py -v` — all tests pass
+2. Run `pipenv run py examples/footnotes_example.py` against real DB to inspect output on known talks
 3. Verify paragraph flags (has_footnote, footnote_count) are set correctly
 4. Spot-check context windows on talks with known footnotes (e.g., the Ruskin "Little Brass Nails" talk)
 5. Verify asterisk-marker talks produce valid output with warnings

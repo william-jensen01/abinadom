@@ -1,7 +1,7 @@
 """
-ValidationReport dataclass for Phase 5 validation gate.
+ValidationReport dataclass for the validation gate.
 
-Read-only: produced by Phase 5, consumed by Phase 6.
+Read-only: produced by validation, consumed by loading.
 """
 
 from dataclasses import dataclass, field
@@ -13,7 +13,7 @@ class ValidationReport:
     """Result of cross-collection validation for a single talk."""
 
     talk_id: int
-    is_valid: bool          # go / no-go for Phase 6
+    is_valid: bool          # go / no-go for loading
     errors: List[str]       # integrity violations — any error sets is_valid=False
     warnings: List[str]     # suspicious but not blocking
     stats: Dict[str, Any]   # counts for summary aggregation

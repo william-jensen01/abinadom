@@ -1,5 +1,5 @@
 """
-Citation data structures for Phase 3 extraction.
+Citation data structures for citation extraction.
 
 Provides type-safe representation of scripture citation data with validation.
 """

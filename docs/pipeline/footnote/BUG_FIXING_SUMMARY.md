@@ -4,7 +4,7 @@
 
 ### Bug 1: Whitespace Destroyed Between Inline Elements
 
-**File:** `extractors/phase4_footnote_extraction.py` — `_extract_footnote_text()`
+**File:** `extractors/footnotes.py` — `_extract_footnote_text()`
 
 **Symptom:**
 
@@ -34,7 +34,7 @@ return fn_span.get_text().strip()
 
 ### Bug 2: Extra Leading Spaces on Citations from `sx()` Anchors
 
-**File:** `extractors/phase4_footnote_extraction.py` — new `_render_footnote_span()`
+**File:** `extractors/footnotes.py` — new `_render_footnote_span()`
 
 **Symptom:**
 
@@ -68,7 +68,7 @@ Then normalize any remaining `&nbsp;` (`\u00a0`) to regular spaces and collapse 
 
 ### Bug 3: Missing Punctuation from CSS `ccontainer` Pseudo-Elements
 
-**File:** `extractors/phase4_footnote_extraction.py` — `_ccontainer_punctuation()`, `_parse_punct_class()`
+**File:** `extractors/footnotes.py` — `_ccontainer_punctuation()`, `_parse_punct_class()`
 
 **Symptom:**
 

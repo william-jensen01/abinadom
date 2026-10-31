@@ -1,5 +1,5 @@
 """
-Unit and integration tests for Phase 4: Footnote Extraction.
+Unit and integration tests for Footnote Extraction.
 """
 
 import pytest
@@ -10,7 +10,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from models.footnote_data import FootnoteData, TalkFootnotes
 from models.paragraph_data import ParagraphData
-from extractors.phase4_footnote_extraction import (
+from extractors.footnotes import (
     extract_footnotes_from_paragraph,
     calculate_footnote_position,
     extract_footnote_context_window,
@@ -625,7 +625,7 @@ class TestFootnoteTextRendering:
             "</span>]</span></sup>"
         )
         from bs4 import BeautifulSoup
-        from extractors.phase4_footnote_extraction import _extract_footnote_text
+        from extractors.footnotes import _extract_footnote_text
 
         soup = BeautifulSoup(html, "html.parser")
         marker = soup.find("sup", class_="noteMarker")
@@ -653,7 +653,7 @@ class TestFootnoteTextRendering:
             ", and as they are to come\u201d).</span>]</span></sup>"
         )
         from bs4 import BeautifulSoup
-        from extractors.phase4_footnote_extraction import _extract_footnote_text
+        from extractors.footnotes import _extract_footnote_text
 
         soup = BeautifulSoup(html, "html.parser")
         marker = soup.find("sup", class_="noteMarker")

@@ -1,5 +1,5 @@
 """
-Phase 2: Paragraph Segmentation
+Paragraph Segmentation
 
 Extracts paragraphs from talk HTML and prepares structured data for ChromaDB insertion.
 
@@ -756,8 +756,8 @@ def extract_semantic_paragraphs(
 
         elif element.name == "div" and "annotation" in element.get("class", []):
             # Annotation: publisher/editorial note attached to the talk.
-            # Emitted as a paragraph so citations inside flow through Phase 3.
-            # Phase 6 folds annotation paragraphs into talk-level metadata and
+            # Emitted as a paragraph so citations inside flow through citation extraction.
+            # Loading folds annotation paragraphs into talk-level metadata and
             # excludes them from conference_talk_paragraphs embeddings.
             text = _element_clean_text(element)
             if text and len(text) >= config.get("min_paragraph_length", 10):
@@ -1480,7 +1480,7 @@ def extract_paragraphs_for_chromadb(
     """
     Complete extraction pipeline from database to ChromaDB format.
 
-    This is the main entry point for Phase 2 extraction. It:
+    This is the main entry point for paragraph extraction. It:
     1. Fetches HTML from database
     2. Extracts paragraphs for each talk
     3. Validates (optional)
@@ -1497,7 +1497,7 @@ def extract_paragraphs_for_chromadb(
         ValueError: If validation fails in strict mode
     """
     logger.info(
-        f"Starting Phase 2 extraction pipeline "
+        f"Starting paragraph extraction pipeline "
         f"(limit={limit or 'none'}, validate={validate})"
     )
 
@@ -1530,7 +1530,7 @@ def extract_paragraphs_for_chromadb(
 
     elapsed = (datetime.now() - start_time).total_seconds()
     logger.info(
-        f"Phase 2 extraction complete: {len(documents)} paragraphs from "
+        f"Paragraph extraction complete: {len(documents)} paragraphs from "
         f"{len(all_talk_paragraphs)} talks in {elapsed:.2f}s"
     )
 
@@ -1547,7 +1547,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Phase 2: Extract paragraphs from talk HTML"
+        description="Extract paragraphs from talk HTML"
     )
     parser.add_argument(
         "--talk-id", type=int, default=None, help="Extract single talk by ID"

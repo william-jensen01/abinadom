@@ -12,13 +12,13 @@ Phase 2 extracts and segments General Conference talk HTML into structured parag
 
 ```bash
 # Extract paragraphs from sample talks
-pipenv run python examples/phase2_example.py
+pipenv run python examples/paragraphs_example.py
 ```
 
 ### Extract Paragraphs from Single Talk
 
 ```python
-from extractors.phase2_paragraph_extraction import process_talk_paragraphs
+from extractors.paragraphs import process_talk_paragraphs
 from db import content_db
 from config.schemas import PARAGRAPH_CONFIG
 
@@ -36,7 +36,7 @@ print(f"Total words: {talk_paras.total_words}")
 ### Extract for ChromaDB
 
 ```python
-from extractors.phase2_paragraph_extraction import extract_paragraphs_for_chromadb
+from extractors.paragraphs import extract_paragraphs_for_chromadb
 
 # Extract paragraphs from all talks and prepare for ChromaDB
 documents, metadatas, ids = extract_paragraphs_for_chromadb(limit=None)
@@ -261,30 +261,30 @@ Converts to ChromaDB insertion format:
 
 ```bash
 # Extract single talk
-pipenv run python extractors/phase2_paragraph_extraction.py --talk-id 1
+pipenv run python extractors/paragraphs.py --talk-id 1
 
 # Extract limited number of talks
-pipenv run python extractors/phase2_paragraph_extraction.py --limit 10
+pipenv run python extractors/paragraphs.py --limit 10
 
 # Skip validation
-pipenv run python extractors/phase2_paragraph_extraction.py --no-validate
+pipenv run python extractors/paragraphs.py --no-validate
 
 # Show statistics only
-pipenv run python extractors/phase2_paragraph_extraction.py --stats
+pipenv run python extractors/paragraphs.py --stats
 ```
 
 ## Testing
 
 ### Unit Tests
 
-Located in `tests/test_phase2.py` (requires pytest):
+Located in `tests/test_paragraphs.py` (requires pytest):
 
 ```bash
 # Run all tests
-pipenv run pytest tests/test_phase2.py -v
+pipenv run pytest tests/test_paragraphs.py -v
 
 # Run specific test class
-pipenv run pytest tests/test_phase2.py::TestHTMLParsing -v
+pipenv run pytest tests/test_paragraphs.py::TestHTMLParsing -v
 ```
 
 Test coverage:
@@ -298,7 +298,7 @@ Test coverage:
 ### Example Script
 
 ```bash
-pipenv run python examples/phase2_example.py
+pipenv run python examples/paragraphs_example.py
 ```
 
 Demonstrates:
@@ -334,8 +334,8 @@ Last paragraph:
 Phase 2 uses `talk_id` from Phase 1 to link paragraphs to talks:
 
 ```python
-from extractors.phase1_talk_metadata import extract_all_talk_metadata
-from extractors.phase2_paragraph_extraction import process_talk_paragraphs
+from extractors.talk_metadata import extract_all_talk_metadata
+from extractors.paragraphs import process_talk_paragraphs
 
 # Get talk metadata from Phase 1
 talks = extract_all_talk_metadata(core_db)
@@ -408,13 +408,13 @@ config/
   └── schemas.py               # Updated with PARAGRAPH_CONFIG
 
 extractors/
-  └── phase2_paragraph_extraction.py   # Main extraction module
+  └── paragraphs.py   # Main extraction module
 
 tests/
-  └── test_phase2.py           # Unit tests
+  └── test_paragraphs.py           # Unit tests
 
 examples/
-  └── phase2_example.py        # Usage examples
+  └── paragraphs_example.py        # Usage examples
 
 PHASE2_README.md               # This file
 ```

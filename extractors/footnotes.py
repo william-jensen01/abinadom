@@ -1,5 +1,5 @@
 """
-Phase 4: Footnote extraction from General Conference talk HTML.
+Footnote extraction from General Conference talk HTML.
 
 Extracts footnotes as "see also" markers. No type-specific parsing —
 the full footnote text is the data to be embedded.
@@ -291,7 +291,7 @@ def process_talk_footnotes(
     contexts: Optional[Dict[int, ParagraphHTMLContext]] = None,
 ) -> Tuple[TalkFootnotes, List[str]]:
     """
-    Full Phase 4 pipeline for a single talk.
+    Full footnote extraction pipeline for a single talk.
 
     For each paragraph:
       1. Detect footnotes from HTML
@@ -317,7 +317,7 @@ def process_talk_footnotes(
         if not raw_footnotes:
             continue
 
-        # Update paragraph flags (same pattern as Phase 3)
+        # Update paragraph flags (same pattern as citation extraction)
         paragraph.has_footnote = True
         paragraph.footnote_count = len(raw_footnotes)
 

@@ -1,5 +1,5 @@
 """
-TalkMetadata dataclass for Phase 1 extraction.
+TalkMetadata dataclass for talk metadata extraction.
 
 Provides type-safe representation of talk metadata with validation.
 """

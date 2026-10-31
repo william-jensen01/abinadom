@@ -1,5 +1,5 @@
 """
-Footnote data structures for Phase 4 extraction.
+Footnote data structures for footnote extraction.
 
 Provides type-safe representation of footnote data with validation.
 """

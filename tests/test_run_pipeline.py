@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Unit tests for Phase 6 orchestrator: scripts/run_pipeline.py
+Unit tests for the pipeline orchestrator: scripts/run_pipeline.py
 
 All tests mock external dependencies (DB, Weaviate, extractors) using
 unittest.mock.patch so no real database or Weaviate is needed.

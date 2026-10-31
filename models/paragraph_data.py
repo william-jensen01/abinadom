@@ -1,5 +1,5 @@
 """
-Paragraph data structures for Phase 2 extraction.
+Paragraph data structures for paragraph extraction.
 
 Provides type-safe representation of paragraph data with validation.
 """
@@ -29,7 +29,7 @@ class ParagraphData:
     # Metrics
     word_count: int
 
-    # Source type (set by Phase 2 extractor)
+    # Source type (set by paragraph extractor)
     source_type: str = "p"  # "p", "stanza", "list", "bare", "table", "annotation"
 
     # List context

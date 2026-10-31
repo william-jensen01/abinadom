@@ -1,5 +1,5 @@
 """
-Phase 3: Citation Extraction & Parsing
+Citation Extraction & Parsing
 
 Detects scripture citations in talk HTML, resolves them via the core.52.db
 citation/book tables, and produces structured CitationData objects with

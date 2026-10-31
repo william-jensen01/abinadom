@@ -34,14 +34,14 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from db import core_db, content_db
 from config.schemas import PARAGRAPH_CONFIG
-from extractors.phase1_talk_metadata import (
+from extractors.talk_metadata import (
     fetch_all_talks,
     fetch_talk_by_id,
     fetch_talks_by_conference,
     extract_talk_metadata,
 )
-from extractors.phase3_citation_extraction import fetch_all_books
-from extractors.phase5_validation import validate_talk
+from extractors.citations import fetch_all_books
+from extractors.validation import validate_talk
 from extractors.pipeline import process_talk_pipeline
 
 
@@ -244,15 +244,15 @@ def run_pipeline(args: argparse.Namespace) -> None:
     for i, row in enumerate(rows, 1):
         talk_id = row.get("talk_id", "?")
 
-        # --- Phase 1 ---
+        # --- Talk metadata ---
         try:
             metadata = extract_talk_metadata(row)
         except Exception as e:
-            talk_errors.append((talk_id, [f"Phase 1 failed: {e}"]))
-            print(f"[{i}/{total}] talk_id={talk_id}  PHASE 1 ERROR: {e}")
+            talk_errors.append((talk_id, [f"Talk metadata failed: {e}"]))
+            print(f"[{i}/{total}] talk_id={talk_id}  TALK METADATA ERROR: {e}")
             continue
 
-        # --- Phases 2–4 ---
+        # --- Paragraphs, citations, footnotes ---
         try:
             result = process_talk_pipeline(
                 content_db=content_db,
@@ -266,7 +266,7 @@ def run_pipeline(args: argparse.Namespace) -> None:
             print(f"[{i}/{total}] talk_id={talk_id}  PIPELINE CRASH: {e}")
             continue
 
-        # --- Phase 5 ---
+        # --- Validation ---
         try:
             report = validate_talk(
                 metadata,
@@ -276,8 +276,8 @@ def run_pipeline(args: argparse.Namespace) -> None:
                 db=core_db,
             )
         except Exception as e:
-            talk_errors.append((talk_id, [f"Phase 5 failed: {e}"]))
-            print(f"[{i}/{total}] talk_id={talk_id}  PHASE 5 ERROR: {e}")
+            talk_errors.append((talk_id, [f"Validation failed: {e}"]))
+            print(f"[{i}/{total}] talk_id={talk_id}  VALIDATION ERROR: {e}")
             continue
 
         # --- Collect diagnostics ---

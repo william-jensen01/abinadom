@@ -1,5 +1,5 @@
 """
-Integration tests: Full pipeline end-to-end (Phases 1-5) over 5 real talks.
+Integration tests: Full pipeline end-to-end (metadata through validation) over 5 real talks.
 
 Validates phase-to-phase data contracts at every boundary. Tests skip
 gracefully when DB files are not present.
@@ -13,7 +13,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from db import Database, CORE_DB_PATH, CONTENT_DB_PATH
 from extractors.pipeline import process_talk_pipeline, TalkPipelineResult
-from extractors.phase5_validation import validate_talk
+from extractors.validation import validate_talk
 
 # Skip the entire module when DB files are not present
 DB_AVAILABLE = os.path.exists(CORE_DB_PATH) and os.path.exists(CONTENT_DB_PATH)
@@ -52,7 +52,7 @@ def content_db():
 
 @pytest.fixture(scope="module")
 def book_cache(core_db):
-    from extractors.phase3_citation_extraction import fetch_all_books
+    from extractors.citations import fetch_all_books
     return fetch_all_books(core_db)
 
 
@@ -75,13 +75,13 @@ def test_pipeline_end_to_end(talk_id, core_db, content_db, book_cache, pipeline_
 
 
 # =============================================================================
-# Test 2: Phase 1 boundary — metadata has required fields
+# Test 2: Talk metadata boundary — metadata has required fields
 # =============================================================================
 
 
 @pytest.mark.parametrize("talk_id", INTEGRATION_TALK_IDS)
-def test_phase1_boundary(talk_id, core_db, content_db, book_cache, pipeline_config):
-    """Phase 1 output has required metadata fields with correct types (D-03)."""
+def test_talk_metadata_boundary(talk_id, core_db, content_db, book_cache, pipeline_config):
+    """Talk metadata output has required metadata fields with correct types (D-03)."""
     result = process_talk_pipeline(content_db, core_db, talk_id, book_cache, pipeline_config)
     meta = result.metadata
     assert meta is not None, f"No metadata for talk {talk_id}"
@@ -93,13 +93,13 @@ def test_phase1_boundary(talk_id, core_db, content_db, book_cache, pipeline_conf
 
 
 # =============================================================================
-# Test 3: Phase 2 boundary — paragraphs non-empty with required fields
+# Test 3: Paragraphs boundary — paragraphs non-empty with required fields
 # =============================================================================
 
 
 @pytest.mark.parametrize("talk_id", INTEGRATION_TALK_IDS)
-def test_phase2_boundary(talk_id, core_db, content_db, book_cache, pipeline_config):
-    """Phase 2 output has non-empty paragraphs with required fields (D-03)."""
+def test_paragraphs_boundary(talk_id, core_db, content_db, book_cache, pipeline_config):
+    """Paragraph extraction output has non-empty paragraphs with required fields (D-03)."""
     result = process_talk_pipeline(content_db, core_db, talk_id, book_cache, pipeline_config)
     paras = result.paragraphs
     assert paras.extraction_success
@@ -112,13 +112,13 @@ def test_phase2_boundary(talk_id, core_db, content_db, book_cache, pipeline_conf
 
 
 # =============================================================================
-# Test 4: Phase 3 boundary — citations extracted with required fields
+# Test 4: Citations boundary — citations extracted with required fields
 # =============================================================================
 
 
 @pytest.mark.parametrize("talk_id", INTEGRATION_TALK_IDS)
-def test_phase3_boundary(talk_id, core_db, content_db, book_cache, pipeline_config):
-    """Phase 3 output has citations with required fields when present (D-03)."""
+def test_citations_boundary(talk_id, core_db, content_db, book_cache, pipeline_config):
+    """Citation extraction output has citations with required fields when present (D-03)."""
     result = process_talk_pipeline(content_db, core_db, talk_id, book_cache, pipeline_config)
     cites = result.citations
     assert cites.extraction_success
@@ -131,13 +131,13 @@ def test_phase3_boundary(talk_id, core_db, content_db, book_cache, pipeline_conf
 
 
 # =============================================================================
-# Test 5: Phase 4 boundary — footnotes extracted with required fields
+# Test 5: Footnotes boundary — footnotes extracted with required fields
 # =============================================================================
 
 
 @pytest.mark.parametrize("talk_id", INTEGRATION_TALK_IDS)
-def test_phase4_boundary(talk_id, core_db, content_db, book_cache, pipeline_config):
-    """Phase 4 output has footnotes with required fields when present (D-03)."""
+def test_footnotes_boundary(talk_id, core_db, content_db, book_cache, pipeline_config):
+    """Footnote extraction output has footnotes with required fields when present (D-03)."""
     result = process_talk_pipeline(content_db, core_db, talk_id, book_cache, pipeline_config)
     fns = result.footnotes
     assert fns.extraction_success
@@ -148,13 +148,13 @@ def test_phase4_boundary(talk_id, core_db, content_db, book_cache, pipeline_conf
 
 
 # =============================================================================
-# Test 6: Phase 5 validation passes
+# Test 6: Validation passes
 # =============================================================================
 
 
 @pytest.mark.parametrize("talk_id", INTEGRATION_TALK_IDS)
-def test_phase5_validation(talk_id, core_db, content_db, book_cache, pipeline_config):
-    """Phase 5 validation gate passes for all integration talks (D-01, D-04)."""
+def test_validation(talk_id, core_db, content_db, book_cache, pipeline_config):
+    """Validation gate passes for all integration talks (D-01, D-04)."""
     result = process_talk_pipeline(content_db, core_db, talk_id, book_cache, pipeline_config)
     report = validate_talk(
         result.metadata, result.paragraphs, result.citations, result.footnotes,

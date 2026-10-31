@@ -95,11 +95,11 @@ Sample extraction:
 ## Files Modified
 
 ### Core Implementation
-- `extractors/phase2_paragraph_extraction.py` - Complete rewrite of extraction logic
+- `extractors/paragraphs.py` - Complete rewrite of extraction logic
 - `config/schemas.py` - Updated configuration
 
 ### Tests
-- `tests/test_phase2.py` - Added semantic extraction tests
+- `tests/test_paragraphs.py` - Added semantic extraction tests
 - `run_phase2_tests.py` - Created simple test runner (no pytest required)
 
 ## Key Improvements
