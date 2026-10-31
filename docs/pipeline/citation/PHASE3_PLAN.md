@@ -10,11 +10,11 @@ Phases 1 (metadata) and 2 (paragraph segmentation) are complete. Phase 3 detects
 
 ## Prerequisite: Update Phase 2 to Populate `text_raw`
 
-Phase 2 currently sets `text_raw=None` (line 914 of `phase2_paragraph_extraction.py`). Phase 3 needs the paragraph's raw HTML to scan for `<span class="citation">` tags.
+Phase 2 currently sets `text_raw=None` (line 914 of `paragraphs.py`). Phase 3 needs the paragraph's raw HTML to scan for `<span class="citation">` tags.
 
 **Fix:** In `extract_semantic_paragraphs()`, the BS4 `element` is already available at each point where paragraphs are appended. Store `str(element)` (the element's outer HTML) in the paragraph dict, then pass it through to `ParagraphData.text_raw`.
 
-**Changes in `extractors/phase2_paragraph_extraction.py`:**
+**Changes in `extractors/paragraphs.py`:**
 
 1. In `extract_semantic_paragraphs()` — add `"text_raw": str(element)` to each paragraph dict:
     - Line ~670 (stanza): add `"text_raw": str(element)` to the dict
@@ -33,14 +33,14 @@ This is a small, backwards-compatible change — `text_raw` was already defined 
 | File                                       | Purpose                                      |
 | ------------------------------------------ | -------------------------------------------- |
 | `models/citation_data.py`                  | `CitationData` + `TalkCitations` dataclasses |
-| `extractors/phase3_citation_extraction.py` | Main extractor (3-layer architecture)        |
-| `tests/test_phase3.py`                     | Unit + integration tests                     |
+| `extractors/citations.py` | Main extractor (3-layer architecture)        |
+| `tests/test_citations.py`                     | Unit + integration tests                     |
 
 ## Files to Modify
 
 | File                                        | Change                                            |
 | ------------------------------------------- | ------------------------------------------------- |
-| `extractors/phase2_paragraph_extraction.py` | Populate `text_raw` with paragraph HTML           |
+| `extractors/paragraphs.py` | Populate `text_raw` with paragraph HTML           |
 | `config/schemas.py`                         | Append `CITATION_CONFIG` + `CITATION_DATA_SCHEMA` |
 
 ---
@@ -135,7 +135,7 @@ Plus `CITATION_DATA_SCHEMA` dict with field definitions matching the dataclass.
 
 ## Step 3: Extractor Module (3-Layer Architecture)
 
-**File:** `extractors/phase3_citation_extraction.py`
+**File:** `extractors/citations.py`
 
 ### Layer 1: Database Access
 
@@ -240,7 +240,7 @@ def update_paragraph_citation_flags(paragraphs, citations):
 
 ## Step 5: Tests
 
-**File:** `tests/test_phase3.py`
+**File:** `tests/test_citations.py`
 
 | Test Class                | Coverage                                                                                         |
 | ------------------------- | ------------------------------------------------------------------------------------------------ |
@@ -271,7 +271,7 @@ def update_paragraph_citation_flags(paragraphs, citations):
 
 | What                                | Where                                       |
 | ----------------------------------- | ------------------------------------------- |
-| `parse_html()`                      | `extractors/phase2_paragraph_extraction.py` |
+| `parse_html()`                      | `extractors/paragraphs.py` |
 | `find_all_occurrences()`            | `tools/text_processing.py:10`               |
 | `Database`, `core_db`, `content_db` | `db/__init__.py`                            |
 | `ValidationResult`                  | `models/paragraph_data.py:150`              |
@@ -282,7 +282,7 @@ def update_paragraph_citation_flags(paragraphs, citations):
 ## Verification
 
 1. **Phase 2 regression:** Run existing Phase 2 tests to confirm `text_raw` change doesn't break anything
-2. **Unit tests:** `python -m pytest tests/test_phase3.py -v`
+2. **Unit tests:** `python -m pytest tests/test_citations.py -v`
 3. **Single talk smoke test:** Process talk 1059 (4 known citations), verify all 4 detected with correct book/chapter/verse
 4. **Footnote citation test:** Process a talk with `<span class="footnote">` citations (talk ~7200+), verify `citation_location="footnote"`
 5. **Zero-citation talk:** Process talk 1 or 5000 (0 citations), verify empty TalkCitations

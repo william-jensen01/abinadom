@@ -1,28 +1,28 @@
-# Phase 4 depends on Phase 2 output (ParagraphData with text_raw)
+# Footnote extraction depends on paragraph extraction output (ParagraphData with text_raw)
 import sys
 from pathlib import Path
 
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from extractors.phase2_paragraph_extraction import process_talk_paragraphs
-from extractors.phase4_footnote_extraction import process_talk_footnotes
+from extractors.paragraphs import process_talk_paragraphs
+from extractors.footnotes import process_talk_footnotes
 from db import content_db
 from config.schemas import PARAGRAPH_CONFIG, FOOTNOTE_CONFIG
 
 # talk_id = 8615  # And They Sought to See Jesus Who He Was, 2022-Oct (footnote-heavy)
 talk_id = 8615
 
-# Per talk: Phase 2 -> Phase 4
+# Per talk: paragraphs -> footnotes
 talk_paras, p2_errors = process_talk_paragraphs(content_db, talk_id, PARAGRAPH_CONFIG)
-print(f"Finished Phase 2")
+print(f"Finished paragraphs")
 print(f"    talk_paras: {talk_paras}")
 
 talk_footnotes, warnings = process_talk_footnotes(
     talk_id, talk_paras.paragraphs, FOOTNOTE_CONFIG
 )
 
-print(f"\nFinished Phase 4")
+print(f"\nFinished footnotes")
 print(f"    talk_footnotes: {talk_footnotes}")
 print(f"    warnings ({len(warnings)}):")
 for w in warnings:

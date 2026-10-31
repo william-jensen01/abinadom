@@ -100,18 +100,18 @@ Follows existing `ValidationResult` pattern used throughout the codebase.
 ## Implementation Plan
 
 - [x] Create `ValidationReport` dataclass in `models/`
-- [x] Create `extractors/phase5_validation.py` with:
+- [x] Create `extractors/validation.py` with:
     - `validate_talk(metadata, paragraphs, citations, footnotes, db_conn) -> ValidationReport`
     - Internal helpers for each check category
 - [x] DB access: reuse existing database utilities for citation/talk lookups
-- [x] Tests: `tests/test_phase5.py`
+- [x] Tests: `tests/test_validation.py`
 
 ## Result
 
 Implemented 2026-03-10. 31/31 tests passing.
 - `models/validation_report.py` — `ValidationReport` dataclass
-- `extractors/phase5_validation.py` — `validate_talk()` + 5 check helpers
-- `tests/test_phase5.py` — 31 tests covering all check categories
+- `extractors/validation.py` — `validate_talk()` + 5 check helpers
+- `tests/test_validation.py` — 31 tests covering all check categories
 
 ## Stats Dict Structure
 

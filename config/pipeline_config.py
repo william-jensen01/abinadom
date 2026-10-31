@@ -16,7 +16,7 @@ PARAGRAPH_HTML_PARSER = "html5lib"
 CITATION_HTML_PARSER = "html.parser"
 FOOTNOTE_HTML_PARSER = "html.parser"
 
-# --- Paragraph Extraction (Phase 2) ---
+# --- Paragraph Extraction ---
 MIN_PARAGRAPH_LENGTH = 10
 NORMALIZE_WHITESPACE = True
 STRIP_FOOTNOTE_MARKERS = False
@@ -27,7 +27,7 @@ MIN_WORD_COUNT_INFO = 5
 MAX_WORD_COUNT_WARNING = 400
 MAX_WORD_COUNT_CRITICAL = 800
 
-# --- Citation Extraction (Phase 3) ---
+# --- Citation Extraction ---
 CONTEXT_BEFORE_CHARS = 100
 CONTEXT_AFTER_CHARS = 100
 CONTEXT_WINDOW_MODE = "word"
@@ -37,11 +37,11 @@ CITATION_BATCH_SIZE = 100
 SQLITE_MAX_PARAMS = 999
 MAX_VERSE_RANGE = 200
 
-# --- Footnote Extraction (Phase 4) ---
+# --- Footnote Extraction ---
 MAX_FOOTNOTES_PER_PARAGRAPH_WARNING = 20
 # Footnotes share CONTEXT_BEFORE_CHARS, CONTEXT_AFTER_CHARS, CONTEXT_WINDOW_MODE
 
-# --- Weaviate Loader (Phase 6) ---
+# --- Weaviate Loader ---
 WEAVIATE_BATCH_SIZE = 50
 WEAVIATE_COLLECTION_NAMES = {
     "talks": "ConferenceTalks",

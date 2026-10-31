@@ -20,8 +20,8 @@ sys.stdout.reconfigure(encoding="utf-8")
 sys.path.append(str(Path(__file__).parent.parent))
 
 from db import core_db, content_db
-from extractors.phase1_talk_metadata import fetch_all_talks, extract_talk_metadata
-from extractors.phase2_paragraph_extraction import fetch_talk_html
+from extractors.talk_metadata import fetch_all_talks, extract_talk_metadata
+from extractors.paragraphs import fetch_talk_html
 from extractors.html_parsing_utils import parse_html, find_body_container
 
 # =============================================================================

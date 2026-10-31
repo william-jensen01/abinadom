@@ -63,7 +63,7 @@ class BaseLoader(ABC):
         Load a single talk bundle into the target vector DB.
 
         Implementations must:
-        - Accept a TalkBundle (5-tuple of Phase 1-5 outputs)
+        - Accept a TalkBundle (5-tuple of metadata, paragraphs, citations, footnotes, validation outputs)
         - Call prepare_talk_bundle() from shared_transforms
         - Upsert all 4 collections (talks, paragraphs, citations, footnotes)
         - Skip-and-log bad records per D-07 (log WARNING, continue)

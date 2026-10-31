@@ -77,7 +77,7 @@ def embedding_available():
 
 
 # ---------------------------------------------------------------------------
-# Factory functions (adapted from test_phase6.py, talk_id=9999)
+# Factory functions (adapted from test_load.py, talk_id=9999)
 # ---------------------------------------------------------------------------
 
 def make_talk_metadata(**kwargs) -> TalkMetadata:

@@ -1,5 +1,5 @@
 """
-Phase 1: Talk Metadata Extraction
+Talk Metadata Extraction
 
 Extracts talk-level metadata from SQLite database and prepares it for ChromaDB insertion.
 
@@ -456,7 +456,7 @@ def extract_talks_for_chromadb(
     """
     Complete extraction pipeline from database to ChromaDB format.
 
-    This is the main entry point for Phase 1 extraction. It:
+    This is the main entry point for talk metadata extraction. It:
     1. Fetches data from database
     2. Transforms into TalkMetadata
     3. Validates (optional)
@@ -473,7 +473,7 @@ def extract_talks_for_chromadb(
         ValueError: If validation fails and validate=True
     """
     logger.info(
-        f"Starting Phase 1 extraction pipeline "
+        f"Starting talk metadata extraction pipeline "
         f"(limit={limit or 'none'}, validate={validate})"
     )
 
@@ -494,7 +494,7 @@ def extract_talks_for_chromadb(
 
     elapsed = (datetime.now() - start_time).total_seconds()
     logger.info(
-        f"Phase 1 extraction complete: {len(documents)} talks in {elapsed:.2f}s"
+        f"Talk metadata extraction complete: {len(documents)} talks in {elapsed:.2f}s"
     )
 
     return documents, metadatas, ids
@@ -545,7 +545,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Phase 1: Extract talk metadata from database"
+        description="Extract talk metadata from database"
     )
     parser.add_argument(
         "--limit",

@@ -4,7 +4,7 @@ stateless-tumbling-charm.md
 
 ## Context
 
-The current position calculation in `phase3_citation_extraction.py` uses text search
+The current position calculation in `citations.py` uses text search
 (`display_text` in `clean_text`) to locate citations in paragraphs. This is unreliable
 when the same scripture reference appears multiple times in a paragraph, and it doesn't
 account for the varied HTML structures citations can appear in. The user requires:
@@ -28,7 +28,7 @@ Seven citation patterns are present in the HTML:
 
 ## Critical File
 
-`extractors/phase3_citation_extraction.py`
+`extractors/citations.py`
 
 ## Current Bugs
 

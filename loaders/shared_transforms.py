@@ -23,7 +23,7 @@ from models.validation_report import ValidationReport
 logger = logging.getLogger(__name__)
 
 
-# Type alias — kept as tuple to match phase6 iteration pattern
+# Type alias — kept as tuple to match the loader iteration pattern
 TalkBundle = tuple[TalkMetadata, TalkParagraphs, TalkCitations, TalkFootnotes, ValidationReport]
 
 
@@ -61,7 +61,7 @@ def prepare_talk_record(
     Uses rich_metadata() so list fields (topics) are preserved as native Python lists.
 
     Args:
-        metadata:         Phase 1 output for this talk.
+        metadata:         Talk metadata output for this talk.
         annotation_texts: Text strings from annotation paragraphs (may be empty).
         embed_fn:         Optional callable (list[str]) -> list[list[float]]. When None, vector is None.
 
@@ -96,8 +96,8 @@ def prepare_paragraph_records(
     their text is collected and returned for folding into talk metadata.
 
     Args:
-        paragraphs:    Phase 2 output container.
-        talk_metadata: Optional Phase 1 metadata. When provided, speaker_name,
+        paragraphs:    Paragraph extraction output container.
+        talk_metadata: Optional talk metadata. When provided, speaker_name,
             title, conference_year, and conference_month are injected into each
             paragraph record's metadata.
         embed_fn:      Optional callable (list[str]) -> list[list[float]]. When None, vector is None.
@@ -136,7 +136,7 @@ def prepare_citation_records(
     ALL citations are included regardless of whether their parent paragraph is an annotation.
 
     Args:
-        citations: Phase 3 output container.
+        citations: Citation extraction output container.
         embed_fn:  Optional callable (list[str]) -> list[list[float]]. When None, vector is None.
 
     Returns:
@@ -163,7 +163,7 @@ def prepare_footnote_records(
     Uses rich_metadata() so list fields are preserved as native Python lists.
 
     Args:
-        footnotes: Phase 4 output container.
+        footnotes: Footnote extraction output container.
         embed_fn:  Optional callable (list[str]) -> list[list[float]]. When None, vector is None.
 
     Returns:
@@ -203,11 +203,11 @@ def prepare_talk_bundle(
         Log a WARNING and return empty lists for all 4 collections.
 
     Args:
-        metadata:           Phase 1 output.
-        paragraphs:         Phase 2 output.
-        citations:          Phase 3 output.
-        footnotes:          Phase 4 output.
-        validation_report:  Phase 5 output.
+        metadata:           Talk metadata output.
+        paragraphs:         Paragraph extraction output.
+        citations:          Citation extraction output.
+        footnotes:          Footnote extraction output.
+        validation_report:  Validation output.
         embed_fn:           Optional callable (list[str]) -> list[list[float]]. When None, vector is None.
 
     Returns:

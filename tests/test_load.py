@@ -1,5 +1,5 @@
 """
-Unit tests for Phase 6: Weaviate Loader (loaders/weaviate_loader.py).
+Unit tests for the Weaviate Loader (loaders/weaviate_loader.py).
 
 Integration tests use weaviate.connect_to_embedded() when available (Linux/macOS CI).
 On Windows (where embedded Weaviate is not supported), integration tests use a
@@ -34,7 +34,7 @@ EMBEDDED_AVAILABLE = platform.system() != "Windows"
 
 
 # =============================================================================
-# Factory / fixture helper functions (verbatim from old test_phase6.py)
+# Factory / fixture helper functions (verbatim from the previous version of this file)
 # =============================================================================
 
 

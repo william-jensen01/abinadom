@@ -1,7 +1,7 @@
 """
-Phase 2 Example: Extract paragraphs from a talk.
+Paragraphs Example: Extract paragraphs from a talk.
 
-This script demonstrates the Phase 2 paragraph extraction functionality.
+This script demonstrates the paragraph extraction functionality.
 """
 
 import sys
@@ -10,7 +10,7 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from extractors.phase2_paragraph_extraction import (
+from extractors.paragraphs import (
     process_talk_paragraphs,
     fetch_all_talk_ids,
     extract_paragraphs_for_chromadb,

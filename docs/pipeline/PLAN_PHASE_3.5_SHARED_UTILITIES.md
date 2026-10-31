@@ -43,7 +43,7 @@ apply_context_window(filtered_text, placeholder_char, label, config) -> (str, st
 
 No dependencies on any phase module — only `bs4.Tag` and `BeautifulSoup`.
 
-### Step 2: Refactor `extractors/phase3_citation_extraction.py`
+### Step 2: Refactor `extractors/citations.py`
 
 **Imports to add:**
 
@@ -91,7 +91,7 @@ return apply_context_window(filtered, ELEMENT_PLACEHOLDER, citation_label, confi
 
 Keep the fallback path (lines 460-476) for when `text_raw`/`citation_id` are not provided.
 
-### Step 3: Update `tests/test_phase3.py`
+### Step 3: Update `tests/test_citations.py`
 
 **Import changes only:**
 
@@ -188,9 +188,9 @@ Phase 4's `process_talk_footnotes` sets `has_footnote = True` and `footnote_coun
 
 1. Create `extractors/html_parsing_utils.py`
 2. Create `tests/test_html_parsing_utils.py`
-3. Refactor `extractors/phase3_citation_extraction.py` — imports + delegation
-4. Update `tests/test_phase3.py` — import adjustments
-5. Run `pytest tests/test_html_parsing_utils.py tests/test_phase3.py -v` — all green
+3. Refactor `extractors/citations.py` — imports + delegation
+4. Update `tests/test_citations.py` — import adjustments
+5. Run `pytest tests/test_html_parsing_utils.py tests/test_citations.py -v` — all green
 6. Update `.claude/plans/bright-greeting-pike.md` — apply fixes 1-6
 
 ---
@@ -198,8 +198,8 @@ Phase 4's `process_talk_footnotes` sets `has_footnote = True` and `footnote_coun
 ## Verification
 
 1. `pytest tests/test_html_parsing_utils.py -v` — new shared utility tests pass
-2. `pytest tests/test_phase3.py -v` — all 63+ existing tests pass (no regressions)
-3. Manual: run `examples/phase3_example.py` against real DB — output unchanged
+2. `pytest tests/test_citations.py -v` — all 63+ existing tests pass (no regressions)
+3. Manual: run `examples/citations_example.py` against real DB — output unchanged
 4. Review updated Phase 4 plan for consistency with pipeline spec
 
 ## Critical Files
@@ -208,7 +208,7 @@ Phase 4's `process_talk_footnotes` sets `has_footnote = True` and `footnote_coun
 | ------------------------------------------ | ------------------------------------------------------- |
 | `extractors/html_parsing_utils.py`         | **Create** — shared utilities                           |
 | `tests/test_html_parsing_utils.py`         | **Create** — tests for shared utilities                 |
-| `extractors/phase3_citation_extraction.py` | **Modify** — remove local defs, import shared           |
-| `tests/test_phase3.py`                     | **Modify** — update imports                             |
+| `extractors/citations.py` | **Modify** — remove local defs, import shared           |
+| `tests/test_citations.py`                     | **Modify** — update imports                             |
 | `.claude/plans/bright-greeting-pike.md`    | **Modify** — apply 6 fixes                              |
 | `config/schemas.py`                        | **Modify** — add FOOTNOTE_CONFIG + FOOTNOTE_DATA_SCHEMA |

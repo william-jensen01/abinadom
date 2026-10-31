@@ -80,27 +80,27 @@
 - `docs/scriptures/SPEC.md` — Scriptures v1 spec (verse-only ScriptureVerses collection from core.db; get_verse tool; windowed embedding; headings/apparatus deferred to v2)
 - `docs/UNMATCHED_TALKS_ANALYSIS.md` — Analysis of 224 API URIs not matched to talk_id (sustaining, audits, stats, welfare sessions, one-offs)
 - `docs/pipeline/PLAN_PHASE_3.5_SHARED_UTILITIES.md` — Shared utilities plan
-- `docs/pipeline/phase-1-metadata/PHASE1_README.md`
-- `docs/pipeline/phase-2-paragraph/IMPLEMENTATION_SUMMARY.md`
-- `docs/pipeline/phase-2-paragraph/PHASE2_PLAN.md`
-- `docs/pipeline/phase-2-paragraph/PHASE2_README.md`
-- `docs/pipeline/phase-3-citation/BUGS.md` — Bug catalogue for Phase 3 audit (all known pipeline bugs)
-- `docs/pipeline/phase-3-citation/PHASE3_PLAN.md`
-- `docs/pipeline/phase-3-citation/REFACTOR_CITATION_PARSING.md`
-- `docs/pipeline/phase-4-footnote/BUG_FIXING_SUMMARY.md`
-- `docs/pipeline/phase-4-footnote/IMPLEMENTATION_SUMMARY_INTERVIEW.md`
-- `docs/pipeline/phase-4-footnote/PLAN_PHASE_4.md`
-- `docs/pipeline/phase-5-validation/PLAN_PHASE_5.md`
+- `docs/pipeline/metadata/PHASE1_README.md`
+- `docs/pipeline/paragraph/IMPLEMENTATION_SUMMARY.md`
+- `docs/pipeline/paragraph/PHASE2_PLAN.md`
+- `docs/pipeline/paragraph/PHASE2_README.md`
+- `docs/pipeline/citation/BUGS.md` — Bug catalogue for Phase 3 audit (all known pipeline bugs)
+- `docs/pipeline/citation/PHASE3_PLAN.md`
+- `docs/pipeline/citation/REFACTOR_CITATION_PARSING.md`
+- `docs/pipeline/footnote/BUG_FIXING_SUMMARY.md`
+- `docs/pipeline/footnote/IMPLEMENTATION_SUMMARY_INTERVIEW.md`
+- `docs/pipeline/footnote/PLAN_PHASE_4.md`
+- `docs/pipeline/validation/PLAN_PHASE_5.md`
 - `docs/update/HOW_UPDATES_WORK.md` — Plain-language guide: how fetch/build updates work, what to run when, and why
 - `docs/update/SCI_SITE_ROUTES.md` — scriptures.byu.edu routes: `sci.N.zip` release probing, Android `/sci/` page, website API (`talks_ajax`, `sync_sci`/`sync_scrip`) and what each is good for
 
 ### extractors/
 - `extractors/html_parsing_utils.py` — Shared HTML parsing utilities
-- `extractors/phase1_talk_metadata.py` — Phase 1: talk metadata
-- `extractors/phase2_paragraph_extraction.py` — Phase 2: paragraph extraction
-- `extractors/phase3_citation_extraction.py` — Phase 3: citation extraction
-- `extractors/phase4_footnote_extraction.py` — Phase 4: footnote extraction
-- `extractors/phase5_validation.py` — Phase 5: validation
+- `extractors/talk_metadata.py` — Talk metadata extraction
+- `extractors/paragraphs.py` — Paragraph extraction
+- `extractors/citations.py` — Citation extraction
+- `extractors/footnotes.py` — Footnote extraction
+- `extractors/validation.py` — Validation gate
 
 ### loaders/
 - `loaders/__init__.py` — BaseLoader ABC (embed_fn + batch_size DI; no host/port)
@@ -116,11 +116,11 @@
 - `config/audit_sample.json` — Talk IDs for bug audit sample (user-curated; populate before running run_audit.py)
 
 ### models/
-- `models/talk_metadata.py` — Phase 1 data model
-- `models/paragraph_data.py` — Phase 2 data model
-- `models/citation_data.py` — Phase 3 data model
-- `models/footnote_data.py` — Phase 4 data model
-- `models/validation_report.py` — Phase 5 data model
+- `models/talk_metadata.py` — Talk metadata data model
+- `models/paragraph_data.py` — Paragraph data model
+- `models/citation_data.py` — Citation data model
+- `models/footnote_data.py` — Footnote data model
+- `models/validation_report.py` — Validation report data model
 
 ### scripts/
 - `scripts/fetch.py` — `fetch`: Church API → committed JSON (talk_metadata, talk_previews, topics, conference_topics); `--conference YYYY-MM` or `--all`
@@ -130,8 +130,8 @@
 - `scripts/UPDATE.py` — Conference database synchronization script (gc.db to core db)
 - `scripts/process_all.py` — Batch topic and talk processing script (threaded API fetcher)
 - `scripts/process_topics.py` — Topics index → `topics.json`, every topic page → `conference_topics.json` (used by fetch)
-- `scripts/run_audit.py` — Bug audit driver script (runs phases 1-5 per talk_id in config/audit_sample.json)
-- `scripts/run_pipeline.py` — Full pipeline orchestrator (Phases 1-6, per-talk streaming, resume, --force)
+- `scripts/run_audit.py` — Bug audit driver script (runs metadata through validation per talk_id in config/audit_sample.json)
+- `scripts/run_pipeline.py` — Full pipeline orchestrator (extract, validate, load; per-talk streaming, resume, --force)
 - `scripts/verify_chromadb_pipeline.py` — Post-pipeline verification (ChromaDB instances, VER-01 through VER-06, JSON report)
 - `scripts/verify_weaviate_pipeline.py` — Post-pipeline verification (Weaviate instances, VER-01 through VER-05, JSON report)
 
@@ -142,13 +142,13 @@
 
 ### tests/
 - `tests/test_html_parsing_utils.py`
-- `tests/test_phase1.py`
-- `tests/test_phase2.py`
-- `tests/test_phase3.py`
-- `tests/test_phase4.py`
-- `tests/test_phase5.py`
-- `tests/test_phase6.py`
-- `tests/test_phase6_orchestrator.py`
+- `tests/test_talk_metadata.py`
+- `tests/test_paragraphs.py`
+- `tests/test_citations.py`
+- `tests/test_footnotes.py`
+- `tests/test_validation.py`
+- `tests/test_load.py` — load_talk_bundles + WeaviateLoader
+- `tests/test_run_pipeline.py` — scripts/run_pipeline.py orchestrator (mocked)
 - `tests/test_server.py`
 - `tests/test_oauth.py`
 - `tests/test_auth.py`

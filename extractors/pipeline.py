@@ -1,7 +1,7 @@
 """
 Unified extraction pipeline.
 
-Orchestrates Phase 2 → Phase 3 → Phase 4 for a single talk, sharing a
+Orchestrates paragraphs → citations → footnotes for a single talk, sharing a
 single HTML parse per paragraph across all three phases via ParagraphHTMLContext.
 
 Usage:
@@ -28,10 +28,10 @@ from models.paragraph_data import ParagraphData, TalkParagraphs
 from models.citation_data import TalkCitations
 from models.footnote_data import TalkFootnotes
 from extractors.html_parsing_utils import ParagraphHTMLContext
-from extractors.phase1_talk_metadata import fetch_talk_by_id, extract_talk_metadata
-from extractors.phase2_paragraph_extraction import process_talk_paragraphs
-from extractors.phase3_citation_extraction import process_talk_citations
-from extractors.phase4_footnote_extraction import process_talk_footnotes
+from extractors.talk_metadata import fetch_talk_by_id, extract_talk_metadata
+from extractors.paragraphs import process_talk_paragraphs
+from extractors.citations import process_talk_citations
+from extractors.footnotes import process_talk_footnotes
 
 logger = logging.getLogger(__name__)
 
@@ -80,55 +80,55 @@ def process_talk_pipeline(
     Run the full extraction pipeline for a single talk.
 
     Steps:
-      1. Phase 1 — extract talk metadata from core DB
-      2. Phase 2 — extract paragraphs from HTML
+      1. Talk metadata — extract talk metadata from core DB
+      2. Paragraphs — extract paragraphs from HTML
       3. Build ParagraphHTMLContext per paragraph (one lazy parse each)
-      4. Phase 3 — extract citations using shared contexts
-      5. Phase 4 — extract footnotes using shared contexts
+      4. Citations — extract citations using shared contexts
+      5. Footnotes — extract footnotes using shared contexts
 
     Paragraph citation/footnote count fields are back-filled in-place by
-    Phases 3 and 4 (they already mutate ParagraphData directly).
+    citation and footnote extraction (they already mutate ParagraphData directly).
 
     Returns a TalkPipelineResult with all outputs and merged diagnostics.
     """
     all_warnings: List[str] = []
     all_errors: List[str] = []
 
-    # --- Phase 1 ---
-    logger.debug(f"Pipeline: Phase 1 for talk {talk_id}")
+    # --- Talk metadata ---
+    logger.debug(f"Pipeline: talk metadata for talk {talk_id}")
     talk_metadata: Optional[TalkMetadata] = None
     try:
         row = fetch_talk_by_id(core_db, talk_id)
         if row is None:
-            all_errors.append(f"Phase 1: talk {talk_id} not found in core DB")
+            all_errors.append(f"Talk metadata: talk {talk_id} not found in core DB")
         else:
             talk_metadata = extract_talk_metadata(row)
     except Exception as e:
-        logger.error(f"Pipeline: Phase 1 failed for talk {talk_id}: {e}", exc_info=True)
-        all_errors.append(f"Phase 1 failed: {e}")
+        logger.error(f"Pipeline: talk metadata failed for talk {talk_id}: {e}", exc_info=True)
+        all_errors.append(f"Talk metadata failed: {e}")
 
-    # --- Phase 2 ---
-    logger.debug(f"Pipeline: Phase 2 for talk {talk_id}")
-    talk_paragraphs, phase2_warnings = process_talk_paragraphs(
+    # --- Paragraphs ---
+    logger.debug(f"Pipeline: paragraphs for talk {talk_id}")
+    talk_paragraphs, para_warnings = process_talk_paragraphs(
         content_db, talk_id, config
     )
-    all_warnings.extend(phase2_warnings)
+    all_warnings.extend(para_warnings)
 
     if talk_paragraphs is None:
-        all_errors.extend(phase2_warnings)
+        all_errors.extend(para_warnings)
         empty_cites = TalkCitations(
             talk_id=talk_id,
             citations=[],
             total_citations=0,
             extraction_success=False,
-            extraction_errors=phase2_warnings,
+            extraction_errors=para_warnings,
         )
         empty_fns = TalkFootnotes(
             talk_id=talk_id,
             footnotes=[],
             total_footnotes=0,
             extraction_success=False,
-            extraction_errors=phase2_warnings,
+            extraction_errors=para_warnings,
         )
         empty_paras = TalkParagraphs(
             talk_id=talk_id,
@@ -136,7 +136,7 @@ def process_talk_pipeline(
             total_paragraphs=0,
             total_words=0,
             extraction_success=False,
-            extraction_errors=phase2_warnings,
+            extraction_errors=para_warnings,
         )
         return TalkPipelineResult(
             talk_id=talk_id,
@@ -161,8 +161,8 @@ def process_talk_pipeline(
     }
     logger.debug(f"Pipeline: built {len(contexts)} HTML contexts for talk {talk_id}")
 
-    # --- Phase 3 ---
-    logger.debug(f"Pipeline: Phase 3 for talk {talk_id}")
+    # --- Citations ---
+    logger.debug(f"Pipeline: citations for talk {talk_id}")
     try:
         talk_citations, cite_warnings = process_talk_citations(
             core_db_instance=core_db,
@@ -174,8 +174,8 @@ def process_talk_pipeline(
         )
         all_warnings.extend(cite_warnings)
     except Exception as e:
-        logger.error(f"Pipeline: Phase 3 failed for talk {talk_id}: {e}", exc_info=True)
-        all_errors.append(f"Phase 3 failed: {e}")
+        logger.error(f"Pipeline: citations failed for talk {talk_id}: {e}", exc_info=True)
+        all_errors.append(f"Citations failed: {e}")
         talk_citations = TalkCitations(
             talk_id=talk_id,
             citations=[],
@@ -184,8 +184,8 @@ def process_talk_pipeline(
             extraction_errors=[str(e)],
         )
 
-    # --- Phase 4 ---
-    logger.debug(f"Pipeline: Phase 4 for talk {talk_id}")
+    # --- Footnotes ---
+    logger.debug(f"Pipeline: footnotes for talk {talk_id}")
     try:
         talk_footnotes, fn_warnings = process_talk_footnotes(
             talk_id=talk_id,
@@ -195,8 +195,8 @@ def process_talk_pipeline(
         )
         all_warnings.extend(fn_warnings)
     except Exception as e:
-        logger.error(f"Pipeline: Phase 4 failed for talk {talk_id}: {e}", exc_info=True)
-        all_errors.append(f"Phase 4 failed: {e}")
+        logger.error(f"Pipeline: footnotes failed for talk {talk_id}: {e}", exc_info=True)
+        all_errors.append(f"Footnotes failed: {e}")
         talk_footnotes = TalkFootnotes(
             talk_id=talk_id,
             footnotes=[],

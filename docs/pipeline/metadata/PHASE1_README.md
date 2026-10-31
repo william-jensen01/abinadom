@@ -35,7 +35,7 @@ Phase 1 extracts talk-level metadata from the SQLite database and prepares it fo
 
 ### Key Components
 
-1. **Database Layer** (`extractors/phase1_talk_metadata.py`)
+1. **Database Layer** (`extractors/talk_metadata.py`)
    - Pure SQL queries
    - Database connection management
    - Raw data retrieval
@@ -80,28 +80,28 @@ pipenv shell
 
 Extract all talks:
 ```bash
-python extractors/phase1_talk_metadata.py
+python extractors/talk_metadata.py
 ```
 
 Extract limited number of talks:
 ```bash
-python extractors/phase1_talk_metadata.py --limit 100
+python extractors/talk_metadata.py --limit 100
 ```
 
 Show statistics only (no extraction):
 ```bash
-python extractors/phase1_talk_metadata.py --stats --limit 10
+python extractors/talk_metadata.py --stats --limit 10
 ```
 
 Skip validation checks:
 ```bash
-python extractors/phase1_talk_metadata.py --no-validate
+python extractors/talk_metadata.py --no-validate
 ```
 
 ### Programmatic Usage
 
 ```python
-from extractors.phase1_talk_metadata import extract_talks_for_chromadb
+from extractors.talk_metadata import extract_talks_for_chromadb
 
 # Extract all talks in ChromaDB format
 documents, metadatas, ids = extract_talks_for_chromadb()
@@ -127,7 +127,7 @@ documents, metadatas, ids = extract_talks_for_chromadb(
 
 ```python
 from db import core_db
-from extractors.phase1_talk_metadata import (
+from extractors.talk_metadata import (
     fetch_talk_by_id,
     extract_talk_metadata
 )
@@ -275,7 +275,7 @@ documents, metadatas, ids = extract_talks_for_chromadb(validate=False)
 
 Run all unit tests:
 ```bash
-python tests/test_phase1.py
+python tests/test_talk_metadata.py
 ```
 
 Test coverage:
@@ -385,14 +385,14 @@ ModuleNotFoundError: No module named 'config'
 
 ```bash
 # Extract 10 talks for testing
-python extractors/phase1_talk_metadata.py --limit 10
+python extractors/talk_metadata.py --limit 10
 ```
 
 ### Get Extraction Statistics
 
 ```bash
 # See what's in the database
-python extractors/phase1_talk_metadata.py --stats --limit 100
+python extractors/talk_metadata.py --stats --limit 100
 ```
 
 Output:
@@ -411,7 +411,7 @@ with_video: 90
 ### Programmatic Integration
 
 ```python
-from extractors.phase1_talk_metadata import extract_talks_for_chromadb
+from extractors.talk_metadata import extract_talks_for_chromadb
 import chromadb
 
 # Extract data
@@ -440,11 +440,11 @@ LDS MCP/
 ├── config/
 │   └── schemas.py              # Schema definitions
 ├── extractors/
-│   └── phase1_talk_metadata.py # Main extraction logic
+│   └── talk_metadata.py # Main extraction logic
 ├── models/
 │   └── talk_metadata.py        # TalkMetadata dataclass
 ├── tests/
-│   └── test_phase1.py          # Unit tests
+│   └── test_talk_metadata.py          # Unit tests
 ├── utils/
 │   └── validators.py           # Validation functions
 └── PHASE1_README.md            # This file

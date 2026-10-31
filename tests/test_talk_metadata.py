@@ -1,5 +1,5 @@
 """
-Unit tests for Phase 1: Talk Metadata Extraction
+Unit tests for Talk Metadata Extraction
 
 Tests cover:
 - Schema validation
@@ -8,7 +8,7 @@ Tests cover:
 - Database queries and transformations
 - ChromaDB format conversion
 - SQLite schema validation (QUAL-06)
-- Phase 1 edge cases via in-memory SQLite (QUAL-05)
+- Talk metadata edge cases via in-memory SQLite (QUAL-05)
 """
 
 import unittest
@@ -38,7 +38,7 @@ from utils.validators import (
     determine_conference_month,
 )
 from models.talk_metadata import TalkMetadata, create_talk_metadata_from_db_row
-from extractors.phase1_talk_metadata import (
+from extractors.talk_metadata import (
     transform_db_row_to_metadata,
     prepare_for_chromadb,
 )
@@ -521,7 +521,7 @@ class TestBackfillTargets(unittest.TestCase):
 
 
 class TestEnrichedFields(unittest.TestCase):
-    """Tests for enriched field coverage in Phase 1."""
+    """Tests for enriched field coverage in talk metadata extraction."""
 
     def _base_data(self) -> Dict[str, Any]:
         return {
@@ -574,8 +574,8 @@ class TestEnrichedFields(unittest.TestCase):
         self.assertIsNone(metadata.talk_preview)
 
     def test_query_has_left_join(self):
-        """Phase 1 query should LEFT JOIN talk_metadata."""
-        from extractors.phase1_talk_metadata import build_talk_metadata_query
+        """Talk metadata query should LEFT JOIN talk_metadata."""
+        from extractors.talk_metadata import build_talk_metadata_query
         query, _ = build_talk_metadata_query()
         self.assertIn("LEFT JOIN talk_metadata", query)
 
@@ -708,8 +708,8 @@ class TestTopicsField(unittest.TestCase):
         self.assertEqual(result["topics"], [])
 
     def test_query_has_group_concat_subquery(self):
-        """Phase 1 query should contain GROUP_CONCAT subquery for topics."""
-        from extractors.phase1_talk_metadata import build_talk_metadata_query
+        """Talk metadata query should contain GROUP_CONCAT subquery for topics."""
+        from extractors.talk_metadata import build_talk_metadata_query
         query, _ = build_talk_metadata_query()
         self.assertIn("GROUP_CONCAT", query)
         self.assertIn("topics_str", query)
@@ -748,7 +748,7 @@ class TestTopicsField(unittest.TestCase):
         conn.commit()
 
         db = InMemoryDatabase(conn)
-        from extractors.phase1_talk_metadata import fetch_talk_by_id, extract_talk_metadata
+        from extractors.talk_metadata import fetch_talk_by_id, extract_talk_metadata
         result = fetch_talk_by_id(db, 1)
         self.assertIsNotNone(result)
         metadata = extract_talk_metadata(result)
@@ -765,7 +765,7 @@ def _build_in_memory_db(
     talk_metadata_rows: Optional[List[Tuple]] = None,
 ) -> sqlite3.Connection:
     """
-    Build minimal in-memory SQLite core DB for Phase 1 testing.
+    Build minimal in-memory SQLite core DB for talk metadata testing.
 
     Column order matches DDL so INSERT positional values are unambiguous.
     talk: (ID, Corpus, URL, Title, Date, SpeakerID, Kicker, AudioUrl, VideoLowUrl, VideoMedUrl, VideoHighUrl)
@@ -891,11 +891,11 @@ class TestSchemaValidation(unittest.TestCase):
         conn.close()
 
 
-class TestPhase1EdgeCases(unittest.TestCase):
-    """Tests for Phase 1 edge cases using in-memory SQLite fixtures (QUAL-05)."""
+class TestTalkMetadataEdgeCases(unittest.TestCase):
+    """Tests for talk metadata edge cases using in-memory SQLite fixtures (QUAL-05)."""
 
     def test_edge_missing_speaker(self):
-        """Phase 1 handles a talk whose SpeakerID has no matching speaker row."""
+        """Talk metadata extraction handles a talk whose SpeakerID has no matching speaker row."""
         conn = _build_in_memory_db(
             talk_rows=[(1, 'G', 'http://example.com', 'Test Talk', '2020-04-05', 999, None, None, None, None, None)],
             speaker_rows=[],  # No speaker with ID 999
@@ -904,19 +904,19 @@ class TestPhase1EdgeCases(unittest.TestCase):
             conf_talk_rows=[(1, 1, 1, 5, 1)],
         )
         db = InMemoryDatabase(conn)
-        from extractors.phase1_talk_metadata import fetch_talk_by_id
+        from extractors.talk_metadata import fetch_talk_by_id
         # INNER JOIN on speaker means no match returns None — that's valid graceful handling
         result = fetch_talk_by_id(db, 1)
         # Should return a row if LEFT JOIN, or None if INNER JOIN — either way: no crash
         if result is not None:
-            from extractors.phase1_talk_metadata import extract_talk_metadata
+            from extractors.talk_metadata import extract_talk_metadata
             metadata = extract_talk_metadata(result)
             self.assertEqual(metadata.talk_id, 1)
         # No exception raised is the key requirement
         conn.close()
 
     def test_edge_unusual_session_type(self):
-        """Phase 1 handles talks from welfare/sustaining sessions."""
+        """Talk metadata extraction handles talks from welfare/sustaining sessions."""
         conn = _build_in_memory_db(
             talk_rows=[(1, 'G', 'http://example.com', 'Welfare Report', '1982-04-03', 1, None, None, None, None, None)],
             speaker_rows=[(1, 'Thomas', 'Monson', 'TSM', '', 'Monson, Thomas')],
@@ -925,7 +925,7 @@ class TestPhase1EdgeCases(unittest.TestCase):
             conf_talk_rows=[(1, 1, 1, 5, 1)],
         )
         db = InMemoryDatabase(conn)
-        from extractors.phase1_talk_metadata import fetch_talk_by_id, extract_talk_metadata
+        from extractors.talk_metadata import fetch_talk_by_id, extract_talk_metadata
         result = fetch_talk_by_id(db, 1)
         self.assertIsNotNone(result, "Expected a row for welfare session talk")
         metadata = extract_talk_metadata(result)
@@ -934,7 +934,7 @@ class TestPhase1EdgeCases(unittest.TestCase):
         conn.close()
 
     def test_edge_no_url_talk(self):
-        """Phase 1 handles talks with NULL URL (Ensign-era corpus)."""
+        """Talk metadata extraction handles talks with NULL URL (Ensign-era corpus)."""
         conn = _build_in_memory_db(
             talk_rows=[(1, 'E', None, 'Faith and Works', '1946-04-06', 1, None, None, None, None, None)],
             speaker_rows=[(1, 'David', 'McKay', 'DOM', '', 'McKay, David')],
@@ -943,7 +943,7 @@ class TestPhase1EdgeCases(unittest.TestCase):
             conf_talk_rows=[(1, 1, 1, 5, 1)],
         )
         db = InMemoryDatabase(conn)
-        from extractors.phase1_talk_metadata import fetch_talk_by_id, extract_talk_metadata
+        from extractors.talk_metadata import fetch_talk_by_id, extract_talk_metadata
         result = fetch_talk_by_id(db, 1)
         self.assertIsNotNone(result, "Expected a row for no-URL talk")
         metadata = extract_talk_metadata(result)

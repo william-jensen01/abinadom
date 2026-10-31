@@ -2,8 +2,8 @@
 """
 Full pipeline orchestrator script.
 
-Runs all 6 extraction phases (Phases 1-5 via process_talk_pipeline, Phase 6
-via load_talk_bundles) over all General Conference talks in the database.
+Runs every extraction stage (talk metadata → validation via process_talk_pipeline,
+then loading via load_talk_bundles) over all General Conference talks in the database.
 
 Features:
   - Resume from last successfully flushed talk (skip-if-processed via Weaviate)
@@ -36,8 +36,8 @@ from config.schemas import PARAGRAPH_CONFIG
 from config.pipeline_config import WEAVIATE_BATCH_SIZE
 from config.embedding import get_embedding_function, resolve_embedding_url
 from extractors.pipeline import process_talk_pipeline
-from extractors.phase3_citation_extraction import fetch_all_books
-from extractors.phase5_validation import validate_talk
+from extractors.citations import fetch_all_books
+from extractors.validation import validate_talk
 from config.weaviate_client import get_weaviate_client
 from loaders.weaviate_loader import WeaviateLoader
 from loaders.shared_transforms import load_talk_bundles, TalkBundle
@@ -125,7 +125,7 @@ def main() -> None:
                 continue
 
             try:
-                # Phases 1-4: extraction
+                # Extraction: metadata, paragraphs, citations, footnotes
                 result = process_talk_pipeline(
                     content_db, core_db, talk_id, book_cache, PARAGRAPH_CONFIG
                 )
@@ -133,7 +133,7 @@ def main() -> None:
                 if not result.success:
                     raise RuntimeError("; ".join(result.errors))
 
-                # Phase 5: validation
+                # Validation
                 validation = validate_talk(
                     result.metadata,
                     result.paragraphs,
@@ -152,7 +152,7 @@ def main() -> None:
                     validation_failed_count += 1
                     continue
 
-                # Build bundle for Phase 6
+                # Build bundle for loading
                 bundle: TalkBundle = (
                     result.metadata,
                     result.paragraphs,

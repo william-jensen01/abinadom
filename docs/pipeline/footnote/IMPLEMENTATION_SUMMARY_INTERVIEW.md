@@ -9,9 +9,9 @@
 | File | Lines | Role |
 |------|-------|------|
 | `models/footnote_data.py` | 100 | `FootnoteData` + `TalkFootnotes` dataclasses |
-| `extractors/phase4_footnote_extraction.py` | 474 | Full extraction pipeline |
-| `tests/test_phase4.py` | ~610 | 49+ tests across 8 test classes |
-| `examples/phase4_example.py` | 42 | Runnable demo against real DB |
+| `extractors/footnotes.py` | 474 | Full extraction pipeline |
+| `tests/test_footnotes.py` | ~610 | 49+ tests across 8 test classes |
+| `examples/footnotes_example.py` | 42 | Runnable demo against real DB |
 
 ### Files Modified
 
@@ -38,7 +38,7 @@ Mirrors `citation_data.py` in structure. `FootnoteData` is a frozen-at-construct
 
 ---
 
-### `extractors/phase4_footnote_extraction.py`
+### `extractors/footnotes.py`
 
 The plan called for a 3-layer architecture. Since footnotes live entirely in HTML (no DB needed), Layer 1 is absent. Layer 2 is the meaty part.
 
@@ -84,7 +84,7 @@ The function parses fresh HTML each call (not reusing a soup from `extract_footn
 
 ---
 
-### `tests/test_phase4.py`
+### `tests/test_footnotes.py`
 
 Eight test classes, 49 tests. The post-submission revision added `TestFootnoteTextRendering` — 13 tests specifically for `_render_footnote_span` and `_ccontainer_punctuation`, including two real-world HTML fixtures pulled directly from actual talk markup (the Wirthlin citation and the scripture `ccontainer rsemi` structure from footnote 5 of talk 8615).
 
@@ -94,7 +94,7 @@ Eight test classes, 49 tests. The post-submission revision added `TestFootnoteTe
 
 ### When given the plan, how did you proceed?
 
-The first thing I did was not look at the plan at all — I looked at the existing code. The plan describes what to build; the existing code tells you the constraints you have to operate within. I read `html_parsing_utils.py`, `citation_data.py`, and `phase3_citation_extraction.py` in full before writing a single line of Phase 4. The plan says "mirror TalkCitations" — but to mirror something accurately you have to know it exactly, not approximately. You need to know the exact field order in `__post_init__`, whether `asdict` or manual dict is used in `to_dict`, what `to_chromadb_format` pops from metadata.
+The first thing I did was not look at the plan at all — I looked at the existing code. The plan describes what to build; the existing code tells you the constraints you have to operate within. I read `html_parsing_utils.py`, `citation_data.py`, and `citations.py` in full before writing a single line of Phase 4. The plan says "mirror TalkCitations" — but to mirror something accurately you have to know it exactly, not approximately. You need to know the exact field order in `__post_init__`, whether `asdict` or manual dict is used in `to_dict`, what `to_chromadb_format` pops from metadata.
 
 The plan also has intentional gaps. It says "handle `*` → assign sequential number" without specifying _what number_. That's a design decision left implicit. I chose `element_index + 1` rather than a running counter because it's stateless — the same footnote gets the same number regardless of what came before it in the parse loop.
 

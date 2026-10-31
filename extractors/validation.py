@@ -1,8 +1,8 @@
 """
-Phase 5: Validation Gate
+Validation Gate
 
-Read-only cross-collection integrity check between extraction (Phases 1-4)
-and ChromaDB insertion (Phase 6).
+Read-only cross-collection integrity check between extraction (metadata, paragraphs, citations, footnotes)
+and ChromaDB insertion (loading).
 
 No enrichment, no mutations, no auto-fixing, no skipping.
 Produces a ValidationReport — that's it.
@@ -34,13 +34,13 @@ def validate_talk(
     db=None,  # Optional[Database] — core_db for citation/talk DB checks
 ) -> ValidationReport:
     """
-    Run all Phase 5 checks against a single talk's extracted data bundle.
+    Run all validation checks against a single talk's extracted data bundle.
 
     Args:
-        metadata:   Phase 1 output
-        paragraphs: Phase 2 output
-        citations:  Phase 3 output
-        footnotes:  Phase 4 output
+        metadata:   talk metadata output
+        paragraphs: paragraph extraction output
+        citations:  citation extraction output
+        footnotes:  footnote extraction output
         db:         Optional Database instance (core_db) for citation DB checks.
                     If None, DB-dependent checks are skipped with a warning.
 

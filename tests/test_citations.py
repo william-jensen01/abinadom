@@ -1,5 +1,5 @@
 """
-Unit and integration tests for Phase 3: Citation Extraction & Parsing
+Unit and integration tests for Citation Extraction & Parsing
 """
 
 import sys
@@ -10,7 +10,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 import pytest
 from unittest.mock import MagicMock
 
-from extractors.phase3_citation_extraction import (
+from extractors.citations import (
     extract_citations_from_paragraph,
     resolve_citation_from_db,
     expand_verses,
@@ -762,7 +762,7 @@ class TestIntegration:
 
     def test_process_talk_1059(self):
         """Process talk 1059 — expect 4 citations, all with DB lookup success."""
-        from extractors.phase2_paragraph_extraction import (
+        from extractors.paragraphs import (
             extract_paragraphs,
             fetch_talk_html,
         )
@@ -779,7 +779,7 @@ class TestIntegration:
 
         talk_paragraphs = extract_paragraphs(1059, html, PARAGRAPH_CONFIG)
         if not talk_paragraphs.extraction_success:
-            pytest.skip("Phase 2 extraction failed for talk 1059")
+            pytest.skip("Paragraph extraction failed for talk 1059")
 
         book_cache = fetch_all_books(core_db)
         talk_citations, warnings = process_talk_citations(
@@ -796,7 +796,7 @@ class TestIntegration:
 
     def test_zero_citation_talk(self):
         """A talk with no citations should return empty TalkCitations."""
-        from extractors.phase2_paragraph_extraction import (
+        from extractors.paragraphs import (
             extract_paragraphs,
             fetch_talk_html,
         )
@@ -829,7 +829,7 @@ class TestIntegration:
 
     def test_paragraph_flags_updated(self):
         """After processing, paragraphs with citations should have flags set."""
-        from extractors.phase2_paragraph_extraction import (
+        from extractors.paragraphs import (
             extract_paragraphs,
             fetch_talk_html,
         )

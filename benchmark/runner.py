@@ -42,8 +42,8 @@ from benchmark.metrics import (
 from benchmark.queries import CANONICAL_QUERIES
 from config.schemas import PARAGRAPH_CONFIG
 from db import content_db, core_db
-from extractors.phase3_citation_extraction import fetch_all_books
-from extractors.phase5_validation import validate_talk
+from extractors.citations import fetch_all_books
+from extractors.validation import validate_talk
 from extractors.pipeline import process_talk_pipeline
 from loaders import BaseLoader
 from config.embedding import get_embedding_function

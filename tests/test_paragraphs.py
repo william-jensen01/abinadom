@@ -1,5 +1,5 @@
 """
-Unit tests for Phase 2: Paragraph Extraction
+Unit tests for Paragraph Extraction
 
 Tests all extraction functions with various edge cases.
 """
@@ -13,7 +13,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 import pytest
 from bs4 import BeautifulSoup
 
-from extractors.phase2_paragraph_extraction import (
+from extractors.paragraphs import (
     parse_html,
     find_body_container,
     extract_stanza_text,
