@@ -430,3 +430,156 @@ def test_final_flush_on_remaining():
     # Only final flush, never hit batch boundary
     assert len(flush_sizes) == 1, f"Expected 1 flush, got {len(flush_sizes)}: {flush_sizes}"
     assert flush_sizes[0] == 2, f"Final flush should have 2 bundles, got {flush_sizes[0]}"
+
+
+# =============================================================================
+# Targeted runs: --talk-ids / --from-failed
+# =============================================================================
+
+
+def _run_targeted(argv, gc_ids, tmp_path, existing_failed=None, pipeline_side_effect=None,
+                  validation=None, talk_exists_return=True):
+    """Run main() with targeted args. gc_ids = IDs the DB treats as GC talks."""
+    mock_loader = _make_weaviate_loader_mock(talk_exists_return=talk_exists_return)
+    failed_path = tmp_path / "failed_talks.json"
+    if existing_failed is not None:
+        failed_path.write_text(json.dumps(existing_failed), encoding="utf-8")
+
+    mock_db = MagicMock()
+
+    def select_side_effect(sql, params=()):
+        return [{"ID": tid} for tid in params if tid in gc_ids]
+
+    mock_db.select.side_effect = select_side_effect
+
+    if pipeline_side_effect is None:
+        def pipeline_side_effect(content_db_arg, core_db_arg, talk_id, *args, **kwargs):
+            return _make_pipeline_result(talk_id=talk_id)
+
+    with (
+        patch.object(run_pipeline, "FAILED_TALKS_PATH", failed_path),
+        patch.object(run_pipeline, "core_db", mock_db),
+        patch.object(run_pipeline, "_get_all_gc_talk_ids") as mock_all_ids,
+        patch.object(run_pipeline, "fetch_all_books", return_value={}),
+        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
+        patch.object(run_pipeline, "WeaviateLoader", return_value=mock_loader),
+        patch.object(run_pipeline, "get_embedding_function", return_value=None),
+        patch.object(run_pipeline, "resolve_embedding_url", return_value=None),
+        patch.object(run_pipeline, "process_talk_pipeline", side_effect=pipeline_side_effect) as mock_pipeline,
+        patch.object(run_pipeline, "validate_talk", return_value=validation or _make_validation(True)),
+        patch.object(run_pipeline, "load_talk_bundles", return_value={}),
+    ):
+        sys.argv = ["run_pipeline.py", *argv]
+        run_pipeline.main()
+
+    processed = [c[0][2] for c in mock_pipeline.call_args_list]
+    failed = json.loads(failed_path.read_text(encoding="utf-8")) if failed_path.exists() else None
+    return processed, mock_loader, mock_all_ids, failed
+
+
+def test_talk_ids_processes_only_named_talks_even_if_loaded(tmp_path):
+    """--talk-ids redoes exactly the named talks, ignoring talk_exists, no full-corpus query."""
+    processed, loader, all_ids, _ = _run_targeted(
+        ["--talk-ids", "5", "3"], gc_ids={3, 5, 9}, tmp_path=tmp_path, talk_exists_return=True
+    )
+    assert processed == [5, 3]
+    assert loader.talk_exists.call_count == 0
+    assert all_ids.call_count == 0
+    assert [c[0][0] for c in loader.delete_talk.call_args_list] == [5, 3]
+
+
+def test_talk_ids_skips_unknown_and_duplicates(tmp_path, capsys):
+    processed, _, _, _ = _run_targeted(
+        ["--talk-ids", "5", "404", "5"], gc_ids={5}, tmp_path=tmp_path
+    )
+    assert processed == [5]
+    assert "404" in capsys.readouterr().out
+
+
+def test_talk_ids_no_valid_ids_exits_before_setup(tmp_path):
+    processed, _, _, _ = _run_targeted(["--talk-ids", "404"], gc_ids=set(), tmp_path=tmp_path)
+    assert processed == []
+
+
+def test_talk_ids_failed_extraction_does_not_delete(tmp_path):
+    """A redo that fails extraction keeps the old Weaviate objects."""
+    def boom(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    _, loader, _, failed = _run_targeted(
+        ["--talk-ids", "5"], gc_ids={5}, tmp_path=tmp_path, pipeline_side_effect=boom
+    )
+    assert loader.delete_talk.call_count == 0
+    assert failed == [{"talk_id": 5, "error": "boom"}]
+
+
+def test_talk_ids_validation_failure_does_not_delete(tmp_path):
+    _, loader, _, failed = _run_targeted(
+        ["--talk-ids", "5"], gc_ids={5}, tmp_path=tmp_path, validation=_make_validation(False)
+    )
+    assert loader.delete_talk.call_count == 0
+    assert [e["talk_id"] for e in failed] == [5]
+
+
+def test_targeted_run_merges_failure_log(tmp_path):
+    """Redone talks that succeed are dropped from the log; other entries are kept."""
+    existing = [{"talk_id": 1, "error": "old"}, {"talk_id": 2, "error": "old"}]
+    _, _, _, failed = _run_targeted(
+        ["--talk-ids", "1"], gc_ids={1, 2}, tmp_path=tmp_path, existing_failed=existing
+    )
+    assert failed == [{"talk_id": 2, "error": "old"}]
+
+
+def test_targeted_run_replaces_entry_when_talk_fails_again(tmp_path):
+    existing = [{"talk_id": 1, "error": "old"}, {"talk_id": 2, "error": "old"}]
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("new")
+
+    _, _, _, failed = _run_targeted(
+        ["--talk-ids", "1"], gc_ids={1, 2}, tmp_path=tmp_path,
+        existing_failed=existing, pipeline_side_effect=boom,
+    )
+    assert failed == [{"talk_id": 2, "error": "old"}, {"talk_id": 1, "error": "new"}]
+
+
+def test_from_failed_redoes_logged_talks(tmp_path):
+    existing = [{"talk_id": 150, "error": "x"}, {"talk_id": 451, "error": "y"}]
+    processed, loader, _, failed = _run_targeted(
+        ["--from-failed"], gc_ids={150, 451}, tmp_path=tmp_path, existing_failed=existing
+    )
+    assert processed == [150, 451]
+    assert loader.talk_exists.call_count == 0
+    assert failed == []
+
+
+def test_from_failed_with_no_log_does_nothing(tmp_path, capsys):
+    processed, _, _, _ = _run_targeted(["--from-failed"], gc_ids={1}, tmp_path=tmp_path)
+    assert processed == []
+    assert "nothing to do" in capsys.readouterr().out
+
+
+def test_talk_ids_and_from_failed_are_exclusive(tmp_path):
+    with pytest.raises(SystemExit):
+        _run_targeted(["--from-failed", "--talk-ids", "1"], gc_ids={1}, tmp_path=tmp_path)
+
+
+def test_weaviate_loader_delete_talk_clears_all_collections():
+    """delete_talk filters on talk_id in every collection, talks first."""
+    from loaders.weaviate_loader import WeaviateLoader
+    from config.pipeline_config import WEAVIATE_COLLECTION_NAMES
+
+    client = MagicMock()
+    client.collections.exists.return_value = True
+    loader = WeaviateLoader(client=client, embed_fn=lambda t: [])
+
+    loader.delete_talk(42)
+
+    used = [c[0][0] for c in client.collections.use.call_args_list]
+    assert used == [
+        WEAVIATE_COLLECTION_NAMES[k] for k in ["talks", "paragraphs", "citations", "footnotes"]
+    ]
+    delete_many = client.collections.use.return_value.data.delete_many
+    assert delete_many.call_count == 4
+    where = delete_many.call_args.kwargs["where"]
+    assert where.target == "talk_id" and where.value == 42

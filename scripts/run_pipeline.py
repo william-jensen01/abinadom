@@ -8,6 +8,7 @@ then loading via load_talk_bundles) over all General Conference talks in the dat
 Features:
   - Resume from last successfully flushed talk (skip-if-processed via Weaviate)
   - --force flag to re-process already-loaded talks
+  - --talk-ids / --from-failed to redo specific talks (clean delete + reload)
   - tqdm progress bar (no per-talk INFO log lines)
   - Incremental failed_talks.json writes after each failure
   - Final summary with processed/skipped/failed/validation-failed counts
@@ -16,6 +17,8 @@ Usage:
     pipenv run py scripts/run_pipeline.py
     pipenv run py scripts/run_pipeline.py --force
     pipenv run py scripts/run_pipeline.py --buffered
+    pipenv run py scripts/run_pipeline.py --talk-ids 150 451
+    pipenv run py scripts/run_pipeline.py --from-failed
 """
 
 import argparse
@@ -60,6 +63,38 @@ def _get_all_gc_talk_ids() -> List[int]:
     return [row["ID"] for row in rows]
 
 
+def _filter_gc_talk_ids(talk_ids: List[int]) -> List[int]:
+    """
+    Return the subset of talk_ids that are General Conference talks, in the
+    order given, with duplicates removed.
+    """
+    unique_ids = list(dict.fromkeys(talk_ids))
+    if not unique_ids:
+        return []
+    placeholders = ",".join("?" * len(unique_ids))
+    rows = core_db.select(
+        "SELECT t.ID FROM talk t INNER JOIN conference_talk ct ON ct.TalkID = t.ID "
+        f"WHERE t.ID IN ({placeholders})",
+        unique_ids,
+    )
+    found = {row["ID"] for row in rows}
+    return [tid for tid in unique_ids if tid in found]
+
+
+def _load_failed_talks() -> List[Dict[str, Any]]:
+    """Read failed_talks.json, or return [] if it doesn't exist."""
+    if not FAILED_TALKS_PATH.exists():
+        return []
+    with open(FAILED_TALKS_PATH, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _write_failed_talks(failed_talks: List[Dict[str, Any]]) -> None:
+    FAILED_TALKS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(FAILED_TALKS_PATH, "w", encoding="utf-8") as f:
+        json.dump(failed_talks, f, indent=2, ensure_ascii=False)
+
+
 def _record_failure(talk_id: int, error: str, failed_talks: list) -> None:
     """
     Append a failure record to the failed_talks list and write it to disk.
@@ -72,9 +107,7 @@ def _record_failure(talk_id: int, error: str, failed_talks: list) -> None:
         failed_talks: The in-memory list of failure dicts (mutated in place).
     """
     failed_talks.append({"talk_id": talk_id, "error": error})
-    FAILED_TALKS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(FAILED_TALKS_PATH, "w", encoding="utf-8") as f:
-        json.dump(failed_talks, f, indent=2, ensure_ascii=False)
+    _write_failed_talks(failed_talks)
 
 
 def main() -> None:
@@ -91,7 +124,46 @@ def main() -> None:
         action="store_true",
         help="Buffer records across talks and bulk-flush to Weaviate (fewer round trips)",
     )
+    target = parser.add_mutually_exclusive_group()
+    target.add_argument(
+        "--talk-ids",
+        nargs="+",
+        type=int,
+        metavar="ID",
+        help="Redo only these talks: delete their Weaviate objects and reload "
+        "(always reprocesses; no --force needed)",
+    )
+    target.add_argument(
+        "--from-failed",
+        action="store_true",
+        help=f"Redo the talks listed in {FAILED_TALKS_PATH.name} (same as --talk-ids)",
+    )
     args = parser.parse_args()
+
+    # --- Resolve targeted talk IDs (before any heavy setup) ---
+    targeted = args.talk_ids is not None or args.from_failed
+    failed_talks: List[Dict[str, Any]] = []
+    if targeted:
+        if args.from_failed:
+            requested = [entry["talk_id"] for entry in _load_failed_talks()]
+            if not requested:
+                print(f"No talks in {FAILED_TALKS_PATH}; nothing to do.")
+                return
+        else:
+            requested = args.talk_ids
+        target_ids = _filter_gc_talk_ids(requested)
+        unknown = [tid for tid in dict.fromkeys(requested) if tid not in set(target_ids)]
+        if unknown:
+            print(f"[WARN] Not General Conference talks, skipping: {unknown}")
+        if not target_ids:
+            print("No valid talk IDs to process.")
+            return
+        # Merge into the existing failure log: keep other talks' entries,
+        # drop entries for the talks being redone (re-added if they fail again).
+        target_set = set(target_ids)
+        failed_talks = [
+            entry for entry in _load_failed_talks() if entry["talk_id"] not in target_set
+        ]
 
     start_time = time.time()
 
@@ -107,7 +179,7 @@ def main() -> None:
         buffered=args.buffered,
         query_embed_fn=query_embedding_fn,
     ) as loader:
-        all_talk_ids = _get_all_gc_talk_ids()
+        all_talk_ids = target_ids if targeted else _get_all_gc_talk_ids()
 
         # --- Counters and buffers ---
         pending_bundles: List[TalkBundle] = []
@@ -116,11 +188,10 @@ def main() -> None:
         failed_count: int = 0
         validation_failed_count: int = 0
         processed_count: int = 0
-        failed_talks: List[Dict[str, Any]] = []
 
         # --- Main per-talk loop ---
         for talk_id in tqdm(all_talk_ids, unit="talk", desc="Pipeline"):
-            if not args.force and loader.talk_exists(talk_id):
+            if not targeted and not args.force and loader.talk_exists(talk_id):
                 skipped_count += 1
                 continue
 
@@ -152,6 +223,12 @@ def main() -> None:
                     validation_failed_count += 1
                     continue
 
+                # Targeted redo: clear old objects so nothing is left orphaned.
+                # Done only after extraction + validation succeed, so a failed
+                # redo leaves the previous version in place.
+                if targeted:
+                    loader.delete_talk(talk_id)
+
                 # Build bundle for loading
                 bundle: TalkBundle = (
                     result.metadata,
@@ -180,10 +257,15 @@ def main() -> None:
         if pending_bundles:
             load_talk_bundles(pending_bundles, loader)
 
+    # Targeted runs rewrite the merged log so talks that now succeed are removed
+    if targeted:
+        _write_failed_talks(failed_talks)
+
     # --- Final summary ---
     elapsed = time.time() - start_time
     print(f"\nRun complete in {elapsed:.1f}s")
-    print(f"  Total GC talks:    {len(all_talk_ids)}")
+    total_label = "Selected talks:   " if targeted else "Total GC talks:   "
+    print(f"  {total_label} {len(all_talk_ids)}")
     print(f"  Processed:         {processed_count}")
     print(f"  Skipped (cached):  {skipped_count}")
     print(f"  Failed:            {failed_count}")

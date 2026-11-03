@@ -21,6 +21,7 @@ import weaviate
 import weaviate.classes as wvc
 from weaviate.classes.config import DataType, Property
 from weaviate.classes.data import DataObject
+from weaviate.classes.query import Filter
 from weaviate.util import generate_uuid5
 from loaders import BaseLoader
 from loaders.shared_transforms import TalkBundle, prepare_talk_bundle
@@ -276,6 +277,18 @@ class WeaviateLoader(BaseLoader):
         col = self._client.collections.use(WEAVIATE_COLLECTION_NAMES["talks"])
         obj = col.query.fetch_object_by_id(generate_uuid5(f"talk_{talk_id}"))
         return obj is not None
+
+    def delete_talk(self, talk_id: int) -> None:
+        """Delete every object for talk_id across all 4 collections.
+
+        Used before a targeted reload so objects the new extraction no longer
+        produces don't linger as orphans. The talk object goes first, so a crash
+        mid-delete leaves the talk looking un-processed (see flush()).
+        """
+        delete_order = ["talks", "paragraphs", "citations", "footnotes"]
+        for key in delete_order:
+            col = self._client.collections.use(WEAVIATE_COLLECTION_NAMES[key])
+            col.data.delete_many(where=Filter.by_property("talk_id").equal(talk_id))
 
     def query(
         self,
