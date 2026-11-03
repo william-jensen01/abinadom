@@ -58,6 +58,7 @@ class WeaviateLoader(BaseLoader):
             key: [] for key in WEAVIATE_COLLECTION_NAMES
         }
         self._buffer_talk_count: int = 0
+        self._insert_failures: dict[int, str] = {}
         self._ensure_schema()
 
     def _ensure_schema(self) -> None:
@@ -232,8 +233,13 @@ class WeaviateLoader(BaseLoader):
         measure: talk_exists() checks only the talks collection, so writing talks
         last guarantees a mid-flush crash leaves the talk looking un-processed,
         triggering safe reprocessing on resume (inserts are idempotent via
-        deterministic UUIDs). Buffers are always cleared, even on error, to avoid
-        infinite retry loops; any lost objects are safely reprocessed next run.
+        deterministic UUIDs).
+
+        The same rule covers insert errors: if any of a talk's paragraph,
+        citation or footnote objects fail, that talk's talk object is withheld
+        so the talk still looks un-processed. Failed talks are collected for
+        pop_insert_failures(). Buffers are always cleared, even on error, to
+        avoid infinite retry loops.
         """
         total = sum(len(buf) for buf in self._buffers.values())
         if total == 0:
@@ -245,38 +251,69 @@ class WeaviateLoader(BaseLoader):
             self._buffer_talk_count,
         )
 
-        flush_order = ["paragraphs", "citations", "footnotes", "talks"]
-        for key in flush_order:
-            objects = self._buffers[key]
-            if not objects:
-                continue
-            class_name = WEAVIATE_COLLECTION_NAMES[key]
-            col = self._client.collections.use(class_name)
-            try:
-                result = col.data.insert_many(objects)
-                if result.has_errors:
-                    for obj_idx, err in result.errors.items():
-                        logger.warning(
-                            "Weaviate insert error in %s idx=%s: %s",
-                            class_name,
-                            obj_idx,
-                            err,
-                        )
-            except Exception as e:
-                logger.warning(
-                    "Weaviate insert_many error in %s (%d objects): %s",
-                    class_name,
-                    len(objects),
-                    e,
-                )
+        failed: dict[int, str] = {}
+        try:
+            for key in ["paragraphs", "citations", "footnotes", "talks"]:
+                objects = self._buffers[key]
+                if key == "talks":
+                    objects = [o for o in objects if o.properties.get("talk_id") not in failed]
+                if not objects:
+                    continue
+                self._insert(key, objects, failed)
+        finally:
+            self._buffers = {key: [] for key in WEAVIATE_COLLECTION_NAMES}
+            self._buffer_talk_count = 0
 
-        self._buffers = {key: [] for key in WEAVIATE_COLLECTION_NAMES}
-        self._buffer_talk_count = 0
+        for talk_id, error in failed.items():
+            self._insert_failures.setdefault(talk_id, error)
+
+    def _insert(self, key: str, objects: list[DataObject], failed: dict[int, str]) -> None:
+        """insert_many one collection; record the talk_id of every object that failed."""
+        class_name = WEAVIATE_COLLECTION_NAMES[key]
+        col = self._client.collections.use(class_name)
+        try:
+            result = col.data.insert_many(objects)
+        except Exception as e:
+            logger.warning(
+                "Weaviate insert_many error in %s (%d objects): %s",
+                class_name,
+                len(objects),
+                e,
+            )
+            for obj in objects:
+                failed.setdefault(obj.properties.get("talk_id"), f"weaviate {class_name}: {e}")
+            return
+        if result.has_errors:
+            for obj_idx, err in result.errors.items():
+                message = getattr(err, "message", err)
+                logger.warning(
+                    "Weaviate insert error in %s idx=%s: %s", class_name, obj_idx, message
+                )
+                talk_id = objects[obj_idx].properties.get("talk_id")
+                failed.setdefault(talk_id, f"weaviate {class_name}: {message}")
+
+    def pop_insert_failures(self) -> dict[int, str]:
+        """Return {talk_id: error} for talks whose inserts failed since the last call."""
+        failures, self._insert_failures = self._insert_failures, {}
+        return failures
 
     def talk_exists(self, talk_id: int) -> bool:
         col = self._client.collections.use(WEAVIATE_COLLECTION_NAMES["talks"])
         obj = col.query.fetch_object_by_id(generate_uuid5(f"talk_{talk_id}"))
         return obj is not None
+
+    def existing_talk_ids(self) -> set[int]:
+        """Return the talk_id of every loaded talk, in one paged scan.
+
+        Lets a resumed run skip loaded talks without one talk_exists() round
+        trip per talk.
+        """
+        col = self._client.collections.use(WEAVIATE_COLLECTION_NAMES["talks"])
+        return {
+            obj.properties["talk_id"]
+            for obj in col.iterator(return_properties=["talk_id"])
+            if obj.properties.get("talk_id") is not None
+        }
 
     def delete_talk(self, talk_id: int) -> None:
         """Delete every object for talk_id across all 4 collections.

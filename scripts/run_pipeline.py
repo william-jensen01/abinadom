@@ -8,6 +8,8 @@ then loading via load_talk_bundles) over all General Conference talks in the dat
 Features:
   - Resume from last successfully flushed talk (skip-if-processed via Weaviate)
   - --force flag to re-process already-loaded talks
+  - Weaviate writes buffered across talks by default (--unbuffered to disable)
+  - Talks whose Weaviate inserts fail are recorded in failed_talks.json
   - --talk-ids / --from-failed to redo specific talks (clean delete + reload)
   - tqdm progress bar (no per-talk INFO log lines)
   - Incremental failed_talks.json writes after each failure
@@ -16,7 +18,7 @@ Features:
 Usage:
     pipenv run py scripts/run_pipeline.py
     pipenv run py scripts/run_pipeline.py --force
-    pipenv run py scripts/run_pipeline.py --buffered
+    pipenv run py scripts/run_pipeline.py --unbuffered
     pipenv run py scripts/run_pipeline.py --talk-ids 150 451
     pipenv run py scripts/run_pipeline.py --from-failed
 """
@@ -36,14 +38,12 @@ from tqdm import tqdm
 
 from db import content_db, core_db
 from config.schemas import PARAGRAPH_CONFIG
-from config.pipeline_config import WEAVIATE_BATCH_SIZE
 from config.embedding import get_embedding_function, resolve_embedding_url
 from extractors.pipeline import process_talk_pipeline
 from extractors.citations import fetch_all_books
 from extractors.validation import validate_talk
 from config.weaviate_client import get_weaviate_client
 from loaders.weaviate_loader import WeaviateLoader
-from loaders.shared_transforms import load_talk_bundles, TalkBundle
 
 logger = logging.getLogger(__name__)
 
@@ -120,10 +120,13 @@ def main() -> None:
         help="Re-process already-loaded talks (skip the Weaviate existence check)",
     )
     parser.add_argument(
-        "--buffered",
+        "--unbuffered",
         action="store_true",
-        help="Buffer records across talks and bulk-flush to Weaviate (fewer round trips)",
+        help="Write each talk to Weaviate as soon as it is extracted "
+        "(default: buffer objects across talks and bulk-flush)",
     )
+    # Buffering is now the default; --buffered is kept so old commands still work
+    parser.add_argument("--buffered", action="store_true", help=argparse.SUPPRESS)
     target = parser.add_mutually_exclusive_group()
     target.add_argument(
         "--talk-ids",
@@ -176,22 +179,35 @@ def main() -> None:
     with WeaviateLoader(
         client=client,
         embed_fn=embedding_fn,
-        buffered=args.buffered,
+        buffered=not args.unbuffered,
         query_embed_fn=query_embedding_fn,
     ) as loader:
         all_talk_ids = target_ids if targeted else _get_all_gc_talk_ids()
 
-        # --- Counters and buffers ---
-        pending_bundles: List[TalkBundle] = []
-        processed_since_flush: int = 0
+        # --- Counters ---
         skipped_count: int = 0
         failed_count: int = 0
         validation_failed_count: int = 0
+        load_failed_count: int = 0
         processed_count: int = 0
+
+        def record_load_failures() -> None:
+            """Record talks whose Weaviate inserts failed in the last flush."""
+            nonlocal load_failed_count
+            for failed_id, error in loader.pop_insert_failures().items():
+                tqdm.write(f"[ERROR] talk_id={failed_id}: {error}")
+                _record_failure(failed_id, error, failed_talks)
+                load_failed_count += 1
+
+        # One scan of loaded talk IDs instead of a talk_exists() call per talk
+        if targeted or args.force:
+            loaded_ids: set = set()
+        else:
+            loaded_ids = loader.existing_talk_ids()
 
         # --- Main per-talk loop ---
         for talk_id in tqdm(all_talk_ids, unit="talk", desc="Pipeline"):
-            if not targeted and not args.force and loader.talk_exists(talk_id):
+            if talk_id in loaded_ids:
                 skipped_count += 1
                 continue
 
@@ -229,23 +245,17 @@ def main() -> None:
                 if targeted:
                     loader.delete_talk(talk_id)
 
-                # Build bundle for loading
-                bundle: TalkBundle = (
-                    result.metadata,
-                    result.paragraphs,
-                    result.citations,
-                    result.footnotes,
-                    validation,
+                # Embed and hand to the loader, which does the only buffering
+                loader.load(
+                    (
+                        result.metadata,
+                        result.paragraphs,
+                        result.citations,
+                        result.footnotes,
+                        validation,
+                    )
                 )
-                pending_bundles.append(bundle)
-                processed_since_flush += 1
                 processed_count += 1
-
-                # Batch flush: load when buffer reaches WEAVIATE_BATCH_SIZE
-                if processed_since_flush >= WEAVIATE_BATCH_SIZE:
-                    load_talk_bundles(pending_bundles, loader)
-                    pending_bundles.clear()
-                    processed_since_flush = 0
 
             except Exception as exc:
                 logger.error("talk_id=%d failed: %s", talk_id, exc)
@@ -253,9 +263,11 @@ def main() -> None:
                 _record_failure(talk_id, str(exc), failed_talks)
                 failed_count += 1
 
-        # --- Final flush: load any remaining buffered talks ---
-        if pending_bundles:
-            load_talk_bundles(pending_bundles, loader)
+            record_load_failures()
+
+        # --- Final flush: write whatever the loader still holds ---
+        loader.flush()
+        record_load_failures()
 
     # Targeted runs rewrite the merged log so talks that now succeed are removed
     if targeted:
@@ -266,10 +278,11 @@ def main() -> None:
     print(f"\nRun complete in {elapsed:.1f}s")
     total_label = "Selected talks:   " if targeted else "Total GC talks:   "
     print(f"  {total_label} {len(all_talk_ids)}")
-    print(f"  Processed:         {processed_count}")
+    print(f"  Processed:         {processed_count - load_failed_count}")
     print(f"  Skipped (cached):  {skipped_count}")
     print(f"  Failed:            {failed_count}")
     print(f"  Validation failed: {validation_failed_count}")
+    print(f"  Load failed:       {load_failed_count}")
     if failed_talks:
         print(f"  Failed talks log:  {FAILED_TALKS_PATH}")
 

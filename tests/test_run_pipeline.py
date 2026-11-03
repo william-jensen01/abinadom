@@ -3,16 +3,14 @@
 Unit tests for the pipeline orchestrator: scripts/run_pipeline.py
 
 All tests mock external dependencies (DB, Weaviate, extractors) using
-unittest.mock.patch so no real database or Weaviate is needed.
-
-Patches WeaviateLoader and get_weaviate_client so no real Weaviate instance is needed.
+unittest.mock.patch so no real database, embedding service or Weaviate is needed.
 """
 
 import json
 import sys
-from io import StringIO
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -24,7 +22,7 @@ from scripts.run_pipeline import _get_all_gc_talk_ids, _record_failure
 
 
 # =============================================================================
-# Fixtures / helpers
+# Helpers
 # =============================================================================
 
 
@@ -49,17 +47,91 @@ def _make_validation(is_valid=True):
     return v
 
 
-def _make_weaviate_loader_mock(talk_exists_return=False):
-    """Build a mock WeaviateLoader context manager."""
-    mock_loader = MagicMock()
-    mock_loader.__enter__ = MagicMock(return_value=mock_loader)
-    mock_loader.__exit__ = MagicMock(return_value=False)
-    mock_loader.talk_exists.return_value = talk_exists_return
-    return mock_loader
+def _default_pipeline(content_db_arg, core_db_arg, talk_id, *args, **kwargs):
+    result = _make_pipeline_result(talk_id=talk_id)
+    result.metadata.talk_id = talk_id
+    return result
+
+
+def _run(
+    argv=(),
+    *,
+    tmp_path,
+    all_ids=(1, 2),
+    loaded_ids=(),
+    gc_ids=None,
+    existing_failed=None,
+    pipeline_side_effect=None,
+    validation=None,
+    insert_failures=None,
+    load_side_effect=None,
+):
+    """
+    Run main() with everything external mocked.
+
+    all_ids:         what _get_all_gc_talk_ids returns (full-corpus runs)
+    loaded_ids:      talk IDs the loader reports as already in Weaviate
+    gc_ids:          IDs core_db treats as GC talks (targeted runs); defaults to all_ids
+    insert_failures: {talk_id: error} the loader reports after its final flush
+    """
+    gc_ids = set(all_ids if gc_ids is None else gc_ids)
+
+    loader = MagicMock()
+    loader.__enter__ = MagicMock(return_value=loader)
+    loader.__exit__ = MagicMock(return_value=False)
+    loader.existing_talk_ids.return_value = set(loaded_ids)
+    loader.load.side_effect = load_side_effect
+    pending = {}
+    loader.flush.side_effect = lambda: pending.update(insert_failures or {})
+    loader.pop_insert_failures.side_effect = lambda: (dict(pending), pending.clear())[0]
+
+    mock_db = MagicMock()
+    mock_db.select.side_effect = lambda sql, params=(): [
+        {"ID": tid} for tid in params if tid in gc_ids
+    ]
+
+    failed_path = tmp_path / "failed_talks.json"
+    if existing_failed is not None:
+        failed_path.write_text(json.dumps(existing_failed), encoding="utf-8")
+
+    with (
+        patch.object(run_pipeline, "FAILED_TALKS_PATH", failed_path),
+        patch.object(run_pipeline, "core_db", mock_db),
+        patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=list(all_ids)) as all_ids_mock,
+        patch.object(run_pipeline, "fetch_all_books", return_value={}),
+        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
+        patch.object(run_pipeline, "WeaviateLoader", return_value=loader) as loader_cls,
+        patch.object(run_pipeline, "get_embedding_function", return_value=None),
+        patch.object(run_pipeline, "resolve_embedding_url", return_value=None),
+        patch.object(
+            run_pipeline,
+            "process_talk_pipeline",
+            side_effect=pipeline_side_effect or _default_pipeline,
+        ) as pipeline,
+        patch.object(
+            run_pipeline, "validate_talk", return_value=validation or _make_validation(True)
+        ) as validate,
+    ):
+        sys.argv = ["run_pipeline.py", *argv]
+        run_pipeline.main()
+
+    return SimpleNamespace(
+        processed=[c[0][2] for c in pipeline.call_args_list],
+        validate=validate,
+        loader=loader,
+        loader_cls=loader_cls,
+        loaded=[c[0][0][0].talk_id for c in loader.load.call_args_list],
+        all_ids_mock=all_ids_mock,
+        failed=json.loads(failed_path.read_text(encoding="utf-8")) if failed_path.exists() else None,
+    )
+
+
+def _boom(*args, **kwargs):
+    raise RuntimeError("boom")
 
 
 # =============================================================================
-# Test: _get_all_gc_talk_ids
+# Helpers under test
 # =============================================================================
 
 
@@ -71,89 +143,9 @@ def test_get_all_gc_talk_ids():
     with patch.object(run_pipeline, "core_db", mock_db):
         result = _get_all_gc_talk_ids()
 
-    # Assert the SQL contains INNER JOIN conference_talk
-    call_args = mock_db.select.call_args
-    sql = call_args[0][0]
+    sql = mock_db.select.call_args[0][0]
     assert "INNER JOIN conference_talk" in sql, f"Expected INNER JOIN conference_talk in SQL: {sql}"
-
-    # Assert the result is a list of ints
     assert result == [1, 2]
-
-
-# =============================================================================
-# Test: full loop calls all phases
-# =============================================================================
-
-
-def test_full_loop_calls_all_phases():
-    """main() calls process_talk_pipeline and validate_talk for each talk, then load_talk_bundles."""
-    mock_loader = _make_weaviate_loader_mock(talk_exists_return=False)
-
-    mock_pipeline_result = _make_pipeline_result(talk_id=1)
-    mock_validation = _make_validation(is_valid=True)
-
-    with (
-        patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[1, 2]),
-        patch.object(run_pipeline, "fetch_all_books", return_value={}),
-        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
-        patch.object(run_pipeline, "WeaviateLoader", return_value=mock_loader),
-        patch.object(run_pipeline, "get_embedding_function", return_value=None),
-        patch.object(run_pipeline, "process_talk_pipeline", return_value=mock_pipeline_result) as mock_pipeline,
-        patch.object(run_pipeline, "validate_talk", return_value=mock_validation) as mock_validate,
-        patch.object(run_pipeline, "load_talk_bundles", return_value={}) as mock_load,
-        patch.object(run_pipeline, "_record_failure"),
-    ):
-        sys.argv = ["run_pipeline.py"]
-        run_pipeline.main()
-
-    # process_talk_pipeline called twice (for talk_id 1 and 2)
-    assert mock_pipeline.call_count == 2
-    # validate_talk called twice
-    assert mock_validate.call_count == 2
-    # load_talk_bundles called at least once (final flush)
-    assert mock_load.call_count >= 1
-
-
-# =============================================================================
-# Test: resume skips already-processed talks
-# =============================================================================
-
-
-def test_resume_skips_processed():
-    """When Weaviate has talk_1, skip it; process talk_2."""
-    mock_loader = _make_weaviate_loader_mock()
-
-    def talk_exists_side_effect(talk_id):
-        return talk_id == 1  # talk_1 is cached, talk_2 is not
-
-    mock_loader.talk_exists.side_effect = talk_exists_side_effect
-
-    mock_pipeline_result = _make_pipeline_result(talk_id=2)
-    mock_validation = _make_validation(is_valid=True)
-
-    with (
-        patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[1, 2]),
-        patch.object(run_pipeline, "fetch_all_books", return_value={}),
-        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
-        patch.object(run_pipeline, "WeaviateLoader", return_value=mock_loader),
-        patch.object(run_pipeline, "get_embedding_function", return_value=None),
-        patch.object(run_pipeline, "process_talk_pipeline", return_value=mock_pipeline_result) as mock_pipeline,
-        patch.object(run_pipeline, "validate_talk", return_value=mock_validation),
-        patch.object(run_pipeline, "load_talk_bundles", return_value={}),
-        patch.object(run_pipeline, "_record_failure"),
-    ):
-        sys.argv = ["run_pipeline.py"]
-        run_pipeline.main()
-
-    # Only called once (for talk_id=2, not talk_id=1)
-    assert mock_pipeline.call_count == 1
-    call_talk_id = mock_pipeline.call_args[0][2]  # positional arg index 2
-    assert call_talk_id == 2
-
-
-# =============================================================================
-# Test: _record_failure writes JSON
-# =============================================================================
 
 
 def test_record_failure_writes_json(tmp_path):
@@ -164,272 +156,103 @@ def test_record_failure_writes_json(tmp_path):
     with patch.object(run_pipeline, "FAILED_TALKS_PATH", fake_path):
         _record_failure(123, "some error", failed_talks)
 
-    # Check the in-memory list was updated
-    assert len(failed_talks) == 1
-    assert failed_talks[0] == {"talk_id": 123, "error": "some error"}
-
-    # Check the file was written
-    assert fake_path.exists()
-    with open(fake_path, encoding="utf-8") as f:
-        data = json.load(f)
-    assert len(data) == 1
-    assert data[0] == {"talk_id": 123, "error": "some error"}
+    assert failed_talks == [{"talk_id": 123, "error": "some error"}]
+    assert json.loads(fake_path.read_text(encoding="utf-8")) == [
+        {"talk_id": 123, "error": "some error"}
+    ]
 
 
 # =============================================================================
-# Test: exception in process_talk_pipeline logs failure
+# Full-corpus runs
 # =============================================================================
 
 
-def test_failed_talk_logged_on_exception():
-    """When process_talk_pipeline raises, _record_failure is called with the talk_id."""
-    mock_loader = _make_weaviate_loader_mock(talk_exists_return=False)
-
-    with (
-        patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[42]),
-        patch.object(run_pipeline, "fetch_all_books", return_value={}),
-        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
-        patch.object(run_pipeline, "WeaviateLoader", return_value=mock_loader),
-        patch.object(run_pipeline, "get_embedding_function", return_value=None),
-        patch.object(run_pipeline, "process_talk_pipeline", side_effect=RuntimeError("boom")),
-        patch.object(run_pipeline, "load_talk_bundles", return_value={}),
-        patch.object(run_pipeline, "_record_failure") as mock_record,
-    ):
-        sys.argv = ["run_pipeline.py"]
-        run_pipeline.main()
-
-    # _record_failure should have been called once with talk_id=42
-    assert mock_record.call_count == 1
-    args = mock_record.call_args[0]
-    assert args[0] == 42  # talk_id
-    assert "boom" in args[1]  # error message
+def test_full_loop_extracts_validates_and_loads_each_talk(tmp_path):
+    r = _run(tmp_path=tmp_path, all_ids=(1, 2))
+    assert r.processed == [1, 2]
+    assert r.validate.call_count == 2
+    assert r.loader.load.call_count == 2
+    assert r.loader.flush.call_count >= 1  # final flush
 
 
-# =============================================================================
-# Test: validation failure skips talk and records it
-# =============================================================================
+def test_resume_skips_loaded_talks_with_one_scan(tmp_path):
+    """Loaded talks come from one existing_talk_ids() scan, not a talk_exists() per talk."""
+    r = _run(tmp_path=tmp_path, all_ids=(1, 2, 3), loaded_ids={1, 3})
+    assert r.processed == [2]
+    assert r.loader.existing_talk_ids.call_count == 1
+    assert r.loader.talk_exists.call_count == 0
 
 
-def test_validation_failure_skips_talk():
-    """When validate_talk returns is_valid=False, talk is not added to bundles."""
-    mock_loader = _make_weaviate_loader_mock(talk_exists_return=False)
+def test_force_reprocesses_without_scanning(tmp_path):
+    r = _run(["--force"], tmp_path=tmp_path, all_ids=(1, 2), loaded_ids={1, 2})
+    assert r.processed == [1, 2]
+    assert r.loader.existing_talk_ids.call_count == 0
 
-    mock_pipeline_result = _make_pipeline_result(talk_id=7)
-    mock_validation = _make_validation(is_valid=False)
 
-    with (
-        patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[7]),
-        patch.object(run_pipeline, "fetch_all_books", return_value={}),
-        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
-        patch.object(run_pipeline, "WeaviateLoader", return_value=mock_loader),
-        patch.object(run_pipeline, "get_embedding_function", return_value=None),
-        patch.object(run_pipeline, "process_talk_pipeline", return_value=mock_pipeline_result),
-        patch.object(run_pipeline, "validate_talk", return_value=mock_validation),
-        patch.object(run_pipeline, "load_talk_bundles", return_value={}) as mock_load,
-        patch.object(run_pipeline, "_record_failure") as mock_record,
-    ):
-        sys.argv = ["run_pipeline.py"]
-        run_pipeline.main()
+def test_extraction_exception_is_recorded(tmp_path):
+    r = _run(tmp_path=tmp_path, all_ids=(42,), pipeline_side_effect=_boom)
+    assert r.failed == [{"talk_id": 42, "error": "boom"}]
+    assert r.loader.load.call_count == 0
 
-    # _record_failure must have been called (validation failure logged)
-    assert mock_record.call_count == 1
-    assert mock_record.call_args[0][0] == 7
 
-    # load_talk_bundles should NOT be called (pending_bundles stays empty, no final flush needed)
-    # OR if called, bundles list must be empty
-    if mock_load.call_count > 0:
-        # If called (final flush path), the bundles arg should be empty
-        bundles_arg = mock_load.call_args[0][0]
-        assert len(bundles_arg) == 0
+def test_unsuccessful_result_is_recorded(tmp_path):
+    def unsuccessful(content_db_arg, core_db_arg, talk_id, *args, **kwargs):
+        return _make_pipeline_result(talk_id=talk_id, success=False)
+
+    r = _run(tmp_path=tmp_path, all_ids=(7,), pipeline_side_effect=unsuccessful)
+    assert r.failed == [{"talk_id": 7, "error": "extraction failed"}]
+
+
+def test_validation_failure_is_recorded_and_not_loaded(tmp_path):
+    r = _run(tmp_path=tmp_path, all_ids=(7,), validation=_make_validation(False))
+    assert [e["talk_id"] for e in r.failed] == [7]
+    assert r.loader.load.call_count == 0
+
+
+def test_load_exception_is_recorded_against_that_talk(tmp_path):
+    """An embedding/load error for one talk doesn't take other talks down with it."""
+    def load(bundle):
+        if bundle[0].talk_id == 2:
+            raise RuntimeError("embed down")
+
+    r = _run(tmp_path=tmp_path, all_ids=(1, 2, 3), load_side_effect=load)
+    assert r.failed == [{"talk_id": 2, "error": "embed down"}]
+    assert r.loader.load.call_count == 3
+
+
+def test_final_summary_printed(tmp_path, capsys):
+    _run(tmp_path=tmp_path, all_ids=(1,))
+    out = capsys.readouterr().out
+    for label in ("Run complete", "Processed:", "Skipped", "Failed:", "Load failed:"):
+        assert label in out
 
 
 # =============================================================================
-# Test: final summary is printed
+# Weaviate buffering and insert failures
 # =============================================================================
 
 
-def test_final_summary_printed(capsys):
-    """After the loop, main() prints a summary with all counters."""
-    mock_loader = _make_weaviate_loader_mock(talk_exists_return=False)
-
-    mock_pipeline_result = _make_pipeline_result(talk_id=1)
-    mock_validation = _make_validation(is_valid=True)
-
-    with (
-        patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[1]),
-        patch.object(run_pipeline, "fetch_all_books", return_value={}),
-        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
-        patch.object(run_pipeline, "WeaviateLoader", return_value=mock_loader),
-        patch.object(run_pipeline, "get_embedding_function", return_value=None),
-        patch.object(run_pipeline, "process_talk_pipeline", return_value=mock_pipeline_result),
-        patch.object(run_pipeline, "validate_talk", return_value=mock_validation),
-        patch.object(run_pipeline, "load_talk_bundles", return_value={}),
-        patch.object(run_pipeline, "_record_failure"),
-    ):
-        sys.argv = ["run_pipeline.py"]
-        run_pipeline.main()
-
-    captured = capsys.readouterr()
-    output = captured.out
-
-    assert "Run complete" in output
-    assert "Processed:" in output
-    assert "Skipped" in output
-    assert "Failed:" in output
+def test_loader_is_buffered_by_default(tmp_path):
+    r = _run(tmp_path=tmp_path)
+    assert r.loader_cls.call_args.kwargs["buffered"] is True
 
 
-# =============================================================================
-# Test: skip mode default (3 talks, 2 already cached)
-# =============================================================================
+def test_unbuffered_flag_disables_buffering(tmp_path):
+    r = _run(["--unbuffered"], tmp_path=tmp_path)
+    assert r.loader_cls.call_args.kwargs["buffered"] is False
 
 
-def test_skip_mode_default():
-    """Default mode (no --force): talks already in Weaviate are skipped; only unprocessed talk is processed."""
-    mock_loader = _make_weaviate_loader_mock()
-
-    def talk_exists_side_effect(talk_id):
-        return talk_id in (1, 3)  # talk_1 and talk_3 are cached; talk_2 is not
-
-    mock_loader.talk_exists.side_effect = talk_exists_side_effect
-
-    mock_pipeline_result = _make_pipeline_result(talk_id=2)
-    mock_validation = _make_validation(is_valid=True)
-
-    with (
-        patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[1, 2, 3]),
-        patch.object(run_pipeline, "fetch_all_books", return_value={}),
-        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
-        patch.object(run_pipeline, "WeaviateLoader", return_value=mock_loader),
-        patch.object(run_pipeline, "get_embedding_function", return_value=None),
-        patch.object(run_pipeline, "process_talk_pipeline", return_value=mock_pipeline_result) as mock_pipeline,
-        patch.object(run_pipeline, "validate_talk", return_value=mock_validation),
-        patch.object(run_pipeline, "load_talk_bundles", return_value={}),
-        patch.object(run_pipeline, "_record_failure"),
-    ):
-        sys.argv = ["run_pipeline.py"]
-        run_pipeline.main()
-
-    # Only talk_id=2 (not in Weaviate) should be processed; talk_1 and talk_3 skipped
-    assert mock_pipeline.call_count == 1
-    call_talk_id = mock_pipeline.call_args[0][2]
-    assert call_talk_id == 2
+def test_legacy_buffered_flag_still_accepted(tmp_path):
+    r = _run(["--buffered"], tmp_path=tmp_path)
+    assert r.loader_cls.call_args.kwargs["buffered"] is True
 
 
-# =============================================================================
-# Test: --force flag bypasses Weaviate skip check entirely
-# =============================================================================
-
-
-def test_force_flag_reprocesses():
-    """--force flag causes all talks to be reprocessed; talk_exists() is NOT called."""
-    mock_loader = _make_weaviate_loader_mock()
-
-    mock_validation = _make_validation(is_valid=True)
-
-    def pipeline_side_effect(content_db_arg, core_db_arg, talk_id, *args, **kwargs):
-        return _make_pipeline_result(talk_id=talk_id)
-
-    with (
-        patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[1, 2]),
-        patch.object(run_pipeline, "fetch_all_books", return_value={}),
-        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
-        patch.object(run_pipeline, "WeaviateLoader", return_value=mock_loader),
-        patch.object(run_pipeline, "get_embedding_function", return_value=None),
-        patch.object(run_pipeline, "process_talk_pipeline", side_effect=pipeline_side_effect) as mock_pipeline,
-        patch.object(run_pipeline, "validate_talk", return_value=mock_validation),
-        patch.object(run_pipeline, "load_talk_bundles", return_value={}),
-        patch.object(run_pipeline, "_record_failure"),
-    ):
-        sys.argv = ["run_pipeline.py", "--force"]
-        run_pipeline.main()
-
-    # Both talks processed (force bypasses skip)
-    assert mock_pipeline.call_count == 2
-    # talk_exists() should NOT be called (skip check entirely bypassed in force mode)
-    assert mock_loader.talk_exists.call_count == 0
-
-
-# =============================================================================
-# Test: buffer flush at WEAVIATE_BATCH_SIZE boundary
-# =============================================================================
-
-
-def test_buffer_flush_at_batch_size():
-    """With WEAVIATE_BATCH_SIZE=2 and 3 talks, load_talk_bundles called twice: once at boundary, once final."""
-    mock_loader = _make_weaviate_loader_mock(talk_exists_return=False)
-
-    mock_validation = _make_validation(is_valid=True)
-
-    # Track bundle snapshot sizes at each flush call (before pending_bundles.clear())
-    flush_sizes = []
-
-    def pipeline_side_effect(content_db_arg, core_db_arg, talk_id, *args, **kwargs):
-        return _make_pipeline_result(talk_id=talk_id)
-
-    def load_bundles_side_effect(bundles, *args, **kwargs):
-        # Capture the size before clear() is called
-        flush_sizes.append(len(bundles))
-        return {}
-
-    with (
-        patch.object(run_pipeline, "WEAVIATE_BATCH_SIZE", 2),
-        patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[1, 2, 3]),
-        patch.object(run_pipeline, "fetch_all_books", return_value={}),
-        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
-        patch.object(run_pipeline, "WeaviateLoader", return_value=mock_loader),
-        patch.object(run_pipeline, "get_embedding_function", return_value=None),
-        patch.object(run_pipeline, "process_talk_pipeline", side_effect=pipeline_side_effect),
-        patch.object(run_pipeline, "validate_talk", return_value=mock_validation),
-        patch.object(run_pipeline, "load_talk_bundles", side_effect=load_bundles_side_effect),
-        patch.object(run_pipeline, "_record_failure"),
-    ):
-        sys.argv = ["run_pipeline.py", "--force"]
-        run_pipeline.main()
-
-    # First flush at boundary (2 talks), second flush for remaining (1 talk)
-    assert len(flush_sizes) == 2, f"Expected 2 flushes, got {len(flush_sizes)}: {flush_sizes}"
-    assert flush_sizes[0] == 2, f"First flush should have 2 bundles, got {flush_sizes[0]}"
-    assert flush_sizes[1] == 1, f"Final flush should have 1 bundle, got {flush_sizes[1]}"
-
-
-# =============================================================================
-# Test: final flush only when total < WEAVIATE_BATCH_SIZE
-# =============================================================================
-
-
-def test_final_flush_on_remaining():
-    """With WEAVIATE_BATCH_SIZE=100 and 2 talks, load_talk_bundles called once (final flush only)."""
-    mock_loader = _make_weaviate_loader_mock(talk_exists_return=False)
-
-    mock_validation = _make_validation(is_valid=True)
-
-    flush_sizes = []
-
-    def pipeline_side_effect(content_db_arg, core_db_arg, talk_id, *args, **kwargs):
-        return _make_pipeline_result(talk_id=talk_id)
-
-    def load_bundles_side_effect(bundles, *args, **kwargs):
-        flush_sizes.append(len(bundles))
-        return {}
-
-    with (
-        patch.object(run_pipeline, "WEAVIATE_BATCH_SIZE", 100),
-        patch.object(run_pipeline, "_get_all_gc_talk_ids", return_value=[1, 2]),
-        patch.object(run_pipeline, "fetch_all_books", return_value={}),
-        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
-        patch.object(run_pipeline, "WeaviateLoader", return_value=mock_loader),
-        patch.object(run_pipeline, "get_embedding_function", return_value=None),
-        patch.object(run_pipeline, "process_talk_pipeline", side_effect=pipeline_side_effect),
-        patch.object(run_pipeline, "validate_talk", return_value=mock_validation),
-        patch.object(run_pipeline, "load_talk_bundles", side_effect=load_bundles_side_effect),
-        patch.object(run_pipeline, "_record_failure"),
-    ):
-        sys.argv = ["run_pipeline.py", "--force"]
-        run_pipeline.main()
-
-    # Only final flush, never hit batch boundary
-    assert len(flush_sizes) == 1, f"Expected 1 flush, got {len(flush_sizes)}: {flush_sizes}"
-    assert flush_sizes[0] == 2, f"Final flush should have 2 bundles, got {flush_sizes[0]}"
+def test_insert_failures_are_recorded_and_not_counted_processed(tmp_path, capsys):
+    r = _run(tmp_path=tmp_path, all_ids=(1, 2), insert_failures={2: "weaviate X: bad"})
+    assert r.failed == [{"talk_id": 2, "error": "weaviate X: bad"}]
+    out = capsys.readouterr().out
+    assert "Processed:         1" in out
+    assert "Load failed:       1" in out
 
 
 # =============================================================================
@@ -437,142 +260,97 @@ def test_final_flush_on_remaining():
 # =============================================================================
 
 
-def _run_targeted(argv, gc_ids, tmp_path, existing_failed=None, pipeline_side_effect=None,
-                  validation=None, talk_exists_return=True):
-    """Run main() with targeted args. gc_ids = IDs the DB treats as GC talks."""
-    mock_loader = _make_weaviate_loader_mock(talk_exists_return=talk_exists_return)
-    failed_path = tmp_path / "failed_talks.json"
-    if existing_failed is not None:
-        failed_path.write_text(json.dumps(existing_failed), encoding="utf-8")
-
-    mock_db = MagicMock()
-
-    def select_side_effect(sql, params=()):
-        return [{"ID": tid} for tid in params if tid in gc_ids]
-
-    mock_db.select.side_effect = select_side_effect
-
-    if pipeline_side_effect is None:
-        def pipeline_side_effect(content_db_arg, core_db_arg, talk_id, *args, **kwargs):
-            return _make_pipeline_result(talk_id=talk_id)
-
-    with (
-        patch.object(run_pipeline, "FAILED_TALKS_PATH", failed_path),
-        patch.object(run_pipeline, "core_db", mock_db),
-        patch.object(run_pipeline, "_get_all_gc_talk_ids") as mock_all_ids,
-        patch.object(run_pipeline, "fetch_all_books", return_value={}),
-        patch.object(run_pipeline, "get_weaviate_client", return_value=MagicMock()),
-        patch.object(run_pipeline, "WeaviateLoader", return_value=mock_loader),
-        patch.object(run_pipeline, "get_embedding_function", return_value=None),
-        patch.object(run_pipeline, "resolve_embedding_url", return_value=None),
-        patch.object(run_pipeline, "process_talk_pipeline", side_effect=pipeline_side_effect) as mock_pipeline,
-        patch.object(run_pipeline, "validate_talk", return_value=validation or _make_validation(True)),
-        patch.object(run_pipeline, "load_talk_bundles", return_value={}),
-    ):
-        sys.argv = ["run_pipeline.py", *argv]
-        run_pipeline.main()
-
-    processed = [c[0][2] for c in mock_pipeline.call_args_list]
-    failed = json.loads(failed_path.read_text(encoding="utf-8")) if failed_path.exists() else None
-    return processed, mock_loader, mock_all_ids, failed
-
-
 def test_talk_ids_processes_only_named_talks_even_if_loaded(tmp_path):
-    """--talk-ids redoes exactly the named talks, ignoring talk_exists, no full-corpus query."""
-    processed, loader, all_ids, _ = _run_targeted(
-        ["--talk-ids", "5", "3"], gc_ids={3, 5, 9}, tmp_path=tmp_path, talk_exists_return=True
-    )
-    assert processed == [5, 3]
-    assert loader.talk_exists.call_count == 0
-    assert all_ids.call_count == 0
-    assert [c[0][0] for c in loader.delete_talk.call_args_list] == [5, 3]
+    """--talk-ids redoes exactly the named talks, ignoring what's loaded, no full-corpus query."""
+    r = _run(["--talk-ids", "5", "3"], tmp_path=tmp_path, gc_ids={3, 5, 9}, loaded_ids={3, 5})
+    assert r.processed == [5, 3]
+    assert r.loader.existing_talk_ids.call_count == 0
+    assert r.all_ids_mock.call_count == 0
+    assert [c[0][0] for c in r.loader.delete_talk.call_args_list] == [5, 3]
 
 
 def test_talk_ids_skips_unknown_and_duplicates(tmp_path, capsys):
-    processed, _, _, _ = _run_targeted(
-        ["--talk-ids", "5", "404", "5"], gc_ids={5}, tmp_path=tmp_path
-    )
-    assert processed == [5]
+    r = _run(["--talk-ids", "5", "404", "5"], tmp_path=tmp_path, gc_ids={5})
+    assert r.processed == [5]
     assert "404" in capsys.readouterr().out
 
 
 def test_talk_ids_no_valid_ids_exits_before_setup(tmp_path):
-    processed, _, _, _ = _run_targeted(["--talk-ids", "404"], gc_ids=set(), tmp_path=tmp_path)
-    assert processed == []
+    r = _run(["--talk-ids", "404"], tmp_path=tmp_path, gc_ids=set())
+    assert r.processed == []
+    assert r.loader_cls.call_count == 0
 
 
 def test_talk_ids_failed_extraction_does_not_delete(tmp_path):
     """A redo that fails extraction keeps the old Weaviate objects."""
-    def boom(*args, **kwargs):
-        raise RuntimeError("boom")
-
-    _, loader, _, failed = _run_targeted(
-        ["--talk-ids", "5"], gc_ids={5}, tmp_path=tmp_path, pipeline_side_effect=boom
-    )
-    assert loader.delete_talk.call_count == 0
-    assert failed == [{"talk_id": 5, "error": "boom"}]
+    r = _run(["--talk-ids", "5"], tmp_path=tmp_path, gc_ids={5}, pipeline_side_effect=_boom)
+    assert r.loader.delete_talk.call_count == 0
+    assert r.failed == [{"talk_id": 5, "error": "boom"}]
 
 
 def test_talk_ids_validation_failure_does_not_delete(tmp_path):
-    _, loader, _, failed = _run_targeted(
-        ["--talk-ids", "5"], gc_ids={5}, tmp_path=tmp_path, validation=_make_validation(False)
-    )
-    assert loader.delete_talk.call_count == 0
-    assert [e["talk_id"] for e in failed] == [5]
+    r = _run(["--talk-ids", "5"], tmp_path=tmp_path, gc_ids={5}, validation=_make_validation(False))
+    assert r.loader.delete_talk.call_count == 0
+    assert [e["talk_id"] for e in r.failed] == [5]
 
 
 def test_targeted_run_merges_failure_log(tmp_path):
     """Redone talks that succeed are dropped from the log; other entries are kept."""
     existing = [{"talk_id": 1, "error": "old"}, {"talk_id": 2, "error": "old"}]
-    _, _, _, failed = _run_targeted(
-        ["--talk-ids", "1"], gc_ids={1, 2}, tmp_path=tmp_path, existing_failed=existing
-    )
-    assert failed == [{"talk_id": 2, "error": "old"}]
+    r = _run(["--talk-ids", "1"], tmp_path=tmp_path, gc_ids={1, 2}, existing_failed=existing)
+    assert r.failed == [{"talk_id": 2, "error": "old"}]
 
 
 def test_targeted_run_replaces_entry_when_talk_fails_again(tmp_path):
     existing = [{"talk_id": 1, "error": "old"}, {"talk_id": 2, "error": "old"}]
 
-    def boom(*args, **kwargs):
+    def new_error(*args, **kwargs):
         raise RuntimeError("new")
 
-    _, _, _, failed = _run_targeted(
-        ["--talk-ids", "1"], gc_ids={1, 2}, tmp_path=tmp_path,
-        existing_failed=existing, pipeline_side_effect=boom,
+    r = _run(
+        ["--talk-ids", "1"], tmp_path=tmp_path, gc_ids={1, 2},
+        existing_failed=existing, pipeline_side_effect=new_error,
     )
-    assert failed == [{"talk_id": 2, "error": "old"}, {"talk_id": 1, "error": "new"}]
+    assert r.failed == [{"talk_id": 2, "error": "old"}, {"talk_id": 1, "error": "new"}]
 
 
 def test_from_failed_redoes_logged_talks(tmp_path):
     existing = [{"talk_id": 150, "error": "x"}, {"talk_id": 451, "error": "y"}]
-    processed, loader, _, failed = _run_targeted(
-        ["--from-failed"], gc_ids={150, 451}, tmp_path=tmp_path, existing_failed=existing
-    )
-    assert processed == [150, 451]
-    assert loader.talk_exists.call_count == 0
-    assert failed == []
+    r = _run(["--from-failed"], tmp_path=tmp_path, gc_ids={150, 451}, existing_failed=existing)
+    assert r.processed == [150, 451]
+    assert r.loader.existing_talk_ids.call_count == 0
+    assert r.failed == []
 
 
 def test_from_failed_with_no_log_does_nothing(tmp_path, capsys):
-    processed, _, _, _ = _run_targeted(["--from-failed"], gc_ids={1}, tmp_path=tmp_path)
-    assert processed == []
+    r = _run(["--from-failed"], tmp_path=tmp_path, gc_ids={1})
+    assert r.processed == []
     assert "nothing to do" in capsys.readouterr().out
 
 
 def test_talk_ids_and_from_failed_are_exclusive(tmp_path):
     with pytest.raises(SystemExit):
-        _run_targeted(["--from-failed", "--talk-ids", "1"], gc_ids={1}, tmp_path=tmp_path)
+        _run(["--from-failed", "--talk-ids", "1"], tmp_path=tmp_path, gc_ids={1})
+
+
+# =============================================================================
+# WeaviateLoader: delete_talk, existing_talk_ids, flush error handling
+# =============================================================================
+
+
+def _real_loader(client=None, **kwargs):
+    from loaders.weaviate_loader import WeaviateLoader
+
+    client = client or MagicMock()
+    client.collections.exists.return_value = True
+    return WeaviateLoader(client=client, embed_fn=lambda t: [], **kwargs), client
 
 
 def test_weaviate_loader_delete_talk_clears_all_collections():
     """delete_talk filters on talk_id in every collection, talks first."""
-    from loaders.weaviate_loader import WeaviateLoader
     from config.pipeline_config import WEAVIATE_COLLECTION_NAMES
 
-    client = MagicMock()
-    client.collections.exists.return_value = True
-    loader = WeaviateLoader(client=client, embed_fn=lambda t: [])
-
+    loader, client = _real_loader()
     loader.delete_talk(42)
 
     used = [c[0][0] for c in client.collections.use.call_args_list]
@@ -583,3 +361,92 @@ def test_weaviate_loader_delete_talk_clears_all_collections():
     assert delete_many.call_count == 4
     where = delete_many.call_args.kwargs["where"]
     assert where.target == "talk_id" and where.value == 42
+
+
+def test_weaviate_loader_existing_talk_ids():
+    loader, client = _real_loader()
+    client.collections.use.return_value.iterator.return_value = [
+        SimpleNamespace(properties={"talk_id": 1}),
+        SimpleNamespace(properties={"talk_id": 7}),
+    ]
+    assert loader.existing_talk_ids() == {1, 7}
+    assert client.collections.use.return_value.iterator.call_args.kwargs == {
+        "return_properties": ["talk_id"]
+    }
+
+
+def _obj(talk_id, kind):
+    from weaviate.classes.data import DataObject
+
+    return DataObject(properties={"talk_id": talk_id, "doc_id_str": f"{kind}_{talk_id}"})
+
+
+def _collections_by_name(client):
+    """Give each collection name its own mock so inserts can be inspected per collection."""
+    cols = {}
+
+    def use(name):
+        if name not in cols:
+            col = MagicMock()
+            col.data.insert_many.return_value = SimpleNamespace(has_errors=False, errors={})
+            cols[name] = col
+        return cols[name]
+
+    client.collections.use.side_effect = use
+    return cols
+
+
+def _inserted_talk_ids(col):
+    return [o.properties["talk_id"] for o in col.data.insert_many.call_args[0][0]]
+
+
+def test_flush_withholds_talk_object_when_a_dependent_insert_fails():
+    from config.pipeline_config import WEAVIATE_COLLECTION_NAMES as N
+
+    loader, client = _real_loader(buffered=True)
+    cols = _collections_by_name(client)
+    cols[N["paragraphs"]] = MagicMock()
+    cols[N["paragraphs"]].data.insert_many.return_value = SimpleNamespace(
+        has_errors=True, errors={1: SimpleNamespace(message="bad vector")}
+    )
+    loader._buffers["paragraphs"] = [_obj(1, "para"), _obj(2, "para")]
+    loader._buffers["talks"] = [_obj(1, "talk"), _obj(2, "talk")]
+
+    loader.flush()
+
+    assert _inserted_talk_ids(cols[N["talks"]]) == [1]
+    assert loader.pop_insert_failures() == {2: f"weaviate {N['paragraphs']}: bad vector"}
+    assert loader.pop_insert_failures() == {}
+    assert all(buf == [] for buf in loader._buffers.values())
+
+
+def test_flush_records_every_talk_when_insert_many_raises():
+    from config.pipeline_config import WEAVIATE_COLLECTION_NAMES as N
+
+    loader, client = _real_loader(buffered=True)
+    cols = _collections_by_name(client)
+    cols[N["citations"]] = MagicMock()
+    cols[N["citations"]].data.insert_many.side_effect = RuntimeError("timeout")
+    loader._buffers["citations"] = [_obj(3, "cite"), _obj(4, "cite")]
+    loader._buffers["talks"] = [_obj(3, "talk"), _obj(4, "talk"), _obj(5, "talk")]
+
+    loader.flush()
+
+    assert _inserted_talk_ids(cols[N["talks"]]) == [5]
+    assert set(loader.pop_insert_failures()) == {3, 4}
+
+
+def test_flush_records_failed_talk_object_insert():
+    from config.pipeline_config import WEAVIATE_COLLECTION_NAMES as N
+
+    loader, client = _real_loader(buffered=True)
+    cols = _collections_by_name(client)
+    cols[N["talks"]] = MagicMock()
+    cols[N["talks"]].data.insert_many.return_value = SimpleNamespace(
+        has_errors=True, errors={0: SimpleNamespace(message="nope")}
+    )
+    loader._buffers["talks"] = [_obj(9, "talk")]
+
+    loader.flush()
+
+    assert loader.pop_insert_failures() == {9: f"weaviate {N['talks']}: nope"}
