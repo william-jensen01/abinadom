@@ -1,6 +1,7 @@
 # db.py
 import os
 import sqlite3
+import threading
 import time
 from typing import Any, Sequence, List, Dict, Optional, Iterable
 import logging
@@ -86,6 +87,10 @@ class Database:
         self._schema_validated = False
         self._expected_schema = None
         self._expected_schema_db_name = None
+        # Read-only connections are reused per (process, thread). SQLite
+        # connections must not cross a fork or a thread, so the cache is
+        # thread-local and tagged with the pid that opened it.
+        self._local = threading.local()
 
     def set_expected_schema(self, expected_tables: Dict[str, List[str]], db_name: str) -> None:
         """
@@ -116,9 +121,34 @@ class Database:
 
         return conn
 
+    def _read_conn(self) -> sqlite3.Connection:
+        """Return a cached read connection, opening one if needed.
+
+        Opening a connection per query dominated short lookups in the
+        pipeline, so read-only databases keep one per process and thread.
+        Writable databases still get a fresh connection per call.
+        """
+        if not self.read_only:
+            return self._connect()
+        conn = getattr(self._local, "conn", None)
+        if conn is None or getattr(self._local, "pid", None) != os.getpid():
+            conn = self._connect()
+            self._local.conn = conn
+            self._local.pid = os.getpid()
+        return conn
+
+    def close(self) -> None:
+        """Close this thread's cached read connection, if any."""
+        conn = getattr(self._local, "conn", None)
+        if conn is not None and getattr(self._local, "pid", None) == os.getpid():
+            conn.close()
+        self._local.conn = None
+
     def select(self, query: str, params: Sequence[Any] = ()) -> List[Row]:
-        conn = self._connect()
+        conn = self._read_conn()
         try:
+            # Restart the timeout clock for this query (the connection may be reused)
+            _install_timeout(conn, self.timeout)
             conn.row_factory = sqlite3.Row
             cur = conn.execute(query, params)
             return [dict(row) for row in cur.fetchall()]
@@ -128,7 +158,8 @@ class Database:
                 return []
             raise
         finally:
-            conn.close()
+            if not self.read_only:
+                conn.close()
 
     def select_one(self, query: str, params: Sequence[Any] = ()) -> Optional[Row]:
         rows = self.select(query, params)
