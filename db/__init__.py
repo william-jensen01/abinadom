@@ -127,14 +127,29 @@ class Database:
         Opening a connection per query dominated short lookups in the
         pipeline, so read-only databases keep one per process and thread.
         Writable databases still get a fresh connection per call.
+
+        The cached connection is dropped when the file at self.path is
+        replaced (scripts/build.py swaps in rebuilt databases with
+        os.replace), so long-running processes such as the MCP server read
+        the new file instead of the deleted one.
         """
         if not self.read_only:
             return self._connect()
         conn = getattr(self._local, "conn", None)
-        if conn is None or getattr(self._local, "pid", None) != os.getpid():
+        try:
+            st = os.stat(self.path)
+            file_id = (st.st_dev, st.st_ino)
+        except FileNotFoundError:
+            file_id = None  # _connect() raises the usual error
+        same_process = getattr(self._local, "pid", None) == os.getpid()
+        if conn is None or not same_process or getattr(self._local, "file_id", None) != file_id:
+            if conn is not None and same_process:
+                conn.close()
+            self._local.conn = None
             conn = self._connect()
             self._local.conn = conn
             self._local.pid = os.getpid()
+            self._local.file_id = file_id
         return conn
 
     def close(self) -> None:

@@ -76,6 +76,33 @@ def test_close_forces_new_connection(db_path):
     assert spy.call_count == 2
 
 
+def test_reconnects_when_file_is_replaced(db_path, tmp_path):
+    """A rebuilt database swapped in with os.replace (scripts/build.py) is picked up."""
+    d = Database(db_path)
+    assert d.select("SELECT id FROM t ORDER BY id") == [{"id": 1}, {"id": 2}]
+
+    new_path = tmp_path / "new.db"
+    conn = sqlite3.connect(new_path)
+    conn.execute("CREATE TABLE t (id INTEGER)")
+    conn.execute("INSERT INTO t VALUES (3)")
+    conn.commit()
+    conn.close()
+    db_module.os.replace(new_path, db_path)
+
+    with patch.object(d, "_connect", wraps=d._connect) as spy:
+        assert d.select("SELECT id FROM t ORDER BY id") == [{"id": 3}]
+        assert d.select("SELECT id FROM t ORDER BY id") == [{"id": 3}]
+    assert spy.call_count == 1
+
+
+def test_missing_file_after_caching_raises(db_path):
+    d = Database(db_path)
+    d.select("SELECT 1")
+    db_module.os.remove(db_path)
+    with pytest.raises(FileNotFoundError):
+        d.select("SELECT 1")
+
+
 def test_writable_database_does_not_cache(db_path):
     d = Database(db_path, read_only=False)
     with patch.object(d, "_connect", wraps=d._connect) as spy:
