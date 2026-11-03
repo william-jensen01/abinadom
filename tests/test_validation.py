@@ -498,7 +498,13 @@ class TestCitationDBValidation:
                 return {"ID": params[0]} if has_citation else None
             return None
 
+        def select(query, params):
+            if "citation" in query.lower():
+                return [{"ID": p} for p in params] if has_citation else []
+            return []
+
         db.select_one.side_effect = select_one
+        db.select.side_effect = select
         return db
 
     def test_valid_db_lookups_no_errors(self):
@@ -548,6 +554,41 @@ class TestCitationDBValidation:
         report = validate_talk(metadata, tp, tc, tf, db=db)
         assert not report.is_valid
         assert any("paragraph_id" in e for e in report.errors)
+
+    def test_citation_ids_checked_in_one_query(self):
+        from extractors.validation import _check_citation_db
+
+        cites = [make_citation(i, paragraph_number=1) for i in (10, 11, 12)]
+        db = self._mock_db()
+        _check_citation_db(make_metadata(), make_paragraphs([]), make_citations(cites), db)
+        citation_queries = [c for c in db.select.call_args_list if "citation" in c[0][0].lower()]
+        assert len(citation_queries) == 1
+        assert list(citation_queries[0][0][1]) == [10, 11, 12]
+
+    def test_only_missing_citation_ids_are_errors(self):
+        from extractors.validation import _check_citation_db
+
+        cites = [make_citation(i, paragraph_number=1) for i in (10, 11, 12)]
+        db = MagicMock()
+        db.select_one.return_value = {"ID": 1}
+        db.select.return_value = [{"ID": 10}, {"ID": 12}]
+        passed, failed, errors, _ = _check_citation_db(
+            make_metadata(), make_paragraphs([]), make_citations(cites), db
+        )
+        id_errors = [e for e in errors if "citation table" in e]
+        assert id_errors == ["Citation 11: ID not found in core.52.db citation table"]
+        # talk check + 2 found IDs + 3 paragraph_id formulas
+        assert passed == 1 + 2 + 3
+        assert failed == 1
+
+    def test_citation_id_lookup_is_chunked(self):
+        from extractors import validation
+
+        db = MagicMock()
+        db.select.side_effect = lambda q, params: [{"ID": p} for p in params]
+        ids = list(range(validation._ID_CHUNK * 2 + 1))
+        assert validation._existing_citation_ids(db, ids) == set(ids)
+        assert db.select.call_count == 3
 
 
 # =============================================================================

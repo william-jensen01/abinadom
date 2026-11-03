@@ -216,6 +216,22 @@ def _check_cross_collection(
 # =============================================================================
 
 
+# Stay well under SQLite's bound-parameter limit (999 on older builds)
+_ID_CHUNK = 500
+
+
+def _existing_citation_ids(db, citation_ids: List[int]) -> set:
+    """Return the subset of citation_ids present in the citation table."""
+    unique_ids = list(dict.fromkeys(citation_ids))
+    found: set = set()
+    for start in range(0, len(unique_ids), _ID_CHUNK):
+        chunk = unique_ids[start : start + _ID_CHUNK]
+        placeholders = ",".join("?" * len(chunk))
+        rows = db.select(f"SELECT ID FROM citation WHERE ID IN ({placeholders})", chunk)
+        found.update(row["ID"] for row in rows)
+    return found
+
+
 def _check_citation_db(
     metadata: TalkMetadata,
     paragraphs: TalkParagraphs,
@@ -238,10 +254,12 @@ def _check_citation_db(
         errors.append(f"talk_id {talk_id} not found in database talk table")
         failed += 1
 
+    # One lookup for all citation IDs instead of one query per citation
+    found_ids = _existing_citation_ids(db, [c.citation_id for c in citations.citations])
+
     for cite in citations.citations:
         # citation_id exists in citation table
-        row = db.select_one("SELECT ID FROM citation WHERE ID = ?", (cite.citation_id,))
-        if row is not None:
+        if cite.citation_id in found_ids:
             passed += 1
         else:
             errors.append(
