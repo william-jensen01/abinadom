@@ -207,7 +207,9 @@ def _iter_extractions(
         pool.shutdown(wait=True, cancel_futures=True)
 
 
-def _record_failure(talk_id: int, error: str, failed_talks: list) -> None:
+def _record_failure(
+    talk_id: int, error: str, failed_talks: list, carried: Iterable[Dict[str, Any]] = ()
+) -> None:
     """
     Append a failure record to the failed_talks list and write it to disk.
 
@@ -217,9 +219,15 @@ def _record_failure(talk_id: int, error: str, failed_talks: list) -> None:
         talk_id:      The talk ID that failed.
         error:        Error message or description.
         failed_talks: The in-memory list of failure dicts (mutated in place).
+        carried:      Old entries for talks a targeted run is redoing. Written
+                      too (unless the talk has a new entry) so a mid-run kill
+                      keeps them; the end-of-run rewrite drops them.
     """
     failed_talks.append({"talk_id": talk_id, "error": error})
-    _write_failed_talks(failed_talks)
+    recorded = {entry["talk_id"] for entry in failed_talks}
+    _write_failed_talks(
+        failed_talks + [entry for entry in carried if entry["talk_id"] not in recorded]
+    )
 
 
 def main() -> None:
@@ -265,6 +273,7 @@ def main() -> None:
     # --- Resolve targeted talk IDs (before any heavy setup) ---
     targeted = args.talk_ids is not None or args.from_failed
     failed_talks: List[Dict[str, Any]] = []
+    carried: List[Dict[str, Any]] = []
     if targeted:
         if args.from_failed:
             requested = [entry["talk_id"] for entry in _load_failed_talks()]
@@ -282,10 +291,13 @@ def main() -> None:
             return
         # Merge into the existing failure log: keep other talks' entries,
         # drop entries for the talks being redone (re-added if they fail again).
+        # Until the run finishes, the redone talks' old entries are carried in
+        # every incremental write, so a crash mid-run can't drop talks that
+        # were never redone from the log.
         target_set = set(target_ids)
-        failed_talks = [
-            entry for entry in _load_failed_talks() if entry["talk_id"] not in target_set
-        ]
+        existing = _load_failed_talks()
+        failed_talks = [entry for entry in existing if entry["talk_id"] not in target_set]
+        carried = [entry for entry in existing if entry["talk_id"] in target_set]
 
     start_time = time.time()
 
@@ -313,7 +325,7 @@ def main() -> None:
             nonlocal load_failed_count
             for failed_id, error in loader.pop_insert_failures().items():
                 tqdm.write(f"[ERROR] talk_id={failed_id}: {error}")
-                _record_failure(failed_id, error, failed_talks)
+                _record_failure(failed_id, error, failed_talks, carried)
                 load_failed_count += 1
 
         # One scan of loaded talk IDs instead of a talk_exists() call per talk
@@ -327,43 +339,51 @@ def main() -> None:
 
         # --- Main loop: workers extract + validate, this process loads ---
         outcomes = _iter_extractions(to_process, args.workers)
-        for talk_id, (kind, payload) in tqdm(
-            outcomes, total=len(to_process), unit="talk", desc="Pipeline"
-        ):
-            if kind == "error":
-                tqdm.write(f"[ERROR] talk_id={talk_id}: {payload}")
-                _record_failure(talk_id, payload, failed_talks)
-                failed_count += 1
-                continue
+        try:
+            for talk_id, (kind, payload) in tqdm(
+                outcomes, total=len(to_process), unit="talk", desc="Pipeline"
+            ):
+                if kind == "error":
+                    tqdm.write(f"[ERROR] talk_id={talk_id}: {payload}")
+                    _record_failure(talk_id, payload, failed_talks, carried)
+                    failed_count += 1
+                    continue
 
-            if kind == "validation":
-                tqdm.write(f"[WARN] talk_id={talk_id} validation failed")
-                _record_failure(talk_id, f"validation: {payload}", failed_talks)
-                validation_failed_count += 1
-                continue
+                if kind == "validation":
+                    tqdm.write(f"[WARN] talk_id={talk_id} validation failed")
+                    _record_failure(talk_id, f"validation: {payload}", failed_talks, carried)
+                    validation_failed_count += 1
+                    continue
 
-            try:
-                # Targeted redo: clear old objects so nothing is left orphaned.
-                # Done only after extraction + validation succeed, so a failed
-                # redo leaves the previous version in place.
-                if targeted:
-                    loader.delete_talk(talk_id)
+                try:
+                    # Targeted redo: clear old objects so nothing is left orphaned.
+                    # Done only after extraction + validation succeed, so a redo
+                    # that fails there leaves the previous version in place. If
+                    # the reload's inserts then fail, the talk is gone from
+                    # Weaviate until redone; it is recorded in failed_talks.json.
+                    if targeted:
+                        loader.delete_talk(talk_id)
 
-                # Embed and hand to the loader, which does the only buffering
-                loader.load(payload)
-                processed_count += 1
+                    # Embed and hand to the loader, which does the only buffering
+                    loader.load(payload)
+                    processed_count += 1
 
-            except Exception as exc:
-                logger.error("talk_id=%d failed: %s", talk_id, exc)
-                tqdm.write(f"[ERROR] talk_id={talk_id}: {exc}")
-                _record_failure(talk_id, str(exc), failed_talks)
-                failed_count += 1
+                except Exception as exc:
+                    logger.error("talk_id=%d failed: %s", talk_id, exc)
+                    tqdm.write(f"[ERROR] talk_id={talk_id}: {exc}")
+                    _record_failure(talk_id, str(exc), failed_talks, carried)
+                    failed_count += 1
 
+                record_load_failures()
+        finally:
+            # Stop the workers, then write whatever the loader still holds and
+            # record its insert failures, even when the run stops on an error
+            # or Ctrl-C (the loader's own close() would flush without recording).
+            close_outcomes = getattr(outcomes, "close", None)
+            if close_outcomes is not None:
+                close_outcomes()
+            loader.flush()
             record_load_failures()
-
-        # --- Final flush: write whatever the loader still holds ---
-        loader.flush()
-        record_load_failures()
 
     # Targeted runs rewrite the merged log so talks that now succeed are removed
     if targeted:

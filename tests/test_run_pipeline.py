@@ -316,6 +316,47 @@ def test_targeted_run_replaces_entry_when_talk_fails_again(tmp_path):
     assert r.failed == [{"talk_id": 2, "error": "old"}, {"talk_id": 1, "error": "new"}]
 
 
+def _interrupt_on(talk_id_to_stop):
+    """process_talk_pipeline stand-in: fails talk 1, Ctrl-C on talk_id_to_stop."""
+
+    def side_effect(content_db_arg, core_db_arg, talk_id, *args, **kwargs):
+        if talk_id == talk_id_to_stop:
+            raise KeyboardInterrupt
+        if talk_id == 1:
+            raise RuntimeError("new")
+        return _default_pipeline(content_db_arg, core_db_arg, talk_id)
+
+    return side_effect
+
+
+def test_interrupted_targeted_run_keeps_entries_for_talks_not_redone(tmp_path):
+    """A crash after the first failure must not drop the remaining targets from the log."""
+    existing = [{"talk_id": t, "error": "old"} for t in (9, 1, 2, 3)]
+    with pytest.raises(KeyboardInterrupt):
+        _run(
+            ["--talk-ids", "1", "2", "3"], tmp_path=tmp_path, gc_ids={1, 2, 3, 9},
+            existing_failed=existing, pipeline_side_effect=_interrupt_on(2),
+        )
+    failed = json.loads((tmp_path / "failed_talks.json").read_text(encoding="utf-8"))
+    assert failed == [
+        {"talk_id": 9, "error": "old"},
+        {"talk_id": 1, "error": "new"},
+        {"talk_id": 2, "error": "old"},
+        {"talk_id": 3, "error": "old"},
+    ]
+
+
+def test_interrupted_run_records_insert_failures_from_last_flush(tmp_path):
+    """Insert failures from the flush on the way out are still logged."""
+    with pytest.raises(KeyboardInterrupt):
+        _run(
+            tmp_path=tmp_path, all_ids=(5, 2), insert_failures={5: "weaviate X: bad"},
+            pipeline_side_effect=_interrupt_on(2),
+        )
+    failed = json.loads((tmp_path / "failed_talks.json").read_text(encoding="utf-8"))
+    assert failed == [{"talk_id": 5, "error": "weaviate X: bad"}]
+
+
 def test_from_failed_redoes_logged_talks(tmp_path):
     existing = [{"talk_id": 150, "error": "x"}, {"talk_id": 451, "error": "y"}]
     r = _run(["--from-failed"], tmp_path=tmp_path, gc_ids={150, 451}, existing_failed=existing)
