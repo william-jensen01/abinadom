@@ -202,6 +202,9 @@ def prepare_talk_bundle(
     If validation_report.is_valid is False:
         Log a WARNING and return empty lists for all 4 collections.
 
+    Raises:
+        ValueError: If embed_fn returns a different number of vectors than records.
+
     Args:
         metadata:           Talk metadata output.
         paragraphs:         Paragraph extraction output.
@@ -237,11 +240,12 @@ def prepare_talk_bundle(
         texts = [doc for doc, _meta, _id, _vec in all_records]
         vectors = embed_fn(texts)
         if len(vectors) != len(all_records):
-            logger.error(
-                "embed_fn returned %d vectors for %d records — skipping bundle talk_id=%s",
-                len(vectors), len(all_records), metadata.talk_id,
+            # Raise rather than skip: an empty result would let the caller count
+            # the talk as loaded when nothing was written.
+            raise ValueError(
+                f"embed_fn returned {len(vectors)} vectors for {len(all_records)} "
+                f"records (talk_id={metadata.talk_id})"
             )
-            return {"talks": [], "paragraphs": [], "citations": [], "footnotes": []}
         all_records = [
             (doc, meta, doc_id, vec)
             for (doc, meta, doc_id, _), vec in zip(all_records, vectors)

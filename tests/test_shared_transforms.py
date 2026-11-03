@@ -227,6 +227,18 @@ class TestPrepareTalkBundle:
         assert len(result["talks"]) > 0
         assert len(result["paragraphs"]) > 0
 
+    def test_vector_count_mismatch_raises(self):
+        """A short embedding result must fail the talk, not silently drop it."""
+        with pytest.raises(ValueError, match="vectors for"):
+            prepare_talk_bundle(
+                make_talk_metadata(),
+                make_talk_paragraphs(),
+                make_talk_citations(),
+                make_talk_footnotes(),
+                make_validation_report(),
+                embed_fn=lambda texts: [[0.0]] * (len(texts) - 1),
+            )
+
 
 # =============================================================================
 # Tests: prepare_talk_record
