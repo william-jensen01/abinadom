@@ -10,6 +10,7 @@ Features:
   - --force flag to re-process already-loaded talks
   - Weaviate writes buffered across talks by default (--unbuffered to disable)
   - Talks whose Weaviate inserts fail are recorded in failed_talks.json
+  - Extraction + validation run in parallel worker processes (--workers)
   - --talk-ids / --from-failed to redo specific talks (clean delete + reload)
   - tqdm progress bar (no per-talk INFO log lines)
   - Incremental failed_talks.json writes after each failure
@@ -19,17 +20,23 @@ Usage:
     pipenv run py scripts/run_pipeline.py
     pipenv run py scripts/run_pipeline.py --force
     pipenv run py scripts/run_pipeline.py --unbuffered
+    pipenv run py scripts/run_pipeline.py --workers 1
     pipenv run py scripts/run_pipeline.py --talk-ids 150 451
     pipenv run py scripts/run_pipeline.py --from-failed
 """
 
 import argparse
+import itertools
 import json
 import logging
+import multiprocessing
+import os
 import sys
 import time
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
+from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Tuple
 
 # Ensure project root is on sys.path when running as a script
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -48,6 +55,16 @@ from loaders.weaviate_loader import WeaviateLoader
 logger = logging.getLogger(__name__)
 
 FAILED_TALKS_PATH = Path(__file__).parent.parent / "data" / "failed_talks.json"
+
+LOG_FORMAT = "%(asctime)s %(levelname)-8s %(name)s: %(message)s"
+
+# Extraction outcome sent back from a worker: (talk_id, (kind, payload)) where
+# kind is "ok" (payload = TalkBundle), "validation" (payload = error list) or
+# "error" (payload = message).
+Outcome = Tuple[int, Tuple[str, Any]]
+
+# Per-process book cache, filled by _init_worker()
+_book_cache: Dict[int, Any] = {}
 
 
 def _get_all_gc_talk_ids() -> List[int]:
@@ -95,6 +112,101 @@ def _write_failed_talks(failed_talks: List[Dict[str, Any]]) -> None:
         json.dump(failed_talks, f, indent=2, ensure_ascii=False)
 
 
+def _init_worker() -> None:
+    """Prepare a process for extraction: logging and the book cache."""
+    global _book_cache
+    if not logging.getLogger().handlers:
+        logging.basicConfig(level=logging.WARNING, format=LOG_FORMAT)
+    _book_cache = fetch_all_books(core_db)
+
+
+def _extract_talk(talk_id: int) -> Outcome:
+    """
+    Extract and validate one talk. Runs in a worker process.
+
+    Never raises: any failure comes back as an "error" outcome so the main
+    process can record it against the right talk.
+    """
+    try:
+        result = process_talk_pipeline(
+            content_db, core_db, talk_id, _book_cache, PARAGRAPH_CONFIG
+        )
+        if not result.success:
+            return talk_id, ("error", "; ".join(result.errors))
+
+        validation = validate_talk(
+            result.metadata,
+            result.paragraphs,
+            result.citations,
+            result.footnotes,
+            db=core_db,
+        )
+        if not validation.is_valid:
+            return talk_id, ("validation", validation.errors)
+
+        bundle = (
+            result.metadata,
+            result.paragraphs,
+            result.citations,
+            result.footnotes,
+            validation,
+        )
+        return talk_id, ("ok", bundle)
+    except Exception as exc:
+        logger.error("talk_id=%d failed: %s", talk_id, exc)
+        return talk_id, ("error", str(exc))
+
+
+def _iter_extractions(
+    talk_ids: Iterable[int],
+    workers: int,
+    extract: Callable[[int], Outcome] = _extract_talk,
+    initializer: Callable[[], None] = _init_worker,
+) -> Iterator[Outcome]:
+    """
+    Yield extraction outcomes for talk_ids, in completion order.
+
+    workers <= 1 runs in this process. Otherwise a spawn-based process pool
+    does the work, with at most workers * 4 talks in flight so finished
+    bundles can't pile up in memory faster than the loader drains them.
+    """
+    if workers <= 1:
+        initializer()
+        for talk_id in talk_ids:
+            yield extract(talk_id)
+        return
+
+    remaining = iter(talk_ids)
+    pool = ProcessPoolExecutor(
+        max_workers=workers,
+        # spawn, not fork: the parent holds gRPC/HTTP client threads
+        mp_context=multiprocessing.get_context("spawn"),
+        initializer=initializer,
+    )
+    in_flight: Dict[Any, int] = {}
+
+    def submit(n: int) -> None:
+        for talk_id in itertools.islice(remaining, n):
+            in_flight[pool.submit(extract, talk_id)] = talk_id
+
+    try:
+        submit(workers * 4)
+        while in_flight:
+            done, _ = wait(in_flight, return_when=FIRST_COMPLETED)
+            for future in done:
+                talk_id = in_flight.pop(future)
+                submit(1)
+                try:
+                    yield future.result()
+                except BrokenProcessPool:
+                    raise
+                except Exception as exc:
+                    # e.g. the result couldn't be pickled back to this process
+                    yield talk_id, ("error", f"worker: {exc}")
+    finally:
+        pool.shutdown(wait=True, cancel_futures=True)
+
+
 def _record_failure(talk_id: int, error: str, failed_talks: list) -> None:
     """
     Append a failure record to the failed_talks list and write it to disk.
@@ -127,6 +239,13 @@ def main() -> None:
     )
     # Buffering is now the default; --buffered is kept so old commands still work
     parser.add_argument("--buffered", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=os.cpu_count() or 1,
+        metavar="N",
+        help="Extraction worker processes (default: CPU count; 1 = no pool)",
+    )
     target = parser.add_mutually_exclusive_group()
     target.add_argument(
         "--talk-ids",
@@ -170,7 +289,6 @@ def main() -> None:
 
     start_time = time.time()
 
-    book_cache = fetch_all_books(core_db)
     embedding_url = resolve_embedding_url()
     embedding_fn = get_embedding_function(url=embedding_url)
     query_embedding_fn = get_embedding_function(url=embedding_url, task="query")
@@ -185,7 +303,6 @@ def main() -> None:
         all_talk_ids = target_ids if targeted else _get_all_gc_talk_ids()
 
         # --- Counters ---
-        skipped_count: int = 0
         failed_count: int = 0
         validation_failed_count: int = 0
         load_failed_count: int = 0
@@ -205,40 +322,27 @@ def main() -> None:
         else:
             loaded_ids = loader.existing_talk_ids()
 
-        # --- Main per-talk loop ---
-        for talk_id in tqdm(all_talk_ids, unit="talk", desc="Pipeline"):
-            if talk_id in loaded_ids:
-                skipped_count += 1
+        to_process = [tid for tid in all_talk_ids if tid not in loaded_ids]
+        skipped_count = len(all_talk_ids) - len(to_process)
+
+        # --- Main loop: workers extract + validate, this process loads ---
+        outcomes = _iter_extractions(to_process, args.workers)
+        for talk_id, (kind, payload) in tqdm(
+            outcomes, total=len(to_process), unit="talk", desc="Pipeline"
+        ):
+            if kind == "error":
+                tqdm.write(f"[ERROR] talk_id={talk_id}: {payload}")
+                _record_failure(talk_id, payload, failed_talks)
+                failed_count += 1
+                continue
+
+            if kind == "validation":
+                tqdm.write(f"[WARN] talk_id={talk_id} validation failed")
+                _record_failure(talk_id, f"validation: {payload}", failed_talks)
+                validation_failed_count += 1
                 continue
 
             try:
-                # Extraction: metadata, paragraphs, citations, footnotes
-                result = process_talk_pipeline(
-                    content_db, core_db, talk_id, book_cache, PARAGRAPH_CONFIG
-                )
-
-                if not result.success:
-                    raise RuntimeError("; ".join(result.errors))
-
-                # Validation
-                validation = validate_talk(
-                    result.metadata,
-                    result.paragraphs,
-                    result.citations,
-                    result.footnotes,
-                    db=core_db,
-                )
-
-                if not validation.is_valid:
-                    tqdm.write(f"[WARN] talk_id={talk_id} validation failed")
-                    _record_failure(
-                        talk_id,
-                        f"validation: {validation.errors}",
-                        failed_talks,
-                    )
-                    validation_failed_count += 1
-                    continue
-
                 # Targeted redo: clear old objects so nothing is left orphaned.
                 # Done only after extraction + validation succeed, so a failed
                 # redo leaves the previous version in place.
@@ -246,15 +350,7 @@ def main() -> None:
                     loader.delete_talk(talk_id)
 
                 # Embed and hand to the loader, which does the only buffering
-                loader.load(
-                    (
-                        result.metadata,
-                        result.paragraphs,
-                        result.citations,
-                        result.footnotes,
-                        validation,
-                    )
-                )
+                loader.load(payload)
                 processed_count += 1
 
             except Exception as exc:
@@ -288,8 +384,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.WARNING,
-        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
-    )
+    logging.basicConfig(level=logging.WARNING, format=LOG_FORMAT)
     main()

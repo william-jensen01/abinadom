@@ -18,7 +18,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import scripts.run_pipeline as run_pipeline
-from scripts.run_pipeline import _get_all_gc_talk_ids, _record_failure
+from scripts.run_pipeline import _get_all_gc_talk_ids, _iter_extractions, _record_failure
 
 
 # =============================================================================
@@ -112,7 +112,9 @@ def _run(
             run_pipeline, "validate_talk", return_value=validation or _make_validation(True)
         ) as validate,
     ):
-        sys.argv = ["run_pipeline.py", *argv]
+        # Mocks don't cross process boundaries, so run in-process unless a test asks
+        workers = [] if "--workers" in argv else ["--workers", "1"]
+        sys.argv = ["run_pipeline.py", *argv, *workers]
         run_pipeline.main()
 
     return SimpleNamespace(
@@ -450,3 +452,112 @@ def test_flush_records_failed_talk_object_insert():
     loader.flush()
 
     assert loader.pop_insert_failures() == {9: f"weaviate {N['talks']}: nope"}
+
+
+# =============================================================================
+# Parallel extraction (_iter_extractions / _extract_talk)
+# =============================================================================
+# Pool tests use real spawned processes, so the extract/initializer functions
+# must be module-level (picklable by reference).
+
+
+def _noop_init():
+    pass
+
+
+def _fake_extract(talk_id):
+    if talk_id == 13:
+        raise ValueError("unlucky")  # escapes the worker; must come back as an error
+    return talk_id, ("ok", talk_id * 10)
+
+
+def _unpicklable_extract(talk_id):
+    return talk_id, ("ok", lambda: None)
+
+
+def test_iter_extractions_pool_returns_every_talk():
+    ids = list(range(1, 30))
+    out = dict(_iter_extractions(ids, workers=2, extract=_fake_extract, initializer=_noop_init))
+    assert set(out) == set(ids)
+    assert out[5] == ("ok", 50)
+    assert out[13][0] == "error" and "unlucky" in out[13][1]
+
+
+def test_iter_extractions_pool_reports_unpicklable_result_as_error():
+    out = list(_iter_extractions([1], workers=2, extract=_unpicklable_extract, initializer=_noop_init))
+    assert out[0][0] == 1
+    assert out[0][1][0] == "error"
+
+
+def test_iter_extractions_single_worker_runs_in_process_in_order():
+    calls = []
+    out = list(
+        _iter_extractions([3, 1, 2], workers=1, extract=lambda t: (t, ("ok", t)),
+                          initializer=lambda: calls.append("init"))
+    )
+    assert [t for t, _ in out] == [3, 1, 2]
+    assert calls == ["init"]
+
+
+def test_iter_extractions_bounds_in_flight_work():
+    """No more than workers * 4 talks are submitted ahead of the consumer."""
+    submitted = []
+
+    class FakeFuture:
+        def __init__(self, value):
+            self.value = value
+
+        def result(self):
+            return self.value
+
+    class FakePool:
+        def __init__(self, *a, **k):
+            pass
+
+        def submit(self, fn, talk_id):
+            submitted.append(talk_id)
+            return FakeFuture(fn(talk_id))
+
+        def shutdown(self, **k):
+            pass
+
+    with (
+        patch.object(run_pipeline, "ProcessPoolExecutor", FakePool),
+        patch.object(run_pipeline, "wait", lambda fs, return_when: ({next(iter(fs))}, set())),
+    ):
+        gen = _iter_extractions(range(100), workers=2, extract=lambda t: (t, ("ok", t)),
+                                initializer=_noop_init)
+        next(gen)
+        assert len(submitted) == 2 * 4 + 1  # initial window + one refill
+        gen.close()
+
+
+def test_extract_talk_outcomes():
+    """_extract_talk turns success / unsuccessful / invalid / exception into outcomes."""
+    with (
+        patch.object(run_pipeline, "process_talk_pipeline", side_effect=_default_pipeline),
+        patch.object(run_pipeline, "validate_talk", return_value=_make_validation(True)),
+    ):
+        talk_id, (kind, bundle) = run_pipeline._extract_talk(4)
+    assert (talk_id, kind, len(bundle)) == (4, "ok", 5)
+
+    with patch.object(
+        run_pipeline, "process_talk_pipeline",
+        return_value=_make_pipeline_result(success=False),
+    ):
+        assert run_pipeline._extract_talk(4) == (4, ("error", "extraction failed"))
+
+    with (
+        patch.object(run_pipeline, "process_talk_pipeline", side_effect=_default_pipeline),
+        patch.object(run_pipeline, "validate_talk", return_value=_make_validation(False)),
+    ):
+        assert run_pipeline._extract_talk(4) == (4, ("validation", ["validation error"]))
+
+    with patch.object(run_pipeline, "process_talk_pipeline", side_effect=_boom):
+        assert run_pipeline._extract_talk(4) == (4, ("error", "boom"))
+
+
+def test_workers_flag_reaches_iter_extractions(tmp_path):
+    with patch.object(run_pipeline, "_iter_extractions", return_value=iter([])) as it:
+        _run(["--workers", "3"], tmp_path=tmp_path)
+    assert it.call_args[0][1] == 3
