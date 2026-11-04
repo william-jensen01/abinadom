@@ -13,7 +13,84 @@ Audit date 2026-11-02, from the full raw store `db/scripture.db` (`raw_latest`, 
 
 ## Q1: JST link coverage
 
-Answered after I7 (it needs the JST import from `core.55.db`).
+Answered at I7, from a temp copy of the full store built with `scripts/build_scriptures.py` (build 2026-11-04;
+`jst_verse` = 31,261 rows = every `core.55.db` J+F row: **F 1,359**, J 29,902). Every number below was recomputed
+from that build, and the appendix numbers also straight from the raw JSON of the `/scriptures/jst/` pages.
+
+**Unresolved `jst` refs: 2 of 941 (0.21%, budget 0.5%).** Both come from one footnote, `nt/rom/7` `note5_a`
+(href `/study/scriptures/jst/jst-rom/7?lang=eng&id=p5-p27#p5`), label `JST Rom. 7:5–27 (Appendix)`. The href range
+expands to 23 rows (Rom 7:5–27); 21 resolve. The other two, JST Rom 7:26 and 7:27, have no `jst_verse` row because
+`core.55.db`'s J/F rows for JST Romans 7 stop at verse 25. The Church appendix does print 7:26 ("And if I subdue not
+the sin …") and 7:27 ("I thank God through Jesus Christ …"), so this is a gap in core.db, not a parser gap. The
+appendix passage `JST, Romans 7:5–27.` names the same 21 `jst_verse` rows.
+
+**F rows reached.** "Reached" means named by a `jst` ref or by a `jst_passage` heading (`jst_passage_verse`).
+
+| Measure | F rows | Share of 1,359 |
+|---|---|---|
+| Reached by `jst` footnote refs | 906 | 66.7% |
+| Reached by appendix passages | 843 | 62.0% |
+| Reached by either | **1,236** | **90.9%** |
+| **Not reached by either** | **123** | 9.1% |
+
+The 939 resolved `jst` refs hit 936 F rows (906 distinct) and 3 J rows. The passages name 845 `jst_verse` rows
+(843 F, 2 J). Only 3 J rows (of 29,902) are reached at all: JST Ex. 34:1 and 34:2 (by `ot/ex/34` `note1_a` and by
+the passage `JST, Exodus 34:1–2, 14.`) and JST Mark 8:40 (by `nt/mark/8` `note37_a`, `JST Mark 8:39–40 …`).
+
+Of the 843 passage-reached F rows, 329 (JST Genesis 1:1–8:18, every F row there) come from the one passage
+`JST, Genesis 1:1–8:18.`, which prints no verse text: its intro says the text is published as the Book of Moses and
+links to `pgp/moses/1`. Only 2 of those 329 are also named by a `jst` ref. The passages that print their own verses
+reach 514 F rows.
+
+**The 123 unreached F rows** are in four places:
+
+- Matthew 23:39–41 (3), Matthew 24:1–56 (56) and Mark 13:1–61 (61), 120 rows: this JST text is printed in the
+  Pearl of Great Price as JS—Matthew (core.db JST Matt 23:39 begins as JS—M 1:1; JST Matt 24:1 = JS—M 1:2; JST
+  Matt 24:56 = JS—M 1:55). The KJV footnotes there link to `pgp/js-m/1` instead of a JST verse: mostly
+  `cross-ref` notes (`nt/matt/23` `note39_a` "JS—M 1:1.", `nt/matt/24` `note1_a` "JS—M 1:2.", and others), plus the
+  2 `jst` spans that name no JST verse (`nt/matt/24` `note3_b`, `nt/mark/13` `note1_a` "The text of JST Mark 13 is
+  the same as JST Matthew 24. See Pearl of Great Price, JS—M."). No appendix passage covers Matthew 23:39–24 or
+  Mark 13. These 120 are reached in substance, through JS—M, but not by a JST link.
+- Romans 8:1, 8:2 and 8:14 (3): real gaps. No footnote on KJV Rom 8:1, 8:2 or 8:14 mentions JST, and no appendix
+  passage names them. core.db's text for these three F rows is identical to the KJV verse text in this store.
+
+**Appendix ranges parse.** All 143 passage headings (`JST, Genesis 9:4–6.`) parse to a `verse_spec`, a start and end
+chapter and verse, and a KJV `book_id`; none of these is null. One heading spans chapters (`JST, Genesis 1:1–8:18.`).
+Lists such as `4:1, 5–6, 8–9` and `33:20, 23` expand verse by verse. Checked against the raw pages, the expanded
+verse list of each of the other 142 headings equals the verse paragraphs printed under it. Every passage names at
+least one `jst_verse` row. The 518 heading verses of those 142 give 516 `jst_passage_verse` rows; the 2 missing are in
+one heading, `JST, Romans 7:5–27.`, whose verses 7:26–27 are not in core.db (above).
+
+**Appendix link targets ("Compare" and the others) parse.** The 143 headings hold 165 links (`<a>` elements). A
+link whose `id=` lists several ranges (`id=p3%2Cp13`) is stored as one `jst_passage_ref` row per range, which gives
+181 rows: 171 `compare` (156 links), 5 `similar` (4 links, "similar changes were made …"), 5 `see-also` (5 links).
+Every heading has at least one `compare` row that points at an Old or New Testament range.
+
+- All 171 `compare` rows have a target chapter and a start and end verse. 168 point at KJV ranges (46 OT, 122 NT).
+  The other 3 are what the Church lists after "Compare": `2 Nephi 3:4–22` (Gen. 50:24–38), `D&C 84:21–26`
+  (Ex. 34:1–2, 14), and one JST passage, `JST, Mark 14:20–25` (Matt. 26:22, 24–25).
+- 1 `compare` row uses `span=` across chapters: `Genesis 1:1–6:13` (`target_chapter` 1, `target_chapter_end` 6).
+- 3 rows point into `/scriptures/jst/` and so have `target_book_id` NULL (JST numbering is not a KJV book row): the
+  `compare` to JST Mark 14:20–25 and the `see-also` pair JST Matt. 12:37–38 ↔ JST Luke 12:9–12. They keep their
+  chapter and verse range.
+- The 5 `similar` rows point at KJV ranges (1 Sam. 18:10, 19:9; Luke 4:2, 4:5–11; Luke 11:4). The other 3
+  `see-also` rows point at D&C 86:1–7, D&C 132:26–27 and `Moroni 8`, a whole chapter with no verse
+  (`target_verse_start`/`_end` NULL).
+- Each of the 178 rows that has a `target_book_id` names a chapter and start verse (verse 1 for Moroni 8) that exist
+  as `verse` rows, and every stored end verse exists too.
+
+**`cross-ref` notes that mention JST without a JST link: 25.** They do not count as reaching F rows (Decision
+2026-11-03) and are stored as ordinary `cross-ref` refs. In 22 the "JST …" text is a link to an Old or New
+Testament verse whose own footnote carries that JST change ("See JST Gen. 18:23 (Gen. 18:22 note a)" links to
+`ot/gen/18` `id=p22`); 3 are text only (`bofm/1-ne/21` note24_a,
+`dc-testament/dc/49` note21_a, `nt/john/4` note34_a).
+
+- `ot/gen/18` note2_a; `ot/gen/47` note29_b; `ot/1-sam/28` note15_a; `ot/1-kgs/22` note22_a; `ot/isa/6` note5_d;
+  `ot/isa/34` note4_b; `ot/isa/37` note36_a; `ot/jer/18` note8_a and note10_c; `ot/dan/7` note3_b; `ot/zech/14` note5_b
+- `nt/matt/5` note30_a; `nt/mark/8` note35_c; `nt/john/4` note34_a; `nt/1-cor/6` note2_a; `nt/gal/3` note24_c;
+  `nt/james/5` note20_c
+- `bofm/1-ne/8` note19_a; `bofm/1-ne/21` note24_a; `bofm/3-ne/13` note12_a; `bofm/3-ne/14` note1_a
+- `dc-testament/dc/6` note6_a; `dc-testament/dc/49` note21_a; `dc-testament/dc/93` note1_f; `dc-testament/dc/109` note76_e
 
 ## Q2: footnote categories (`data-note-category`)
 
