@@ -57,7 +57,8 @@ def open_db(path: str) -> sqlite3.Connection:
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     conn = sqlite3.connect(path)
     with open(SCHEMA, encoding="utf-8") as f:
-        conn.executescript(f.read())
+        # the raw layer only: the normalized layer (after the marker) belongs to build_scriptures.py
+        conn.executescript(f.read().split("-- ==== normalized layer ====")[0])
     return conn
 
 
