@@ -81,24 +81,21 @@ def get_json(session: requests.Session, uri: str, retries: int = 1) -> Dict[str,
             time.sleep(RETRY_DELAY)
 
 
-CONTENT_BASE_URL = "https://www.churchofjesuschrist.org/study/api/v3/language-pages/type/content?lang=eng&uri="
+CONTENT_URL = "https://www.churchofjesuschrist.org/study/api/v3/language-pages/type/content?lang=eng&uri="
 
 
-def get_content_response(session: requests.Session, uri: str, retries: int = 1) -> requests.Response:
-    """GET a page from the `type/content` endpoint (scripture pages), throttled.
+def get_content(session: requests.Session, uri: str, retries: int = 1) -> requests.Response:
+    """GET a page from the `type/content` endpoint (scripture pages), throttled like get_json.
 
-    Returns the Response so callers can keep the body unmodified. Retries
-    network errors and 5xx answers, then raises (HTTPError for bad statuses).
+    Returns the Response, so callers can store the body unmodified. Network errors and 5xx answers are
+    retried; after the last try a network error is raised and a 5xx response is returned.
     """
-    url = f"{CONTENT_BASE_URL}{uri}"
     for attempt in range(retries + 1):
         try:
-            response = _get(session, url)
-            if response.status_code < 500:
+            response = _get(session, f"{CONTENT_URL}{uri}")
+            if response.status_code < 500 or attempt == retries:
                 return response
-            response.raise_for_status()
         except requests.exceptions.RequestException:
             if attempt == retries:
                 raise
         time.sleep(RETRY_DELAY)
-    raise RuntimeError("unreachable")

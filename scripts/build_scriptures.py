@@ -1,19 +1,13 @@
 #!/usr/bin/env python3
-"""Build the normalized layer of scripture.db from the raw layer (SPEC-v2 §4.2, §8, §10).
-
-Drops and recreates every normalized table in ONE transaction, from `raw_latest`. The raw layer is
-never touched. Validation (§10) runs before the commit: any failure rolls the whole build back and
-leaves the previous normalized tables as they were. Exit status is non-zero on failure.
+"""Build the normalized layer of scripture.db from its raw layer and core.db's JST (SPEC-v2 §4.2, §5, §8, §10).
 
   --db PATH   the scripture.db to build in place (default db/scripture.db)
 
-Steps: read the six volume TOCs, fail (naming them) if a linked page has no stored 200 response,
-parse every page with extractors/scripture_page.py, insert, validate, write build_meta.
-`book.num_chapters` is taken from each book's `_contents` page (Abraham's facsimile links count toward
-the Facsimiles book), or for a book without one from its chapter links in the volume TOC, and §10 checks
-it against the chapter rows the volume TOC walk produced.
-`build_meta.build_id` is a sha256 over the content of the normalized tables, so rebuilding identical
-raw data gives the same id.
+Fails, naming them, when a TOC page or a page a TOC links to has no stored response. Otherwise drops and
+recreates every normalized table in ONE transaction, parses every page, imports core.db's J/F rows, links the
+`jst` footnotes and the JST appendix passages, and runs the §10 checks; a failed check rolls everything back.
+The raw layer is never touched. `build_meta.build_id` is a sha256 over the normalized tables' content, so
+rebuilding the same raw data gives the same id.
 """
 import argparse
 import hashlib
@@ -29,340 +23,231 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+from config.scripture_books import BOOK_CROSSWALK, VOLUME_ABBR, book_abbr  # noqa: E402
 from db import SCI_DB_VERSION  # noqa: E402
-from config.scripture_books import BOOK_CROSSWALK, VOLUME_ABBR  # noqa: E402
 from extractors import scripture_jst as jst  # noqa: E402
 from extractors import scripture_page as sp  # noqa: E402
 
 DEFAULT_DB = os.path.join(ROOT, "db", "scripture.db")
 SCHEMA = os.path.join(ROOT, "db", "scripture_schema.sql")
 MARKER = "-- ==== normalized layer ===="
-LANG = "eng"
-SCHEMA_VERSION = "1"
-NORMALIZED_TABLES = ["jst_passage_ref", "jst_passage_verse", "jst_passage", "footnote_ref", "footnote", "jst_verse", "verse", "chapter", "page", "book", "volume", "build_meta"]
-# tables hashed into build_id (build_meta itself is not)
-HASHED_TABLES = ["volume", "book", "page", "chapter", "verse", "jst_verse", "footnote", "footnote_ref",
-                 "jst_passage", "jst_passage_verse", "jst_passage_ref"]
+TABLES = ["volume", "book", "page", "chapter", "verse", "jst_verse", "footnote", "footnote_ref",
+          "jst_passage", "jst_passage_verse", "jst_passage_ref"]   # hashed into build_id, in this order
 SAMPLE = 8
+VERSE_P = re.compile(r'<p\b[^>]*\bclass="(?:[^"]*\s)?verse(?:\s[^"]*)?"')   # an independent count of verse paragraphs
 
 
 class BuildError(Exception):
     pass
 
 
-def normalized_ddl() -> str:
-    with open(SCHEMA, encoding="utf-8") as f:
-        return f.read().split(MARKER, 1)[1]
+def insert(conn, table, **row):
+    cur = conn.execute(f"INSERT INTO {table} ({', '.join(row)}) VALUES ({', '.join('?' * len(row))})",
+                       list(row.values()))
+    return cur.lastrowid
 
 
-def ddl_statements(ddl: str) -> list:
-    """Split DDL text into complete statements (so the build can stay inside one transaction)."""
-    out, buf = [], ""
-    for line in ddl.splitlines(keepends=True):
-        if not buf and (not line.strip() or line.lstrip().startswith("--")):
-            continue
-        buf += line
-        if sqlite3.complete_statement(buf):
-            out.append(buf.strip())
-            buf = ""
-    if buf.strip():
-        raise BuildError("unterminated statement in the normalized DDL: " + buf.strip()[:60])
-    return out
-
-
-def load_raw(conn: sqlite3.Connection) -> dict:
-    """uri -> (content_hash, json text) for every stored 200 response in raw_latest."""
-    rows = conn.execute("SELECT uri, content_hash, json FROM raw_latest WHERE lang = ? AND status = 200", (LANG,))
-    return {uri: (h, js) for uri, h, js in rows}
-
-
-def read_tocs(raw: dict) -> list:
-    """[(volume segment, uri, parsed Toc)] for the six volume TOCs, in volume order."""
-    missing = [f"/scriptures/{v}" for v in sp.TOC_VOLUMES if f"/scriptures/{v}" not in raw]
-    if missing:
-        raise BuildError("volume TOC pages with no raw_latest row (fetch them first): " + ", ".join(missing))
-    return [(v, f"/scriptures/{v}", sp.parse_toc(json.loads(raw[f"/scriptures/{v}"][1]), v)) for v in sp.TOC_VOLUMES]
-
-
-def check_toc_links(tocs: list, raw: dict) -> None:
-    missing = []
-    for _, _, toc in tocs:
-        missing += [i.uri for i in toc.items if i.uri not in raw]
-    if missing:
-        shown = ", ".join(missing[:50]) + (f" … and {len(missing) - 50} more" if len(missing) > 50 else "")
-        raise BuildError(f"{len(missing)} page(s) linked from a TOC have no raw_latest row (status 200): {shown}")
-
-
-def build_id_of(conn: sqlite3.Connection) -> str:
+def build_id_of(conn) -> str:
     h = hashlib.sha256()
-    for table in HASHED_TABLES:
+    for table in TABLES:
         cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
         h.update(f"#{table}:{','.join(cols)}\n".encode())
         for row in conn.execute(f"SELECT * FROM {table} ORDER BY {', '.join(str(i + 1) for i in range(len(cols)))}"):
-            h.update(json.dumps(row, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-            h.update(b"\n")
+            h.update(json.dumps(row, ensure_ascii=False, separators=(",", ":")).encode() + b"\n")
     return h.hexdigest()
 
 
 class Builder:
-    def __init__(self, conn: sqlite3.Connection, raw: dict, tocs: list):
-        self.conn = conn
-        self.raw = raw
-        self.tocs = tocs
-        self.volume_ids = {}
-        self.book_ids = {}
-        self.page_ids = {}
-        self.parsed = {}          # uri -> ParsedPage
-        self.chapter_ids = {}     # uri -> chapter_id
-        self.verse_ids = {}       # uri -> {aid: verse_id}
-        self.report = []
-        self.contents_unlinked = []   # (_contents uri, link) for _contents links no volume TOC lists
-        self.contents_no_book = []    # (_contents uri, link, book uri) counted toward a book with no row
+    def __init__(self, conn, raw: dict, core_rows: list):
+        self.conn, self.raw = conn, raw
+        self.errors, self.report = [], []
+        self.book_ids, self.page_ids, self.pages = {}, {}, {}   # pages: uri -> sp.Page
+        # JST verses: ids are 1.. in core.db ID order; looked up by (core BookID, JST chapter, JST verse)
+        self.core_rows = core_rows
+        self.jst_ids = {(r["BookID"], r["Chapter"], r["Verse"]): i for i, r in enumerate(core_rows, 1)}
+        self.jst_by_book = defaultdict(list)   # core BookID -> sorted [(chapter, verse, jst_verse_id)]
+        for i, r in enumerate(core_rows, 1):
+            self.jst_by_book[r["BookID"]].append((r["Chapter"], r["Verse"], i))
+        for rows in self.jst_by_book.values():
+            rows.sort()
 
-    # -- structure ---------------------------------------------------------
-    def build_structure(self) -> None:
-        c = self.conn
-        book_sort = 0
-        page_sort = 0
-        pages = []   # (uri, book_uri)
-        seen = set()
-        for vsort, (vseg, vuri, toc) in enumerate(self.tocs):
-            if vseg != sp.JST_VOLUME:
-                cur = c.execute("INSERT INTO volume (uri, title, abbr, sort) VALUES (?,?,?,?)",
-                                (vuri, toc.title or vseg, VOLUME_ABBR.get(vseg), vsort))
-                self.volume_ids[vseg] = cur.lastrowid
-            for b in toc.books:
-                vol_id = self.volume_ids[b.volume]
-                segs = sp.uri_segments(b.uri)
-                key = (segs[0], "/".join(segs[1:]))
-                abbr, cite, core_id = BOOK_CROSSWALK.get(key, (None, b.name, None))
-                cur = c.execute(
-                    "INSERT INTO book (volume_id, uri, name, abbr, cite_abbr, sort, num_chapters, core_book_id) "
-                    "VALUES (?,?,?,?,?,?,NULL,?)", (vol_id, b.uri, b.name, abbr, cite, book_sort, core_id))
-                self.book_ids[b.uri] = cur.lastrowid
-                book_sort += 1
-            if vuri not in seen:
-                seen.add(vuri)
-                pages.append((vuri, None))
-            for item in toc.items:
-                if item.uri not in seen:
-                    seen.add(item.uri)
-                    pages.append((item.uri, item.book_uri if item.book_uri in self.book_ids else None))
+    def fail(self, msg, items):
+        if items:
+            self.errors.append(f"{msg}: {len(items)} — " + "; ".join(map(str, items[:SAMPLE])))
 
-        for uri, book_uri in pages:
-            data = json.loads(self.raw[uri][1])
-            parsed = sp.parse_page(uri, data)
-            self.parsed[uri] = parsed
-            book_id = self.book_ids.get(book_uri) if book_uri else None
-            cur = c.execute("INSERT INTO page (uri, book_id, kind, title, sort) VALUES (?,?,?,?,?)",
-                            (uri, book_id, parsed.kind, parsed.title, page_sort))
-            page_sort += 1
-            self.page_ids[uri] = cur.lastrowid
-        for book_uri, n in self.toc_chapter_counts().items():
-            c.execute("UPDATE book SET num_chapters = ? WHERE uri = ?", (n, book_uri))
+    def data(self, uri) -> dict:
+        return json.loads(self.raw[uri])
 
-    def toc_chapter_counts(self) -> dict:
-        """book uri -> num_chapters, read from the TOC pages (never from the chapter rows).
+    # -- volumes, books, pages ---------------------------------------------
+    def structure(self, tocs: dict) -> None:
+        order = dict.fromkeys(u for vol, links in tocs.items() for u in [f"/scriptures/{vol}", *links])
+        self.pages = {uri: sp.parse_page(uri, self.data(uri)) for uri in order}
+        for sort, (vol, links) in enumerate(tocs.items()):
+            vuri = f"/scriptures/{vol}"
+            if vol != "jst":
+                volume_id = insert(self.conn, "volume", uri=vuri, title=self.pages[vuri].title or vol,
+                                   abbr=VOLUME_ABBR.get(vol), sort=sort)
+                groups = sp.toc_groups(self.data(vuri))
+                for uri in links:
+                    if b := sp.book_uri(uri):
+                        names = groups.get(uri) or [None]
+                        # a sub-book's parent first (abr for abr/fac), named by the outermost group
+                        self.add_book(vol, volume_id, "/".join(b.split("/")[:4]), names[-1])
+                        self.add_book(vol, volume_id, b, names[0])
+        for sort, (uri, page) in enumerate(self.pages.items()):
+            self.page_ids[uri] = insert(self.conn, "page", uri=uri, book_id=self.book_ids.get(sp.book_uri(uri)),
+                                        kind=page.kind, title=page.title, sort=sort)
+        self.num_chapters({u for links in tocs.values() for u in links})
 
-        A book with a `_contents` page gets the number of pages that page lists, each counted toward
-        `sp.contents_link_book` (Abraham's `fac-N` links count toward `/scriptures/pgp/abr/fac`). Only links
-        that a volume TOC also lists are counted: the volume TOCs define the corpus (the fetch walks them, and
-        a missing page among their links fails the build), and the others are reported. A book with no
-        `_contents` page (the one-chapter books) gets its chapter links in the volume TOC.
-        """
-        toc_links = {item.uri for _, _, toc in self.tocs for item in toc.items}
-        from_contents = Counter()
-        covered = set()
-        for vseg, _, toc in self.tocs:
-            if vseg == sp.JST_VOLUME:
+    def add_book(self, vol, volume_id, uri, name) -> None:
+        if uri not in self.book_ids:
+            path = uri.split("/", 3)[3]
+            cite, core_id = BOOK_CROSSWALK.get((vol, path), (name or path, None))
+            self.book_ids[uri] = insert(self.conn, "book", volume_id=volume_id, uri=uri, name=name or path,
+                                        abbr=book_abbr(path), cite_abbr=cite, sort=len(self.book_ids),
+                                        num_chapters=None, core_book_id=core_id)
+
+    def num_chapters(self, toc_links: set) -> None:
+        """book.num_chapters from the TOC pages, never from chapter rows: the pages a book's `_contents` page lists
+        (Abraham's `fac-N` links count toward the Facsimiles), or, for a book without one, its chapter-like links
+        in the volume TOC. `_contents` links that no volume TOC lists were not fetched; they are reported."""
+        from_contents, unlisted = Counter(), []
+        for uri, page in self.pages.items():
+            if page.kind == "book_toc" and sp.book_uri(uri):
+                from_contents[sp.book_uri(uri)] += 0
+                for link in sp.contents_links(self.data(uri)):
+                    if link in toc_links:
+                        from_contents[sp.book_uri(link) or sp.book_uri(uri)] += 1
+                    else:
+                        unlisted.append(link)
+        in_toc = Counter(sp.book_uri(u) for u, page in self.pages.items() if page.kind in sp.CHAPTER_KINDS)
+        self.fail("_contents links that count toward a book with no book row",
+                  [b for b in from_contents if b not in self.book_ids])
+        self.conn.executemany("UPDATE book SET num_chapters = ? WHERE uri = ?", [
+            (from_contents[b] if b in from_contents else in_toc[b], b) for b in self.book_ids])
+        if unlisted:
+            self.report.append(f"_contents links no volume TOC lists (not fetched, not counted): {len(unlisted)} "
+                               f"(e.g. {', '.join(unlisted[:SAMPLE])})")
+
+    # -- JST verses ----------------------------------------------------------
+    def jst_verses(self) -> None:
+        books = {core: bid for core, bid in self.conn.execute(
+            "SELECT core_book_id, book_id FROM book WHERE core_book_id IS NOT NULL")}
+        text = lambda t: t.decode("utf-8") if isinstance(t, (bytes, bytearray)) else ("" if t is None else str(t))
+        self.conn.executemany(
+            "INSERT INTO jst_verse (jst_verse_id, core_id, book_id, chapter, verse, source_flag, text) "
+            "VALUES (?,?,?,?,?,?,?)",
+            [(i, r["ID"], books.get(r["BookID"]), r["Chapter"], r["Verse"], r["Flag"], text(r["Text"]))
+             for i, r in enumerate(self.core_rows, 1)])
+
+    # -- chapters, verses, footnotes -----------------------------------------
+    def content(self) -> None:
+        bad_verses, bad_pids, bad_markers = [], [], []
+        for uri, page in self.pages.items():
+            page_id, book_id = self.page_ids[uri], self.book_ids.get(sp.book_uri(uri))
+            verse_ids = {}
+            if page.kind in sp.CHAPTER_KINDS:
+                chapter_id = insert(self.conn, "chapter", page_id=page_id, book_id=book_id, number=page.number,
+                                    title=page.title, summary=page.summary, intro=page.intro,
+                                    summary_html=page.summary_html, intro_html=page.intro_html)
+                for v in page.verses:
+                    verse_ids[v.aid] = insert(self.conn, "verse", chapter_id=chapter_id, book_id=book_id,
+                                              chapter=page.number, verse=v.verse, aid=v.aid, pid_html_id=v.html_id,
+                                              text=v.text, text_html=v.text_html)
+                numbers = [v.verse for v in page.verses]
+                if numbers != list(range(1, len(numbers) + 1)) or \
+                        len(VERSE_P.findall(self.data(uri)["content"].get("body") or "")) != len(numbers):
+                    bad_verses.append(uri)
+            for fn in page.footnotes:
+                footnote_id = insert(self.conn, "footnote", verse_id=verse_ids.get(fn.pid), note_key=fn.note_key,
+                                     marker=fn.marker, letter=fn.letter, context=fn.context, text=fn.text,
+                                     text_html=fn.text_html, page_id=page_id, anchor_aid=fn.pid)
+                for seq, r in enumerate(fn.refs):
+                    insert(self.conn, "footnote_ref", footnote_id=footnote_id, seq=seq, category=r.category,
+                           ref_type=r.ref_type, href=r.href, label=r.label, target_uri=r.target_uri,
+                           target_book_id=self.book_ids.get(r.book_uri), target_chapter=r.chapter,
+                           target_verse_start=r.verse_start, target_verse_end=r.verse_end, target_help=r.help,
+                           target_jst_verse_id=self.jst_ids.get((r.jst_book, r.chapter, r.verse_start))
+                           if r.category == "jst" else None)
+            # §10: a verse note's pid is a verse aid; body markers and footnote entries match (a note that is not
+            # on a verse, e.g. a table note, may have no marker)
+            if page.kind in ("chapter", "section"):
+                bad_pids += [(uri, fn.note_key) for fn in page.footnotes
+                             if re.fullmatch(r"note\d+_[a-z]+", fn.note_key) and fn.pid not in verse_ids]
+            keys, markers = {fn.note_key for fn in page.footnotes}, set(page.note_markers)
+            on_verses = {fn.note_key for fn in page.footnotes if fn.pid in verse_ids}
+            if markers - keys or on_verses - markers:
+                bad_markers.append((uri, sorted(markers - keys)[:3], sorted(on_verses - markers)[:3]))
+        self.fail("chapters whose verses are not 1..N or not the body's verse paragraphs", bad_verses)
+        self.fail("verse footnotes whose pid matches no verse aid", bad_pids)
+        self.fail("pages whose study-note-ref markers and footnote entries differ (uri, marker only, entry only)",
+                  bad_markers)
+
+    # -- JST appendix passages -----------------------------------------------
+    def passages(self) -> None:
+        books = {core: bid for core, bid in self.conn.execute(
+            "SELECT core_book_id, book_id FROM book WHERE core_book_id IS NOT NULL")}
+        unparsed, mismatched, rels, named = [], [], Counter(), 0
+        for uri, page in self.pages.items():
+            if page.kind != "jst_appendix":
                 continue
-            for item in toc.items:
-                if sp.classify_page(item.uri) != sp.KIND_BOOK_TOC:
-                    continue
-                own_book = item.uri.rsplit("/", 1)[0]
-                covered.add(own_book)
-                for link in sp.parse_book_contents(json.loads(self.raw[item.uri][1])):
-                    if link not in toc_links:
-                        self.contents_unlinked.append((item.uri, link))
-                        continue
-                    book_uri = sp.contents_link_book(link, own_book)
-                    if book_uri not in self.book_ids:
-                        self.contents_no_book.append((item.uri, link, book_uri))
-                        continue
-                    covered.add(book_uri)
-                    from_contents[book_uri] += 1
-        counts = {}
-        for book_uri in self.book_ids:
-            if book_uri in covered:
-                counts[book_uri] = from_contents[book_uri]
-            else:
-                counts[book_uri] = sum(1 for _, _, toc in self.tocs for item in toc.items
-                                       if item.book_uri == book_uri and sp.classify_page(item.uri) in sp.CHAPTER_KINDS)
-        return counts
+            core_book = sp.jst_book(uri)
+            for seq, p in enumerate(jst.parse_appendix(uri, self.data(uri))):
+                if not p.ranges or core_book is None:
+                    unparsed.append(f"{uri} ({p.title})")
+                first, last = (p.ranges[0], p.ranges[-1]) if p.ranges else ((None,) * 4, (None,) * 4)
+                passage_id = insert(self.conn, "jst_passage", page_id=self.page_ids[uri], seq=seq,
+                                    section_id=p.section_id, anchor_aid=p.anchor_aid, title=p.title,
+                                    verse_spec=p.verse_spec, book_id=books.get(core_book), core_book_id=core_book,
+                                    chapter_start=first[0], verse_start=first[1], chapter_end=last[2],
+                                    verse_end=last[3], intro=p.intro)
+                ids = [i for c1, v1, c2, v2 in p.ranges or [] for c, v, i in self.jst_by_book.get(core_book, [])
+                       if (c1, v1) <= (c, v) <= (c2, v2)]
+                self.conn.executemany("INSERT INTO jst_passage_verse (passage_id, jst_verse_id) VALUES (?,?)",
+                                      [(passage_id, i) for i in dict.fromkeys(ids)])
+                named += len(set(ids))
+                heading = sorted({v for c1, v1, c2, v2 in p.ranges or [] if c1 == c2 for v in range(v1, v2 + 1)})
+                if p.paragraphs and heading != sorted(p.paragraphs):
+                    mismatched.append(p.title)
+                for ref_seq, (rel, r, chapter_end) in enumerate(p.refs):
+                    rels[rel] += 1
+                    insert(self.conn, "jst_passage_ref", passage_id=passage_id, seq=ref_seq, rel=rel, href=r.href,
+                           label=r.label, target_uri=r.target_uri, target_book_id=self.book_ids.get(r.book_uri),
+                           target_chapter=r.chapter, target_chapter_end=chapter_end,
+                           target_verse_start=r.verse_start, target_verse_end=r.verse_end)
+        self.fail("appendix passages whose heading does not parse to a JST verse range", unparsed)
+        n = self.conn.execute("SELECT COUNT(*) FROM jst_passage").fetchone()[0]
+        self.report.append(f"jst appendix passages: {n}, heading links: {dict(rels)}, jst_verse rows named: "
+                           f"{named}; headings whose verses differ from the printed paragraphs: {mismatched[:SAMPLE]}")
 
-    # -- content -----------------------------------------------------------
-    def build_content(self) -> None:
+    # -- the rest of §10 ---------------------------------------------------------
+    def validate(self, core_count: int) -> None:
         c = self.conn
-        page_book = {uri: bid for uri, bid in c.execute("SELECT uri, book_id FROM page")}
-        for uri, parsed in self.parsed.items():
-            page_id = self.page_ids[uri]
-            book_id = page_book[uri]
-            aid_to_verse = {}
-            if parsed.kind in sp.CHAPTER_KINDS:
-                cur = c.execute(
-                    "INSERT INTO chapter (page_id, book_id, number, title, summary, intro, summary_html, intro_html) "
-                    "VALUES (?,?,?,?,?,?,?,?)",
-                    (page_id, book_id, parsed.number, parsed.title, parsed.summary, parsed.intro,
-                     parsed.summary_html, parsed.intro_html))
-                chapter_id = cur.lastrowid
-                self.chapter_ids[uri] = chapter_id
-                for v in parsed.verses:
-                    vc = c.execute(
-                        "INSERT INTO verse (chapter_id, book_id, chapter, verse, aid, pid_html_id, text, text_html) "
-                        "VALUES (?,?,?,?,?,?,?,?)",
-                        (chapter_id, book_id, parsed.number, v.verse, v.aid, v.html_id, v.text, v.text_html))
-                    aid_to_verse[v.aid] = vc.lastrowid
-            self.verse_ids[uri] = aid_to_verse
-            for fn in parsed.footnotes:
-                fc = c.execute(
-                    "INSERT INTO footnote (verse_id, note_key, marker, letter, context, text, text_html, page_id, "
-                    "anchor_aid) VALUES (?,?,?,?,?,?,?,?,?)",
-                    (aid_to_verse.get(fn.pid), fn.note_key, fn.marker, fn.letter, fn.context, fn.text,
-                     fn.text_html, page_id, fn.pid))
-                fid = fc.lastrowid
-                for r in fn.refs:
-                    t = r.target
-                    c.execute(
-                        "INSERT INTO footnote_ref (footnote_id, seq, category, ref_type, href, label, target_uri, "
-                        "target_book_id, target_chapter, target_verse_start, target_verse_end, target_help, "
-                        "target_jst_verse_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NULL)",
-                        (fid, r.seq, r.category, r.ref_type, r.href, r.label, t.target_uri,
-                         self.book_ids.get(t.book_uri) if t.book_uri else None,
-                         t.chapter, r.verse_start, r.verse_end, t.help))
-
-    # -- JST (§5) ------------------------------------------------------------
-    def build_jst(self, core_rows: list) -> None:
-        """Import core.db's J/F rows, resolve the `jst` footnote refs, store the appendix passages."""
-        c = self.conn
-        self.core_jst_rows = len(core_rows)
-        jst.import_jst_verses(c, core_rows)
-        index = jst.JstIndex(c, core_rows)
-        self.jst_refs = jst.resolve_footnote_refs(c, index)
-        pages = [(uri, self.page_ids[uri], json.loads(self.raw[uri][1]))
-                 for uri, parsed in self.parsed.items() if parsed.kind == sp.KIND_JST_APPENDIX]
-        self.jst_passages = jst.store_passages(c, index, pages)
-
-    # -- validation (§10) ----------------------------------------------------
-    def validate(self) -> list:
-        c = self.conn
-        errors = []
-
-        def fail(msg, items):
-            if items:
-                errors.append(f"{msg}: {len(items)} — " + "; ".join(map(str, items[:SAMPLE])))
-
-        # verse count per chapter = <p class=verse> in the body; verses run 1..N
-        body_counts = {}
-        for uri, parsed in self.parsed.items():
-            if parsed.kind in sp.CHAPTER_KINDS:
-                body = json.loads(self.raw[uri][1]).get("content", {}).get("body") or ""
-                body_counts[uri] = len(re.findall(r'<p\b[^>]*\bclass="(?:[^"]*\s)?verse(?:\s[^"]*)?"', body))
-        stored = {uri: n for uri, n in c.execute(
-            "SELECT p.uri, COUNT(v.verse_id) FROM page p JOIN chapter ch ON ch.page_id = p.page_id "
-            "LEFT JOIN verse v ON v.chapter_id = ch.chapter_id GROUP BY p.uri")}
-        fail("chapters whose verse rows != <p class=verse> in the body",
-             [(u, stored.get(u), n) for u, n in body_counts.items() if stored.get(u) != n])
-        gaps = []
-        for uri, chapter_id in self.chapter_ids.items():
-            nums = [r[0] for r in c.execute("SELECT verse FROM verse WHERE chapter_id = ? ORDER BY verse", (chapter_id,))]
-            if nums and nums != list(range(1, len(nums) + 1)):
-                gaps.append(uri)
-        fail("chapters whose verses do not run 1..N", gaps)
-
-        # footnotes: stored count = content.footnotes; verse_id resolves when pid is a verse aid;
-        # every study-note-ref has an entry and the reverse
-        bad_count, bad_pid, bad_refs = [], [], []
-        for uri, parsed in self.parsed.items():
-            n = c.execute("SELECT COUNT(*) FROM footnote WHERE page_id = ?", (self.page_ids[uri],)).fetchone()[0]
-            if n != len(parsed.footnotes):
-                bad_count.append((uri, n, len(parsed.footnotes)))
-            aids = self.verse_ids.get(uri, {})
-            for fn in parsed.footnotes:
-                if fn.pid in aids:
-                    continue
-                if parsed.kind in (sp.KIND_CHAPTER, sp.KIND_SECTION) and fn.note_key.startswith("note") \
-                        and re.match(r"^note\d+_[a-z]+$", fn.note_key):
-                    bad_pid.append((uri, fn.note_key, fn.pid))
-            # every body marker needs an entry; every entry anchored on a verse needs a marker (a verse-less
-            # note may be a table note with no marker, e.g. chron-order figure1_note_asterisk)
-            keys = {fn.note_key for fn in parsed.footnotes}
-            verse_keys = {fn.note_key for fn in parsed.footnotes if fn.pid in aids}
-            body_keys = set(parsed.body_note_keys)
-            if body_keys - keys or verse_keys - body_keys:
-                bad_refs.append((uri, sorted(body_keys - keys)[:3], sorted(verse_keys - body_keys)[:3]))
-        fail("pages whose footnote rows != content.footnotes", bad_count)
-        fail("verse footnotes whose pid matches no verse aid", bad_pid)
-        fail("pages where study-note-ref markers and footnote entries differ (uri, marker-only, entry-only)", bad_refs)
-        orphans = c.execute("SELECT COUNT(*) FROM footnote WHERE verse_id IS NOT NULL AND verse_id NOT IN "
-                            "(SELECT verse_id FROM verse)").fetchone()[0]
-        if orphans:
-            errors.append(f"{orphans} footnotes whose verse_id does not resolve")
-
-        # text is clean
-        dirty = c.execute("SELECT verse_id, substr(text, 1, 50) FROM verse WHERE text LIKE '%<%' OR text LIKE '%>%' "
-                          "OR text GLOB '[0-9]*' OR trim(text) = '' LIMIT ?", (SAMPLE,)).fetchall()
-        fail("verse.text with HTML, a leading verse number or no text", dirty)
-
-        # chapter rows per book = num_chapters (TOC-derived: the book's _contents page, see toc_chapter_counts)
-        fail("books whose chapter rows != num_chapters from the TOC (uri, num_chapters, chapter rows)", c.execute(
-            "SELECT b.uri, b.num_chapters, (SELECT COUNT(*) FROM chapter ch WHERE ch.book_id = b.book_id) n "
-            "FROM book b WHERE b.num_chapters IS NULL OR b.num_chapters != n ORDER BY b.sort").fetchall())
-        fail("_contents links that count toward a book with no book row (contents page, link, book)",
-             self.contents_no_book)
-        if self.contents_unlinked:
-            self.report.append(
-                f"_contents links that no volume TOC lists (not fetched, not counted in num_chapters): "
-                f"{len(self.contents_unlinked)} (e.g. {', '.join(l for _, l in self.contents_unlinked[:SAMPLE])})")
-
-        # chapters with verses need a number
-        fail("verse-bearing pages without a chapter number", c.execute(
-            "SELECT p.uri FROM chapter ch JOIN page p ON p.page_id = ch.page_id "
-            "WHERE ch.number IS NULL AND EXISTS (SELECT 1 FROM verse v WHERE v.chapter_id = ch.chapter_id) LIMIT ?",
-            (SAMPLE,)).fetchall())
-
-        # JST: jst_verse = the core.db J/F rows; unresolved `jst` refs are reported (the item check bounds them)
+        self.fail("verse.text with HTML, a leading verse number or no text", c.execute(
+            "SELECT verse_id, substr(text, 1, 50) FROM verse WHERE text LIKE '%<%' OR text LIKE '%>%' "
+            "OR text GLOB '[0-9]*' OR trim(text) = ''").fetchall())
+        self.fail("books whose chapter rows != num_chapters from the TOC (uri, num_chapters, chapter rows)", c.execute(
+            "SELECT uri, num_chapters, (SELECT COUNT(*) FROM chapter ch WHERE ch.book_id = b.book_id) n FROM book b "
+            "WHERE num_chapters IS NULL OR num_chapters != n ORDER BY sort").fetchall())
+        self.fail("verse-bearing pages without a chapter number", c.execute(
+            "SELECT p.uri FROM chapter ch JOIN page p USING (page_id) WHERE ch.number IS NULL "
+            "AND EXISTS (SELECT 1 FROM verse v WHERE v.chapter_id = ch.chapter_id)").fetchall())
         n_jst = c.execute("SELECT COUNT(*) FROM jst_verse").fetchone()[0]
-        if n_jst != self.core_jst_rows:
-            errors.append(f"jst_verse rows {n_jst} != core.db J+F rows {self.core_jst_rows}")
-        fail("appendix passages whose heading does not parse to a JST verse range", self.jst_passages["bad_title"])
-        unres = c.execute("SELECT COUNT(*) FROM footnote_ref WHERE category = 'jst' AND target_jst_verse_id IS NULL"
-                          ).fetchone()[0]
+        if n_jst != core_count or n_jst == 0:
+            self.errors.append(f"jst_verse rows {n_jst} != core.db J+F rows {core_count}")
+        unresolved = [r[0] for r in c.execute(
+            "SELECT label FROM footnote_ref WHERE category = 'jst' AND target_jst_verse_id IS NULL")]
         total = c.execute("SELECT COUNT(*) FROM footnote_ref WHERE category = 'jst'").fetchone()[0]
-        self.report.append(f"jst_verse: {n_jst}; jst refs: {total}, unresolved: {unres}"
-                           + (f" (e.g. {'; '.join(sorted(set(self.jst_refs['unresolved']))[:SAMPLE])})" if unres else ""))
-        ps = self.jst_passages
-        self.report.append(
-            f"jst appendix passages: {ps['passages']}, Compare links: {ps['compare']} (other links: "
-            f"{ps['refs'] - ps['compare']}), jst_verse rows named: {ps['verses']}; no Compare link: "
-            f"{len(ps['no_compare'])}; heading verses not in jst_verse: {len(ps['missing_verses'])}; "
-            f"heading != verse paragraphs: {len(ps['paragraph_mismatch'])}")
-
-        # unresolved scripture refs: reported, not fatal
-        rows = c.execute(
+        self.report.append(f"jst_verse: {n_jst}; jst refs: {total}, unresolved: {len(unresolved)}"
+                           + (f" ({'; '.join(sorted(set(unresolved))[:SAMPLE])})" if unresolved else ""))
+        rows = c.execute(  # scripture refs that resolve to no book: reported, not fatal
             "SELECT target_uri, COUNT(*) FROM footnote_ref WHERE target_help IS NULL AND target_book_id IS NULL "
-            "AND target_uri IS NOT NULL AND target_uri NOT LIKE '/scriptures/jst/%' GROUP BY target_uri "
-            "ORDER BY 2 DESC, 1").fetchall()
-        total_refs = c.execute("SELECT COUNT(*) FROM footnote_ref WHERE target_uri IS NOT NULL "
-                               "AND target_help IS NULL AND target_uri NOT LIKE '/scriptures/jst/%'").fetchone()[0]
-        n_unres = sum(n for _, n in rows)
-        self.report.append(f"scripture refs: {total_refs}; resolved to no book: {n_unres}"
-                           + (f" (e.g. {', '.join(f'{u} x{n}' for u, n in rows[:SAMPLE])})" if rows else ""))
-        return errors
-
-
-def counts(conn: sqlite3.Connection) -> dict:
-    return {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
-            for t in ["volume", "book", "page", "chapter", "verse", "footnote", "footnote_ref"]}
+            "AND target_uri IS NOT NULL AND target_uri NOT LIKE '/scriptures/jst/%' GROUP BY 1 ORDER BY 2 DESC, 1"
+        ).fetchall()
+        total = c.execute("SELECT COUNT(*) FROM footnote_ref WHERE target_uri IS NOT NULL AND target_help IS NULL "
+                          "AND target_uri NOT LIKE '/scriptures/jst/%'").fetchone()[0]
+        self.report.append(f"scripture refs: {total}; resolved to no book: {sum(n for _, n in rows)}"
+                           + (f" ({', '.join(f'{u} x{n}' for u, n in rows[:SAMPLE])})" if rows else ""))
 
 
 def build(db_path: str) -> int:
@@ -370,65 +255,54 @@ def build(db_path: str) -> int:
         print(f"ERROR: {db_path} does not exist; run scripts/fetch_scriptures.py first", file=sys.stderr)
         return 1
     conn = sqlite3.connect(db_path, isolation_level=None)
-    conn.execute("PRAGMA foreign_keys = OFF")
     try:
-        if not conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'raw_latest'").fetchone():
-            print(f"ERROR: {db_path} has no raw layer; run scripts/fetch_scriptures.py first", file=sys.stderr)
-            return 1
-        raw = load_raw(conn)
-        tocs = read_tocs(raw)
-        check_toc_links(tocs, raw)
+        raw = {u: (h, js) for u, h, js in conn.execute(
+            "SELECT uri, content_hash, json FROM raw_latest WHERE lang = 'eng' AND status = 200")}
+        tocs = {v: sp.toc_links(json.loads(raw[f"/scriptures/{v}"][1])) if f"/scriptures/{v}" in raw else None
+                for v in sp.TOC_VOLUMES}
+        missing = [f"/scriptures/{v}" for v, links in tocs.items() if links is None]
+        missing += [u for links in tocs.values() for u in links or [] if u not in raw]
+        if missing:
+            raise BuildError(f"{len(missing)} TOC page(s) or page(s) linked from a TOC have no stored response "
+                             f"(fetch them first): {', '.join(missing[:50])}")
         try:
-            core_rows = jst.read_core_jst()
+            core_rows, core_count = jst.read_core_jst()
         except FileNotFoundError as e:
             raise BuildError(str(e))
 
-        conn.execute("BEGIN")
+        with open(SCHEMA, encoding="utf-8") as f:
+            ddl = f.read().split(MARKER, 1)[1]
+        drops = "".join(f"DROP TABLE IF EXISTS {t};" for t in ["build_meta", *reversed(TABLES)])
+        conn.executescript("BEGIN;" + drops + ddl)   # the transaction stays open until COMMIT below
         try:
-            for t in NORMALIZED_TABLES:
-                conn.execute(f"DROP TABLE IF EXISTS {t}")
-            for idx in ("footnote_verse_idx", "footnote_ref_book_idx", "verse_chapter_idx", "jst_verse_ref_idx",
-                        "jst_verse_core_idx", "jst_passage_ref_book_idx"):
-                conn.execute(f"DROP INDEX IF EXISTS {idx}")
-            for stmt in ddl_statements(normalized_ddl()):
-                conn.execute(stmt)
-            b = Builder(conn, raw, tocs)
-            b.build_structure()
-            b.build_content()
-            b.build_jst(core_rows)
-            errors = b.validate()
-            if errors:
-                raise BuildError("validation failed:\n  - " + "\n  - ".join(errors))
+            b = Builder(conn, {u: js for u, (_, js) in raw.items()}, core_rows)
+            b.structure(tocs)
+            b.jst_verses()
+            b.content()
+            b.passages()
+            b.validate(core_count)
+            if b.errors:
+                raise BuildError("validation failed:\n  - " + "\n  - ".join(b.errors))
             build_id = build_id_of(conn)
-            raw_hash = hashlib.sha256(
-                "\n".join(f"{u}\t{h}" for u, (h, _) in sorted(raw.items())).encode()).hexdigest()
-            meta = {
-                "build_id": build_id,
-                "schema_version": SCHEMA_VERSION,
-                "raw_hash": raw_hash,
-                "raw_pages": str(len(raw)),
-                "core_db_version": SCI_DB_VERSION,
-                "built_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            }
+            meta = {"build_id": build_id, "schema_version": "1", "raw_pages": str(len(raw)),
+                    "raw_hash": hashlib.sha256("\n".join(f"{u}\t{h}" for u, (h, _) in sorted(raw.items()))
+                                               .encode()).hexdigest(),
+                    "core_db_version": SCI_DB_VERSION,
+                    "built_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
             conn.executemany("INSERT INTO build_meta (key, value) VALUES (?, ?)", sorted(meta.items()))
             conn.execute("COMMIT")
         except BaseException:
             conn.execute("ROLLBACK")
             raise
+        counts = {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+                  for t in ["volume", "book", "page", "chapter", "verse", "footnote", "footnote_ref"]}
     except BuildError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
     finally:
         conn.close()
-
-    c2 = sqlite3.connect(db_path)
-    try:
-        n = counts(c2)
-    finally:
-        c2.close()
-    print("build ok: " + ", ".join(f"{k}={v}" for k, v in n.items()))
-    for line in b.report:
-        print(line)
+    print("build ok: " + ", ".join(f"{k}={v}" for k, v in counts.items()))
+    print("\n".join(b.report))
     print(f"build_id: {build_id}")
     return 0
 
@@ -436,8 +310,7 @@ def build(db_path: str) -> int:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--db", default=DEFAULT_DB, help="scripture.db to build in place (default db/scripture.db)")
-    args = ap.parse_args(argv)
-    return build(args.db)
+    return build(ap.parse_args(argv).db)
 
 
 if __name__ == "__main__":
