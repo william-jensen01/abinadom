@@ -29,7 +29,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
+from db import SCI_DB_VERSION  # noqa: E402
 from config.scripture_books import BOOK_CROSSWALK, VOLUME_ABBR  # noqa: E402
+from extractors import scripture_jst as jst  # noqa: E402
 from extractors import scripture_page as sp  # noqa: E402
 
 DEFAULT_DB = os.path.join(ROOT, "db", "scripture.db")
@@ -37,9 +39,10 @@ SCHEMA = os.path.join(ROOT, "db", "scripture_schema.sql")
 MARKER = "-- ==== normalized layer ===="
 LANG = "eng"
 SCHEMA_VERSION = "1"
-NORMALIZED_TABLES = ["footnote_ref", "footnote", "jst_verse", "verse", "chapter", "page", "book", "volume", "build_meta"]
+NORMALIZED_TABLES = ["jst_passage_ref", "jst_passage_verse", "jst_passage", "footnote_ref", "footnote", "jst_verse", "verse", "chapter", "page", "book", "volume", "build_meta"]
 # tables hashed into build_id (build_meta itself is not)
-HASHED_TABLES = ["volume", "book", "page", "chapter", "verse", "jst_verse", "footnote", "footnote_ref"]
+HASHED_TABLES = ["volume", "book", "page", "chapter", "verse", "jst_verse", "footnote", "footnote_ref",
+                 "jst_passage", "jst_passage_verse", "jst_passage_ref"]
 SAMPLE = 8
 
 
@@ -237,6 +240,18 @@ class Builder:
                          self.book_ids.get(t.book_uri) if t.book_uri else None,
                          t.chapter, r.verse_start, r.verse_end, t.help))
 
+    # -- JST (§5) ------------------------------------------------------------
+    def build_jst(self, core_rows: list) -> None:
+        """Import core.db's J/F rows, resolve the `jst` footnote refs, store the appendix passages."""
+        c = self.conn
+        self.core_jst_rows = len(core_rows)
+        jst.import_jst_verses(c, core_rows)
+        index = jst.JstIndex(c, core_rows)
+        self.jst_refs = jst.resolve_footnote_refs(c, index)
+        pages = [(uri, self.page_ids[uri], json.loads(self.raw[uri][1]))
+                 for uri, parsed in self.parsed.items() if parsed.kind == sp.KIND_JST_APPENDIX]
+        self.jst_passages = jst.store_passages(c, index, pages)
+
     # -- validation (§10) ----------------------------------------------------
     def validate(self) -> list:
         c = self.conn
@@ -315,6 +330,23 @@ class Builder:
             "WHERE ch.number IS NULL AND EXISTS (SELECT 1 FROM verse v WHERE v.chapter_id = ch.chapter_id) LIMIT ?",
             (SAMPLE,)).fetchall())
 
+        # JST: jst_verse = the core.db J/F rows; unresolved `jst` refs are reported (the item check bounds them)
+        n_jst = c.execute("SELECT COUNT(*) FROM jst_verse").fetchone()[0]
+        if n_jst != self.core_jst_rows:
+            errors.append(f"jst_verse rows {n_jst} != core.db J+F rows {self.core_jst_rows}")
+        fail("appendix passages whose heading does not parse to a JST verse range", self.jst_passages["bad_title"])
+        unres = c.execute("SELECT COUNT(*) FROM footnote_ref WHERE category = 'jst' AND target_jst_verse_id IS NULL"
+                          ).fetchone()[0]
+        total = c.execute("SELECT COUNT(*) FROM footnote_ref WHERE category = 'jst'").fetchone()[0]
+        self.report.append(f"jst_verse: {n_jst}; jst refs: {total}, unresolved: {unres}"
+                           + (f" (e.g. {'; '.join(sorted(set(self.jst_refs['unresolved']))[:SAMPLE])})" if unres else ""))
+        ps = self.jst_passages
+        self.report.append(
+            f"jst appendix passages: {ps['passages']}, Compare links: {ps['compare']} (other links: "
+            f"{ps['refs'] - ps['compare']}), jst_verse rows named: {ps['verses']}; no Compare link: "
+            f"{len(ps['no_compare'])}; heading verses not in jst_verse: {len(ps['missing_verses'])}; "
+            f"heading != verse paragraphs: {len(ps['paragraph_mismatch'])}")
+
         # unresolved scripture refs: reported, not fatal
         rows = c.execute(
             "SELECT target_uri, COUNT(*) FROM footnote_ref WHERE target_help IS NULL AND target_book_id IS NULL "
@@ -346,18 +378,24 @@ def build(db_path: str) -> int:
         raw = load_raw(conn)
         tocs = read_tocs(raw)
         check_toc_links(tocs, raw)
+        try:
+            core_rows = jst.read_core_jst()
+        except FileNotFoundError as e:
+            raise BuildError(str(e))
 
         conn.execute("BEGIN")
         try:
             for t in NORMALIZED_TABLES:
                 conn.execute(f"DROP TABLE IF EXISTS {t}")
-            for idx in ("footnote_verse_idx", "footnote_ref_book_idx", "verse_chapter_idx"):
+            for idx in ("footnote_verse_idx", "footnote_ref_book_idx", "verse_chapter_idx", "jst_verse_ref_idx",
+                        "jst_verse_core_idx", "jst_passage_ref_book_idx"):
                 conn.execute(f"DROP INDEX IF EXISTS {idx}")
             for stmt in ddl_statements(normalized_ddl()):
                 conn.execute(stmt)
             b = Builder(conn, raw, tocs)
             b.build_structure()
             b.build_content()
+            b.build_jst(core_rows)
             errors = b.validate()
             if errors:
                 raise BuildError("validation failed:\n  - " + "\n  - ".join(errors))
@@ -369,7 +407,7 @@ def build(db_path: str) -> int:
                 "schema_version": SCHEMA_VERSION,
                 "raw_hash": raw_hash,
                 "raw_pages": str(len(raw)),
-                "core_db_version": "not used (JST import not built yet)",
+                "core_db_version": SCI_DB_VERSION,
                 "built_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             }
             conn.executemany("INSERT INTO build_meta (key, value) VALUES (?, ?)", sorted(meta.items()))

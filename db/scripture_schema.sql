@@ -81,14 +81,54 @@ CREATE TABLE verse (
   UNIQUE (chapter_id, verse)
 );
 
-CREATE TABLE jst_verse (               -- filled by the JST import (extractors/scripture_jst.py)
+CREATE TABLE jst_verse (               -- every core.db J/F row, in JST numbering (extractors/scripture_jst.py)
   jst_verse_id  INTEGER PRIMARY KEY,
-  core_id       INTEGER,
-  book_id       INTEGER,
-  chapter       INTEGER,
-  verse         INTEGER,
+  core_id       INTEGER,               -- core.db scripture.ID
+  book_id       INTEGER,               -- the KJV book of the same name (book.core_book_id = core.db BookID);
+                                       -- NULL when the build has no such book row
+  chapter       INTEGER,               -- JST chapter
+  verse         INTEGER,               -- JST verse
   source_flag   TEXT,                  -- F = in the Church edition, J = rest of the Inspired Version
-  text          TEXT
+  text          TEXT                   -- core.db text, decoded, unchanged
+);
+
+CREATE TABLE jst_passage (             -- one JST appendix passage (a <section> with a "JST, Book C:V." heading)
+  passage_id     INTEGER PRIMARY KEY,
+  page_id        INTEGER NOT NULL REFERENCES page(page_id),   -- the /scriptures/jst/jst-gen/9 page
+  seq            INTEGER NOT NULL,     -- order on the page
+  section_id     TEXT,                 -- html id of the section, "sec_gen_9_4_6"
+  anchor_aid     TEXT,                 -- data-aid of the heading
+  title          TEXT,                 -- "JST, Genesis 9:4–6."
+  verse_spec     TEXT,                 -- "9:4–6" / "4:1, 5–6, 8–9" as printed after the book name
+  book_id        INTEGER,              -- the KJV book of the same name; NULL when the build has no such book row
+  core_book_id   INTEGER,              -- core.db BookID (jst_verse.book_id's key)
+  chapter_start  INTEGER,              -- first JST chapter:verse of the passage
+  verse_start    INTEGER,
+  chapter_end    INTEGER,              -- last JST chapter:verse
+  verse_end      INTEGER,
+  intro          TEXT,                 -- the heading's study-intro, when it has one
+  UNIQUE (page_id, seq)
+);
+
+CREATE TABLE jst_passage_verse (       -- the jst_verse rows a passage's heading names (JST numbering)
+  passage_id    INTEGER NOT NULL REFERENCES jst_passage(passage_id),
+  jst_verse_id  INTEGER NOT NULL REFERENCES jst_verse(jst_verse_id),
+  PRIMARY KEY (passage_id, jst_verse_id)
+);
+
+CREATE TABLE jst_passage_ref (         -- the links in a passage heading. Never footnote_ref rows.
+  passage_id          INTEGER NOT NULL REFERENCES jst_passage(passage_id),
+  seq                 INTEGER NOT NULL,
+  rel                 TEXT NOT NULL,   -- compare (the KJV range, after "Compare") | similar | see-also
+  href                TEXT,
+  label               TEXT,
+  target_uri          TEXT,
+  target_book_id      INTEGER REFERENCES book(book_id),
+  target_chapter      INTEGER,
+  target_chapter_end  INTEGER,         -- only for a `span=` href crossing chapters
+  target_verse_start  INTEGER,
+  target_verse_end    INTEGER,
+  PRIMARY KEY (passage_id, seq)
 );
 
 CREATE TABLE footnote (
@@ -130,6 +170,9 @@ CREATE TABLE footnote_ref (
 CREATE INDEX footnote_verse_idx ON footnote(verse_id);
 CREATE INDEX footnote_ref_book_idx ON footnote_ref(target_book_id, target_chapter, target_verse_start);
 CREATE INDEX verse_chapter_idx ON verse(book_id, chapter, verse);
+CREATE INDEX jst_verse_ref_idx ON jst_verse(book_id, chapter, verse);
+CREATE UNIQUE INDEX jst_verse_core_idx ON jst_verse(core_id);
+CREATE INDEX jst_passage_ref_book_idx ON jst_passage_ref(target_book_id, target_chapter, target_verse_start);
 
 CREATE TABLE build_meta (
   key    TEXT PRIMARY KEY,
