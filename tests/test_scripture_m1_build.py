@@ -170,3 +170,39 @@ def test_missing_toc_page_fails_the_build(tmp_path, fetched_db):
     code, out = run_script("build_scriptures.py", "--db", db)
     assert code != 0, "a TOC link with no raw row must fail the build"
     assert "enos/1" in out, "the missing URI must be listed"
+
+
+def test_jst_build_checks_report_and_ex_7_3(tmp_path, fetched_db):
+    """§10: report F rows nothing reaches; KJV Ex 7:3 must link to JST Ex 7:3 (fatal when missing)."""
+    need_core_db()
+    db = tmp_path / "jstcheck.db"
+    shutil.copy(fetched_db, db)
+    code, out = run_script("build_scriptures.py", "--db", db)
+    assert code == 0, out[-1500:]
+    assert "jst_verse F rows no jst footnote or appendix passage names:" in out, out[-1500:]
+    assert "KJV Ex 7:3 -> JST Ex 7:3: linked" in out, out[-1500:]
+
+    # the same check, run on the built store with the Ex 7:3 link removed, must be an error
+    import importlib.util
+    import sys
+    from pathlib import Path
+    scripts = str(Path(__file__).parent.parent / "scripts")
+    sys.path.insert(0, scripts)
+    try:
+        spec = importlib.util.spec_from_file_location("build_scriptures_under_test", Path(scripts) / "build_scriptures.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+    finally:
+        sys.path.remove(scripts)
+    conn = sqlite3.connect(db)
+    b = mod.Builder(conn, {}, [])
+    b.jst_checks()
+    assert not b.errors, b.errors
+    conn.execute("""DELETE FROM footnote_ref WHERE category='jst' AND footnote_id IN (
+                    SELECT f.footnote_id FROM footnote f JOIN verse v USING (verse_id)
+                    JOIN chapter c ON c.chapter_id=v.chapter_id JOIN page p ON p.page_id=c.page_id
+                    WHERE p.uri='/scriptures/ot/ex/7' AND v.verse=3)""")
+    b = mod.Builder(conn, {}, [])
+    b.jst_checks()
+    conn.close()
+    assert any("Ex 7:3" in e for e in b.errors), f"a missing Ex 7:3 link must fail the build: {b.errors}"

@@ -143,7 +143,7 @@ so text and href agree wherever both exist.
 | `nt/mark/13` | `note1_a` | `pgp/js-m/1` | "The text of JST Mark 13 is the same as JST Matthew 24. See Pearl of Great Price, JS—M." |
 
 The first 5 are the `<h1>` book-title notes (see Contradicts spec, item 1). How these 7 are stored is decided at
-I6, together with the open JST-storage question in PROGRESS.md Blockers.
+I6, together with the JST-storage question, which PROGRESS.md Decisions now rule.
 
 **Numbers for the I6 JST-storage decision**
 
@@ -203,7 +203,7 @@ The spec says "five volume TOCs". There are six: the JST appendix TOC is the ext
 **Page kinds in the store**
 
 `data-content-type` does not separate the document kinds, so the kind is derived from the URI and the body. Rule
-order for the parser: 3-segment URI is a volume TOC; last segment `_contents` is a book TOC; volume `jst` is a JST appendix
+order for the parser: 2-segment URI (/scriptures/ot) is a volume TOC; last segment `_contents` is a book TOC; volume `jst` is a JST appendix
 page; `/od/` is a declaration; `/fac-` is a facsimile; last segment not numeric (or `title-page`) is front matter;
 numeric under `dc-testament` is a section; the rest are chapters.
 
@@ -271,7 +271,7 @@ Five pages with verses have no `study-summary` paragraph. `chapter.summary` come
 
 **Contradicts spec**
 
-Three findings contradict the spec. All are logged under Blockers in PROGRESS.md; 1 and 2 have a planned resolution that does not stop the run, 3 is an open question.
+Three findings contradict the spec. All are ruled under Decisions in PROGRESS.md (none is an open question now).
 
 1. **9 footnotes are not on a verse.** Spec §2 says footnotes are keyed `note{verse}_{letter}` with `pid` = the verse's
    `data-aid`, and §10 says every `footnote.verse_id` resolves. These 9 have other keys, and their `pid` is the
@@ -305,11 +305,11 @@ Three findings contradict the spec. All are logged under Blockers in PROGRESS.md
    | 84:102 | `verse contains-line digits-3` |
 
    Planned resolution: a verse is any `<p>` whose class tokens include `verse`. An exact `class="verse"` match would
-   leave D&C 84 as 1..98, 103..120 and break the 1..N check. The locked checks `test_build_full.py:55` and `:69`
-   match the exact string; that is logged as a Blocker for the user.
+   leave D&C 84 as 1..98, 103..120 and break the 1..N check. The locked checks originally matched the exact
+   string; the user edited them (PROGRESS.md Decisions, 2026-11-03) to match the `verse` class token.
 
 3. **Where appendix passages go.** Spec §5.2.2 puts JST appendix passages into `footnote_ref` (`category='jst'`), but GOAL.md
-   puts appendix "Compare" links in a separate table (e.g. `jst_passage`). See the PROGRESS.md Blockers question on JST link storage.
+   puts appendix "Compare" links in a separate table (e.g. `jst_passage`). Ruled 2026-11-03 (goal Decisions): passages and their Compare links go only in `jst_passage` tables, never `footnote_ref`.
 
 The rest extends the spec without disagreeing with it: the category list (§2) gains four (`or`, `jst`, `bd`,
 `triple-index`); there are six TOCs, not five (the JST TOC, which GOAL.md adds); and 171 of 558 `jst` spans link to

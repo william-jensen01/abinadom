@@ -246,8 +246,33 @@ class Builder:
         ).fetchall()
         total = c.execute("SELECT COUNT(*) FROM footnote_ref WHERE target_uri IS NOT NULL AND target_help IS NULL "
                           "AND target_uri NOT LIKE '/scriptures/jst/%'").fetchone()[0]
+        self.jst_checks()
         self.report.append(f"scripture refs: {total}; resolved to no book: {sum(n for _, n in rows)}"
                            + (f" ({', '.join(f'{u} x{n}' for u, n in rows[:SAMPLE])})" if rows else ""))
+
+    def jst_checks(self) -> None:
+        c = self.conn
+        # F rows (the JST the Church's Bible shows) that no jst footnote and no appendix passage names: reported
+        rows = c.execute(
+            "SELECT COALESCE(b.abbr, '?') || ' ' || j.chapter || ':' || j.verse "
+            "FROM jst_verse j LEFT JOIN book b ON b.book_id = j.book_id WHERE j.source_flag = 'F' "
+            "AND NOT EXISTS (SELECT 1 FROM footnote_ref r WHERE r.category = 'jst' AND r.target_jst_verse_id = j.jst_verse_id) "
+            "AND NOT EXISTS (SELECT 1 FROM jst_passage_verse pv WHERE pv.jst_verse_id = j.jst_verse_id) "
+            "ORDER BY j.jst_verse_id").fetchall()
+        self.report.append(f"jst_verse F rows no jst footnote or appendix passage names: {len(rows)}"
+                           + (f" (e.g. {', '.join(r for r, in rows[:SAMPLE])})" if rows else ""))
+        # spec section 10: KJV Ex 7:3 links to JST Ex 7:3
+        if not c.execute("SELECT 1 FROM page WHERE uri = '/scriptures/ot/ex/7'").fetchone():
+            self.report.append("KJV Ex 7:3 -> JST Ex 7:3: not checked, /scriptures/ot/ex/7 is not in the store")
+        elif c.execute(
+                "SELECT 1 FROM footnote_ref r JOIN footnote f USING (footnote_id) JOIN verse v USING (verse_id) "
+                "JOIN chapter ch ON ch.chapter_id = v.chapter_id JOIN page p ON p.page_id = ch.page_id "
+                "JOIN jst_verse j ON j.jst_verse_id = r.target_jst_verse_id "
+                "WHERE r.category = 'jst' AND p.uri = '/scriptures/ot/ex/7' AND v.verse = 3 "
+                "AND j.book_id = ch.book_id AND j.chapter = 7 AND j.verse = 3").fetchone():
+            self.report.append("KJV Ex 7:3 -> JST Ex 7:3: linked")
+        else:
+            self.errors.append("KJV Ex 7:3 has no jst footnote_ref to JST Ex 7:3 (jst_verse chapter 7, verse 3)")
 
 
 def build(db_path: str) -> int:
