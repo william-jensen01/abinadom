@@ -1,4 +1,4 @@
-"""M1 fetch-full — the real raw store db/scripture.db is complete (SPEC-v2 phase 1 checkpoint).
+"""The real raw store db/scripture.db is complete.
 
 Runs on a temp copy of the real store; skips when db/scripture.db is missing or empty.
 Independent reference: canonical chapter counts of the LDS standard works.

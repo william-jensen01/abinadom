@@ -1,4 +1,4 @@
-"""Shared harness for the M1 scripture tests: a fake Church API, in-process CLI runs, and real-store guards.
+"""Shared harness for the scripture tests: a fake Church API, in-process CLI runs, and real-store guards.
 
 Fixture tests never touch the network: requests' HTTPAdapter.send is patched to serve the recorded Church API
 pages in tests/fixtures/scriptures/. Tests of the real store (db/scripture.db) and of anything that needs the

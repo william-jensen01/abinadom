@@ -1,4 +1,4 @@
-"""scripts/fetch_scriptures.py with a fake session (SPEC-v2 §4.1, §8): no network."""
+"""scripts/fetch_scriptures.py with a fake session: no network."""
 import json
 import sqlite3
 

@@ -1,4 +1,4 @@
-"""M1 build — parse + normalize the fixture raw store (SPEC-v2 §4.2, §10 build-time, phase 2).
+"""build_scriptures.py on the fixture raw store: parsing, normalizing and the build checks.
 
 Golden values below were read off the recorded API pages in tests/fixtures/scriptures/.
 """
@@ -173,7 +173,7 @@ def test_missing_toc_page_fails_the_build(tmp_path, fetched_db):
 
 
 def test_jst_build_checks_report_and_ex_7_3(tmp_path, fetched_db):
-    """§10: report F rows nothing reaches; KJV Ex 7:3 must link to JST Ex 7:3 (fatal when missing)."""
+    """Report F rows nothing reaches; KJV Ex 7:3 must link to JST Ex 7:3 (fatal when missing)."""
     need_core_db()
     db = tmp_path / "jstcheck.db"
     shutil.copy(fetched_db, db)

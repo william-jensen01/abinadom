@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Build the normalized layer of scripture.db from its raw layer and core.db's JST (SPEC-v2 §4.2, §5, §8, §10).
+"""Build the normalized layer of scripture.db from its raw layer and core.db's JST.
 
   --db PATH   the scripture.db to build in place (default db/scripture.db)
 
 Fails, naming them, when a TOC page or a page a TOC links to has no stored response. Otherwise drops and
 recreates every normalized table in ONE transaction, parses every page, imports core.db's J/F rows, links the
-`jst` footnotes and the JST appendix passages, and runs the §10 checks; a failed check rolls everything back.
+`jst` footnotes and the JST appendix passages, and runs the build checks; a failed check rolls everything back.
 The raw layer is never touched. `build_meta.build_id` is a sha256 over the normalized tables' content, so
 rebuilding the same raw data gives the same id.
 """
@@ -169,7 +169,7 @@ class Builder:
                            target_verse_start=r.verse_start, target_verse_end=r.verse_end, target_help=r.help,
                            target_jst_verse_id=self.jst_ids.get((r.jst_book, r.chapter, r.verse_start))
                            if r.category == "jst" else None)
-            # §10: a verse note's pid is a verse aid; body markers and footnote entries match (a note that is not
+            # a verse note's pid is a verse aid; body markers and footnote entries match (a note that is not
             # on a verse, e.g. a table note, may have no marker)
             if page.kind in ("chapter", "section"):
                 bad_pids += [(uri, fn.note_key) for fn in page.footnotes
@@ -220,7 +220,7 @@ class Builder:
         self.report.append(f"jst appendix passages: {n}, heading links: {dict(rels)}, jst_verse rows named: "
                            f"{named}; headings whose verses differ from the printed paragraphs: {mismatched[:SAMPLE]}")
 
-    # -- the rest of §10 ---------------------------------------------------------
+    # -- the remaining build checks ----------------------------------------------
     def validate(self, core_count: int) -> None:
         c = self.conn
         self.fail("verse.text with HTML, a leading verse number or no text", c.execute(

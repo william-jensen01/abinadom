@@ -1,4 +1,4 @@
-"""M1 audit — docs/scriptures/AUDIT.md answers SPEC-v2 §12 Q2/Q3 with numbers from the full raw store.
+"""docs/scriptures/AUDIT.md: its Q2/Q3 answers match the numbers in the full raw store.
 
 Reads a temp copy of the real store; skips when db/scripture.db is missing or empty.
 """

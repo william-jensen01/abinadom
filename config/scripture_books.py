@@ -1,4 +1,4 @@
-"""Static crosswalk from Church API books to their cite abbreviation and core.db `book.ID` (SPEC-v2 §4.2, §13).
+"""Static crosswalk from Church API books to their cite abbreviation and core.db `book.ID`.
 
 Keyed by (volume segment, book path) as in `/scriptures/<volume>/<book path>`; the Facsimiles are the book
 `abr/fac`. Values are (cite_abbr, core_book_id), both taken from core.db's `book` table (`CiteAbbr`, `ID`).

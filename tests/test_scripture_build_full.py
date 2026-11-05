@@ -1,4 +1,4 @@
-"""M1 build-full — build_scriptures.py on the real raw store passes every §10 build check.
+"""build_scriptures.py on the real raw store passes every build check.
 
 Runs on a temp copy of db/scripture.db (never the real file); skips when that store or core.db is missing.
 Independent reference: published verse totals of the LDS standard works.

@@ -1,4 +1,4 @@
-"""The JST (Joseph Smith Translation): core.db's J/F rows and the Church's JST appendix pages (SPEC-v2 §5).
+"""The JST (Joseph Smith Translation): core.db's J/F rows and the Church's JST appendix pages.
 
 - `read_core_jst`: every core.db `Flag IN ('J','F')` row, read only through `db.Database`. The build stores them in
   `jst_verse` in JST numbering, text decoded and otherwise unchanged.

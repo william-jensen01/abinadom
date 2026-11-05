@@ -1,4 +1,4 @@
-"""M1 jst-full — JST links on the real store (SPEC-v2 §5.2 'must be confirmed', §10 JST, phase 3 checkpoint).
+"""JST links on the real store.
 
 Builds a temp copy of db/scripture.db; skips when that store or core.db is missing.
 """
@@ -23,7 +23,7 @@ def test_full_jst_import_and_links(full):
     total = q1(db, "SELECT COUNT(*) FROM footnote_ref WHERE category='jst'")
     rows = q(db, "SELECT label FROM footnote_ref WHERE category='jst' AND target_jst_verse_id IS NULL")
     print(f"jst refs: {total}, unresolved: {len(rows)}")
-    assert total > 900, f"only {total} jst-category refs on the full store"  # estimate: AUDIT.md (I3) measured 941 jst-footnote JST verses
+    assert total > 900, f"only {total} jst-category refs on the full store"  # estimate; AUDIT.md measured 941 jst-footnote JST verses
     assert len(rows) <= total * 0.005, f"{len(rows)}/{total} jst refs unresolved: {[r[0] for r in rows[:8]]}"
     audit = AUDIT.read_text() if AUDIT.exists() else ""
     unlisted = sorted({r[0] for r in rows if r[0] and r[0] not in audit})

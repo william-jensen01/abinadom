@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch the scripture pages into the raw layer of scripture.db (SPEC-v2 §4.1, §8).
+"""Fetch the scripture pages into the raw layer of scripture.db.
 
 Walks the five volume tables of contents and the JST appendix TOC, and stores every page they link to
 (`_contents` pages included) from the `type/content` endpoint, sequentially through utils.church_api (throttle,

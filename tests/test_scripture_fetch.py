@@ -1,4 +1,4 @@
-"""M1 fetch — scripts/fetch_scriptures.py against the fake Church API (SPEC-v2 §4.1, §8, phase 1)."""
+"""scripts/fetch_scriptures.py against the fake Church API."""
 import json
 
 from tests.scripture_world import FakeAPI, VOLUMES, q, q1, run_script, world_toc_links, CONTENT_PATH

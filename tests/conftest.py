@@ -210,5 +210,5 @@ def talk_bundle() -> TalkBundle:
     return metadata, paragraphs, citations, footnotes, validation_report
 
 
-# M1 scripture tests: fake Church API world and fetched/built scripture.db fixtures
+# Scripture tests: fake Church API world and fetched/built scripture.db fixtures
 from tests.scripture_world import world, fetched_db, built_db, full_store, full_built  # noqa: E402,F401

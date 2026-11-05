@@ -1,4 +1,4 @@
--- scripture.db raw layer (SPEC-v2 §4.1). Written only by scripts/fetch_scriptures.py, append-only.
+-- scripture.db raw layer. Written only by scripts/fetch_scriptures.py, append-only.
 CREATE TABLE IF NOT EXISTS raw_page (
   uri           TEXT NOT NULL,        -- "/scriptures/bofm/alma/32"
   lang          TEXT NOT NULL,        -- "eng"
@@ -21,7 +21,7 @@ WHERE r.rowid = (
 );
 
 -- ==== normalized layer ====
--- scripture.db normalized layer (SPEC-v2 §4.2). Written only by scripts/build_scriptures.py, which
+-- scripture.db normalized layer. Written only by scripts/build_scriptures.py, which
 -- drops and recreates every table below in one transaction. scripts/fetch_scriptures.py reads only the
 -- raw layer above (everything before the marker line).
 

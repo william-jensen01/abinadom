@@ -1,4 +1,4 @@
-"""M1 jst — JST import from core.db + the Church's own JST links (SPEC-v2 §5, phase 3), on the fixture store.
+"""JST import from core.db and the Church's own JST links, on the fixture store.
 
 Needs the user-built core db (db/core.<SCI_DB_VERSION>.db); read only through db.Database.
 """

@@ -1,4 +1,4 @@
-"""Parse Church API scripture pages (`type/content` JSON) into plain rows (SPEC-v2 §2, §4.2, §8).
+"""Parse Church API scripture pages (`type/content` JSON) into plain rows.
 
 Pure functions: no database, no network. scripts/build_scriptures.py stores what they return.
 
