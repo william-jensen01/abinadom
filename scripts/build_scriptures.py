@@ -135,9 +135,9 @@ class Builder:
             "SELECT core_book_id, book_id FROM book WHERE core_book_id IS NOT NULL")}
         text = lambda t: t.decode("utf-8") if isinstance(t, (bytes, bytearray)) else ("" if t is None else str(t))
         self.conn.executemany(
-            "INSERT INTO jst_verse (jst_verse_id, core_id, book_id, chapter, verse, source_flag, text) "
-            "VALUES (?,?,?,?,?,?,?)",
-            [(i, r["ID"], books.get(r["BookID"]), r["Chapter"], r["Verse"], r["Flag"], text(r["Text"]))
+            "INSERT INTO jst_verse (jst_verse_id, core_id, book_id, core_book_id, chapter, verse, source_flag, text) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            [(i, r["ID"], books.get(r["BookID"]), r["BookID"], r["Chapter"], r["Verse"], r["Flag"], text(r["Text"]))
              for i, r in enumerate(self.core_rows, 1)])
 
     # -- chapters, verses, footnotes -----------------------------------------

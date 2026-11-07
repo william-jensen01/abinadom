@@ -46,3 +46,12 @@ BOOK_CROSSWALK = {
 def book_abbr(book_path: str) -> str:
     """"1-ne" -> "1 ne", "abr/fac" -> "fac"."""
     return book_path.rsplit("/", 1)[-1].replace("-", " ")
+
+
+# core.db BookID -> (volume segment, book path, cite_abbr): names a book the build has no `book` row for.
+CORE_BOOKS = {core_id: (vol, path, cite) for (vol, path), (cite, core_id) in BOOK_CROSSWALK.items()}
+
+
+def display_book_name(uri: str, name: str) -> str:
+    """The Church names the D&C's book "Sections"; people (and embeddings) want "Doctrine and Covenants"."""
+    return "Doctrine and Covenants" if uri == "/scriptures/dc-testament/dc" else name

@@ -10,6 +10,7 @@ Logging Level Conventions:
   WARNING -- skipped items, fallbacks, suspicious-but-not-blocking events
   ERROR   -- failures that halt or corrupt output
 """
+import os
 
 # --- HTML Parsing ---
 PARAGRAPH_HTML_PARSER = "html5lib"
@@ -49,6 +50,16 @@ WEAVIATE_COLLECTION_NAMES = {
     "citations": "ConferenceTalkCitations",
     "footnotes": "ConferenceTalkFootnotes",
 }
+
+# --- Scripture collections (docs/scriptures/SPEC-v2.md section 6) ---
+WEAVIATE_SCRIPTURE_COLLECTION_NAMES = {
+    "verses": "ScriptureVerses",
+    "chapters": "ScriptureChapters",
+}
+# One object holding the build_id of the scripture.db that was completely loaded.
+WEAVIATE_SCRIPTURE_META_COLLECTION = "ScriptureMeta"
+# Neighbours on each side of a verse in its embedded context window. Changing it needs --force.
+SCRIPTURE_WINDOW_RADIUS = int(os.environ.get("SCRIPTURE_WINDOW_RADIUS", "1"))
 
 # --- ChromaDB backward-compatibility (verify_chromadb_pipeline.py) ---
 # Production now uses Weaviate (Phase 24). These names are kept for operators
