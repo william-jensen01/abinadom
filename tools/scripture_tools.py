@@ -299,3 +299,82 @@ def get_chapter_overview(store: ScriptureStore, book: str, chapter: int):
         "verse_count": verse_count,
         "top_cross_references": top,
     }
+
+
+# ---------------------------------------------------------------------------
+# search filters and result rows (SPEC-v2 §9 `search`)
+# ---------------------------------------------------------------------------
+
+def _volume_names(store: Optional[ScriptureStore], text: str) -> list[str]:
+    """Weaviate `volume` values that `text` names: a volume title ("Book of Mormon") or its URI segment ("bofm")."""
+    names = [text.strip()]
+    if store is None:
+        return names
+    wanted = text.strip().lower()
+    if wanted.startswith("the "):
+        wanted = wanted[4:]
+    try:
+        rows = store.db.select("SELECT uri, title FROM volume")
+    except Exception:  # noqa: BLE001 — fall back to the text as written
+        return names
+    for r in rows:
+        title = r["title"].lower()
+        if wanted in (title, title[4:] if title.startswith("the ") else title, r["uri"].rstrip("/").rsplit("/", 1)[-1].lower()):
+            names.append(r["title"])
+    return names
+
+
+def build_scripture_filter(store: Optional[ScriptureStore], collection: str, *, book: Optional[str] = None,
+                           volume: Optional[str] = None, chapter: Optional[int] = None,
+                           variant: Optional[str] = None):
+    """A Weaviate filter for a scripture search, or an error string. `collection` is "verses" or "chapters".
+
+    `book` goes through the resolver (the Weaviate `book` holds the display name, "Doctrine and Covenants", while
+    the db says "Sections"); an unresolved name is matched as written. A verse search defaults to variant
+    "standard"; "jst" keeps only the JST verses and "both" drops the filter.
+    """
+    from weaviate.classes.query import Filter
+
+    conditions = []
+    if book and book.strip():
+        resolved = store.resolver.resolve(book) if store is not None else None
+        names = [resolved.display_name, resolved.name] if resolved else [book.strip()]
+        conditions.append(Filter.by_property("book").contains_any(list(dict.fromkeys(names))))
+    if volume and volume.strip():
+        conditions.append(Filter.by_property("volume").contains_any(list(dict.fromkeys(_volume_names(store, volume)))))
+    if chapter is not None:
+        conditions.append(Filter.by_property("chapter").equal(int(chapter)))
+    if collection == "verses":
+        v = (variant or "standard").strip().lower()
+        if v not in ("standard", "jst", "both"):
+            return f"Unknown variant '{variant}'. Valid: standard (default), jst, both."
+        if v != "both":
+            conditions.append(Filter.by_property("variant").equal(v))
+    if not conditions:
+        return None
+    return conditions[0] if len(conditions) == 1 else Filter.all_of(conditions)
+
+
+def scripture_snippet(collection: str, props: dict) -> str:
+    if collection == "verses":
+        return props.get("text", "") or ""
+    parts = [props.get("title") or "", props.get("summary") or ""]
+    return "\n\n".join(p for p in parts if p) or (props.get("intro") or "")
+
+
+def format_scripture_result(collection: str, props: dict, *, relevance=None, score_type=None, distance=None) -> dict:
+    row = {"reference": props.get("reference", ""), "snippet": scripture_snippet(collection, props),
+           "book": props.get("book"), "volume": props.get("volume"), "chapter": props.get("chapter")}
+    if collection == "verses":
+        row.update(variant=props.get("variant"), verse=props.get("verse"))
+        if props.get("variant") == "standard":
+            row["has_jst"] = bool(props.get("has_jst"))
+    else:
+        row.update(title=props.get("title"), kind=props.get("kind"))
+    if relevance is not None:
+        row["relevance"] = relevance
+    if score_type is not None:
+        row["score_type"] = score_type
+    if distance is not None:
+        row["distance"] = distance
+    return row

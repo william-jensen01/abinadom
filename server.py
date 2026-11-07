@@ -68,12 +68,14 @@ from weaviate.classes.aggregate import GroupByAggregate
 from weaviate.util import generate_uuid5
 
 from config.weaviate_client import get_weaviate_client
-from config.pipeline_config import WEAVIATE_COLLECTION_NAMES
+from config.pipeline_config import WEAVIATE_COLLECTION_NAMES, WEAVIATE_SCRIPTURE_COLLECTION_NAMES
 from config.embedding import resolve_embedding_url, get_embedding_function
 from db.scripture import open_scripture_db
 from tools.scripture_tools import (
     NOT_AVAILABLE as SCRIPTURE_NOT_AVAILABLE,
     ScriptureStore,
+    build_scripture_filter,
+    format_scripture_result,
     get_chapter_overview as scripture_chapter_overview,
     get_verse as scripture_verse,
 )
@@ -412,7 +414,7 @@ async def search(
     season: str | None = None,
     collection: str = "paragraphs",
     limit: int = 5,
-    alpha: float = 0.7,
+    alpha: float | None = None,
     group_by_talk: bool = False,
     session: str | None = None,
     cites_scripture: bool | None = None,
@@ -422,12 +424,19 @@ async def search(
     offset: int = 0,
     sort_by: str | None = None,
     results_per_talk: int = 3,
+    book: str | None = None,
+    volume: str | None = None,
+    chapter: int | None = None,
+    variant: str | None = None,
     ctx: Context = None,
 ) -> str:
     """Search LDS General Conference content by meaning.
 
     Use collection='paragraphs' for passage text, 'talks' for talk discovery,
     'citations' for scripture references, 'footnotes' for footnote content.
+    Use collection='scripture_verses' to search the scripture text itself (KJV wording
+    matters, so alpha=0.0 gives exact-phrase keyword search) and 'scripture_chapters'
+    to find which chapter is about a topic.
 
     Args:
         query: Natural language search query.
@@ -436,7 +445,8 @@ async def search(
         season: Optional conference season filter ("April" or "October").
         collection: Collection to search - "talks", "paragraphs" (default), "citations", or "footnotes".
         limit: Number of results to return (default 5, max 20).
-        alpha: Blend of vector (1.0) and keyword/BM25 (0.0). Default 0.7 (hybrid).
+        alpha: Blend of vector (1.0) and keyword/BM25 (0.0). Default 0.7 (hybrid); 0.4 for
+            scripture_verses, where people remember KJV wording and keyword matches should weigh more.
         group_by_talk: If True (paragraphs only), cluster results by talk_id.
             Grouped results are always vector-ranked (search_mode "vector_grouped")
             regardless of alpha, and require the embedding service; alpha applies
@@ -449,29 +459,59 @@ async def search(
         offset: Number of results to skip for pagination (default 0).
         sort_by: Sort order for browse path only — 'date_desc' (newest first) or 'date_asc' (oldest first).
         results_per_talk: Max passages per talk when group_by_talk=True (default 3, max 10).
+        book: Scripture collections only. Book name or abbreviation ("Alma", "1 Ne.", "D&C").
+        volume: Scripture collections only. Volume title or short name ("Book of Mormon", "bofm").
+        chapter: Scripture collections only. Chapter or section number.
+        variant: scripture_verses only. "standard" (default), "jst" or "both".
     """
     app: AppContext = ctx.lifespan_context["app"]
 
-    col_name = WEAVIATE_COLLECTION_NAMES.get(collection)
+    scripture_key = None
+    if collection in ("scripture_verses", "scripture_chapters"):
+        scripture_key = collection.split("_", 1)[1]
+        col_name = WEAVIATE_SCRIPTURE_COLLECTION_NAMES[scripture_key]
+    else:
+        col_name = WEAVIATE_COLLECTION_NAMES.get(collection)
     if col_name is None:
         return f"Unknown collection '{collection}'. Valid: talks, paragraphs, citations, footnotes."
+    if scripture_key is None and any(x is not None for x in (book, volume, chapter, variant)):
+        return "book, volume, chapter and variant apply only to the scripture_verses and scripture_chapters collections."
+    if scripture_key is not None and any(
+        x is not None for x in (speaker, year, season, session, cites_scripture, year_from, year_to)
+    ):
+        return "speaker, year, season, session, cites_scripture and year_from/to apply only to talk collections."
+    if scripture_key == "chapters" and variant is not None:
+        return "variant applies only to the scripture_verses collection."
 
     if group_by_talk and collection != "paragraphs":
         return "group_by_talk is only supported for the paragraphs collection."
 
+    if alpha is None:
+        alpha = 0.4 if scripture_key == "verses" else 0.7
     alpha = max(0.0, min(1.0, alpha))
     limit = max(1, min(limit, 20))
     offset = max(0, offset)
     results_per_talk = max(1, min(results_per_talk, 10))
-    weaviate_filter = _build_weaviate_filters(
-        year, season, speaker,
-        session=session,
-        cites_scripture=cites_scripture,
-        year_from=year_from,
-        year_to=year_to,
-    )
+    if scripture_key is not None:
+        weaviate_filter = build_scripture_filter(
+            app.scripture, scripture_key, book=book, volume=volume, chapter=chapter, variant=variant,
+        )
+        if isinstance(weaviate_filter, str):
+            return weaviate_filter
+    else:
+        weaviate_filter = _build_weaviate_filters(
+            year, season, speaker,
+            session=session,
+            cites_scripture=cites_scripture,
+            year_from=year_from,
+            year_to=year_to,
+        )
     col = app.client.collections.use(col_name)
     snippet_fn = _SNIPPET_PROP.get(collection, lambda p: "")
+    fmt = _format_search_result
+    if scripture_key is not None:
+        # scripture rows carry `reference`, not talk fields
+        fmt = lambda document, meta, **kw: format_scripture_result(scripture_key, meta, **kw)  # noqa: E731
 
     # Compute total count for pagination envelope (best-effort; None on failure)
     total = None
@@ -506,7 +546,7 @@ async def search(
         if not result.objects:
             return "No results found."
         results = [
-            _format_search_result(snippet_fn(obj.properties), obj.properties)
+            fmt(snippet_fn(obj.properties), obj.properties)
             for obj in result.objects
         ]
         has_more = bool(total is not None and (offset + len(results)) < total)
@@ -584,7 +624,7 @@ async def search(
                 meta = obj.metadata
                 relevance = getattr(meta, "certainty", None)
                 dist = getattr(meta, "distance", None)
-                paragraphs.append(_format_search_result(
+                paragraphs.append(fmt(
                     snippet_fn(props), props,
                     relevance=relevance, score_type="vector_certainty", distance=dist,
                 ))
@@ -643,19 +683,19 @@ async def search(
         if effective_alpha == 1.0:
             relevance = getattr(meta, "certainty", None)
             dist = getattr(meta, "distance", None)
-            row = _format_search_result(
+            row = fmt(
                 snippet_fn(props), props,
                 relevance=relevance, score_type="vector_certainty", distance=dist,
             )
         elif effective_alpha == 0.0:
             relevance = getattr(meta, "score", None)
-            row = _format_search_result(
+            row = fmt(
                 snippet_fn(props), props,
                 relevance=relevance, score_type="bm25",
             )
         else:
             relevance = getattr(meta, "score", None)
-            row = _format_search_result(
+            row = fmt(
                 snippet_fn(props), props,
                 relevance=relevance, score_type="hybrid_fusion",
             )
