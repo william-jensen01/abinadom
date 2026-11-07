@@ -70,6 +70,13 @@ from weaviate.util import generate_uuid5
 from config.weaviate_client import get_weaviate_client
 from config.pipeline_config import WEAVIATE_COLLECTION_NAMES
 from config.embedding import resolve_embedding_url, get_embedding_function
+from db.scripture import open_scripture_db
+from tools.scripture_tools import (
+    NOT_AVAILABLE as SCRIPTURE_NOT_AVAILABLE,
+    ScriptureStore,
+    get_chapter_overview as scripture_chapter_overview,
+    get_verse as scripture_verse,
+)
 
 # ---------------------------------------------------------------------------
 # Logging — must be configured before anything else writes to stderr (INTG-01)
@@ -90,6 +97,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AppContext:
     client: weaviate.WeaviateClient
+    scripture: ScriptureStore | None = None   # None: scripture.db is not available (talk tools are unaffected)
 
 
 # Per-collection property extractor: maps collection key -> text snippet from Weaviate properties.
@@ -169,7 +177,17 @@ def _startup() -> AppContext:
         sys.exit(1)
     _check_embedding()
     _validate_collections(client)
-    return AppContext(client=client)
+    return AppContext(client=client, scripture=_open_scripture())
+
+
+def _open_scripture() -> ScriptureStore | None:
+    """Open scripture.db read-only from SCRIPTURE_DB_PATH (read now, at startup). None when it is unusable."""
+    try:
+        database = open_scripture_db()
+        return ScriptureStore.open(database) if database is not None else None
+    except Exception as exc:  # noqa: BLE001 — scripture is optional; never block the talk tools
+        logger.warning("scripture.db unavailable: %s", exc)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -909,6 +927,63 @@ async def get_talk_citations(
         })
 
     return json.dumps(results, ensure_ascii=False, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# Scripture tools — read scripture.db directly (no embedding, no Weaviate)
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def get_verse(
+    book: str,
+    chapter: int,
+    verse_start: int | None = None,
+    verse_end: int | None = None,
+    include_footnotes: bool = True,
+    include_jst: bool = False,
+    numbering: str = "standard",
+    ctx: Context = None,
+) -> str:
+    """Return scripture verses with their chapter summary, footnotes and optionally the JST. No embedding needed.
+
+    Args:
+        book: Book name or abbreviation ("Alma", "1 Nephi", "1 Ne.", "First Nephi", "D&C", "Psalms").
+            "JST Genesis" reads the Joseph Smith Translation in its own chapter and verse numbering.
+        chapter: Chapter (or D&C section) number. For a one-chapter book ("Jude", 3) means Jude 1:3.
+        verse_start: First verse; omit for the whole chapter.
+        verse_end: Last verse of a range (default: verse_start).
+        include_footnotes: Attach each verse's footnotes with their references (default true).
+        include_jst: Attach the JST verses the Church links to each verse (its JST footnotes and appendix).
+        numbering: "standard" (default) or "jst" (same as a "JST ..." book).
+
+    Returns JSON {reference, chapter_summary, verses: [{reference, verse, text, jst?, footnotes?}]}.
+    """
+    app: AppContext = ctx.lifespan_context["app"]
+    if app.scripture is None:
+        return SCRIPTURE_NOT_AVAILABLE
+    result = scripture_verse(app.scripture, book, chapter, verse_start, verse_end,
+                             include_footnotes=include_footnotes, include_jst=include_jst, numbering=numbering)
+    return result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+
+
+@mcp.tool()
+async def get_chapter_overview(
+    book: str,
+    chapter: int,
+    ctx: Context = None,
+) -> str:
+    """Orient on a chapter before reading it: title, intro, summary, verse count and its most-referenced
+    cross-reference targets. No embedding needed.
+
+    Args:
+        book: Book name or abbreviation ("Alma", "1 Ne.", "D&C").
+        chapter: Chapter (or D&C section) number.
+    """
+    app: AppContext = ctx.lifespan_context["app"]
+    if app.scripture is None:
+        return SCRIPTURE_NOT_AVAILABLE
+    result = scripture_chapter_overview(app.scripture, book, chapter)
+    return result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
 
 
 if __name__ == "__main__":
