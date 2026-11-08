@@ -11,8 +11,8 @@ from config.scripture_books import BOOK_CROSSWALK, CORE_BOOKS
 from db import Database
 
 NOT_AVAILABLE = (
-    "The scripture corpus not available: scripture.db is missing or unusable on this server "
-    "(set SCRIPTURE_DB_PATH to a built scripture.db). The talk tools are unaffected."
+    "Error: scripture corpus not available on this server (scripture.db is missing or unusable; "
+    "set SCRIPTURE_DB_PATH to a built scripture.db). The talk tools are unaffected."
 )
 
 TOP_CROSS_REFERENCES = 10
@@ -116,7 +116,9 @@ def get_verse(store: ScriptureStore, book: str, chapter: int, verse_start: Optio
         (ch["chapter_id"], lo, hi))
     if not verses:
         where = format_reference(b["cite_abbr"], chapter)
-        return f"No verses {lo}–{hi} in {where}." if hi != _ALL else f"No verses in {where}."
+        if hi == _ALL:
+            return f"No verses in {where}."
+        return f"No verse {lo} in {where}." if lo == hi else f"No verses {lo}–{hi} in {where}."
     by_verse = {v["verse"]: {"reference": format_reference(b["cite_abbr"], chapter, v["verse"]),
                              "verse": v["verse"], "text": v["text"]} for v in verses}
     if include_footnotes:

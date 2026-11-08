@@ -215,8 +215,9 @@ def _scripture_status(client, scripture: ScriptureStore | None) -> tuple[bool, d
     file_id, loaded_id = status["file_build_id"], status["loaded_build_id"]
     if file_id and loaded_id and file_id != loaded_id:
         status["mismatch"] = True
-        logger.warning("scripture build mismatch: scripture.db build_id %s, Weaviate ScriptureMeta build_id %s",
-                       file_id, loaded_id)
+        status["hint"] = "re-run `run_scripture_pipeline.py` to reload Weaviate from scripture.db"
+        logger.warning("scripture build mismatch: scripture.db build_id %s, Weaviate ScriptureMeta build_id %s; "
+                       "re-run `run_scripture_pipeline.py`", file_id, loaded_id)
     return status["collections"], status
 
 

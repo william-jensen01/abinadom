@@ -58,7 +58,8 @@ def test_verse_range_footnotes_and_shorthand(store):
 def test_messages(store):
     assert "Unknown book" in get_verse(store, "Hezekiah", 1)
     assert "No chapter 99" in get_verse(store, "Alma", 99, 1)
-    assert "No verses" in get_verse(store, "Alma", 32, 500)
+    assert get_verse(store, "Alma", 32, 500).startswith("No verse 500 in")
+    assert "No verses 500–600 in" in get_verse(store, "Alma", 32, 500, 600)
     assert "before" in get_verse(store, "Alma", 32, 5, 3)
     assert "Unknown book" in get_chapter_overview(store, "Hezekiah", 1)
     assert "No chapter" in get_chapter_overview(store, "Alma", 99)

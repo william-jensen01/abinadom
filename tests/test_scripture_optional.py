@@ -24,12 +24,18 @@ def _store(build_id):
 def test_mismatch_reports_both_ids(caplog):
     loaded, st = server._scripture_status(_Client(True, {"build_id": "old"}), _store("new"))
     assert loaded and st["mismatch"] and st["file_build_id"] == "new" and st["loaded_build_id"] == "old"
-    assert "mismatch" in caplog.text
+    assert "mismatch" in caplog.text and "run_scripture_pipeline.py" in caplog.text
+    assert "run_scripture_pipeline.py" in st["hint"]
 
 
 def test_slice_without_finished_build_is_not_a_mismatch():
     loaded, st = server._scripture_status(_Client(True, {"loading_build_id": "x"}), _store("new"))
     assert loaded and not st["mismatch"] and st["loaded_build_id"] is None and st["loading_build_id"] == "x"
+
+
+def test_not_available_message_has_exact_phrase():
+    from tools.scripture_tools import NOT_AVAILABLE
+    assert "scripture corpus not available" in NOT_AVAILABLE   # GOAL.md: exact, case-sensitive
 
 
 def test_missing_collections_and_db():
@@ -60,6 +66,7 @@ def test_no_scripture_db_keeps_talk_tools(loaded, tmp_path):
     ], unset=("SCRIPTURE_DB_URL",))
     assert isinstance(stats, list) or "total" in blob(stats), f"talk tools must still work: {blob(stats)[:200]}"
     assert _unavailable(verse), f"get_verse without scripture.db must say 'scripture corpus not available': {blob(verse)[:200]}"
+    assert "scripture corpus not available" in blob(verse), f"exact, case-sensitive phrase: {blob(verse)[:200]}"
     (unset_only,) = call_tools({k: v for k, v in env.items() if k != "SCRIPTURE_DB_PATH"},
                                [("corpus_stats", {"collection": "talks"})], unset=("SCRIPTURE_DB_PATH", "SCRIPTURE_DB_URL"))
     assert "total" in blob(unset_only), "server must start with no scripture settings at all"
@@ -77,6 +84,7 @@ def test_unloaded_collections_keep_talk_tools(loaded):
         ])
         assert "total" in blob(stats), f"server must start without scripture collections: {blob(stats)[:200]}"
         assert _unavailable(srch), f"scripture search with collections not loaded must say 'not available': {blob(srch)[:200]}"
+        assert "scripture corpus not available" in blob(srch), f"exact, case-sensitive phrase: {blob(srch)[:200]}"
     finally:
         code, out = run_script("run_scripture_pipeline.py", "--db", db, env=env)
         assert code == 0, out[-1500:]
