@@ -5,6 +5,7 @@ import json
 import pytest
 
 from db.scripture import open_scripture_db
+from tests.scripture_world import FULL_DB, need_full_db
 from tools.scripture_tools import ScriptureStore, get_chapter_overview, get_verse
 
 
@@ -67,7 +68,7 @@ def test_jst_by_footnote_appendix_and_numbering(store):
     ex = get_verse(store, "Exodus", 7, 3, include_jst=True)["verses"][0]
     assert "JST Ex. 7:3" in [j["reference"] for j in ex["jst"]]
     gen = get_verse(store, "Genesis", 9, 5, include_jst=True)["verses"][0]
-    assert [j["reference"] for j in gen["jst"]] == [f"JST Gen. 9:{n}" for n in range(10, 16)]
+    assert [j["reference"] for j in gen["jst"]] == ["JST Gen. 9:10–15"]      # one entry per appendix passage
     assert "jst" not in get_verse(store, "Genesis", 9, 5)["verses"][0]
     j = get_verse(store, "JST Genesis", 8, 19)
     assert j["reference"] == "JST Gen. 8:19" and j["verses"][0]["reference"] == "JST Gen. 8:19"
@@ -176,3 +177,81 @@ def test_server_chapter_overview(loaded):
         next((v for k, v in a.items() if "ref" in k and isinstance(v, list)), None)
     assert top, f"overview must list the most-referenced cross-ref targets: keys {list(a)}"
     assert "Revelation given through Joseph Smith the Prophet" in blob(d), "D&C overview includes the section intro"
+
+
+@pytest.fixture(scope="module")
+def real_store():
+    """The real built store, opened read-only by the tools; skipped when missing or not built."""
+    need_full_db()
+    db = open_scripture_db(str(FULL_DB))
+    if db is None:
+        pytest.skip(f"{FULL_DB} is not a built scripture store")
+    return ScriptureStore.open(db)
+
+
+def _jst_count(r):
+    return sum(len(v.get("jst", [])) for v in r["verses"])
+
+
+def _split_full_and_pointers(response):
+    """The first entry of each JST reference in a response (in verse order) is the full one; later entries with the
+    same reference are pointers. Returns ({reference: {text, holder}}, [pointer entries])."""
+    full, pointers = {}, []
+    for v in response["verses"]:
+        for j in v.get("jst", []):
+            if j["reference"] in full:
+                pointers.append(j)
+            else:
+                full[j["reference"]] = {"text": j["text"], "holder": v["reference"]}
+    return full, pointers
+
+
+def test_include_jst_stays_bounded_on_the_real_store(real_store):
+    """A big appendix passage (Compare Gen 1:1-6:13 -> 329 JST verses) used to attach to every verse it covers:
+    10,199 entries / 2.2 MB for Gen 1."""
+    chapter = get_verse(real_store, "Gen", 1, include_jst=True)
+    assert _jst_count(chapter) <= 2 * len(chapter["verses"])
+    assert len(json.dumps(chapter)) < 200_000
+    full, pointers = _split_full_and_pointers(chapter)
+    assert pointers, "the big passage covers all of Gen 1, so later verses point back to its first entry"
+    for j in pointers:
+        f = full[j["reference"]]
+        assert j["text"] != f["text"] and len(j["text"]) < 200 and f["holder"] in j["text"]
+
+    one = get_verse(real_store, "Gen", 6, 6, include_jst=True)["verses"][0]["jst"]
+    assert len(one) <= 3 and len(json.dumps(one)) < 100_000
+
+
+def test_include_jst_footnote_targets_first_and_in_full(real_store):
+    jst = get_verse(real_store, "Gen", 6, 6, include_jst=True)["verses"][0]["jst"]
+    assert jst[0]["reference"] == "JST Gen. 8:13"                    # the Church's own footnote link comes first
+    assert jst[0]["text"].startswith("And it repented Noah")
+    assert len(jst[0]["text"]) > 50                                    # full text, not a pointer
+    assert len(jst) > 1 and jst[1]["reference"] != jst[0]["reference"]   # then the appendix passage, as one entry
+    ex = get_verse(real_store, "Exodus", 7, 3, include_jst=True)["verses"][0]["jst"]
+    assert ex[0]["reference"] == "JST Ex. 7:3" and len(ex[0]["text"]) > 20
+
+
+def _jst_refs(response):
+    return {v["verse"]: [j["reference"] for j in v.get("jst", [])] for v in response["verses"]}
+
+
+@pytest.mark.parametrize("book,chapter", [("Ex", 33), ("Ex", 7), ("1 Cor", 7), ("Matt", 4), ("Gen", 9)])
+def test_include_jst_chapter_and_single_verse_agree(real_store, book, chapter):
+    """A passage with several Compare refs into one chapter reaches the verses under every ref, so a whole-chapter
+    response lists, for each verse, the same JST references as that verse asked for alone."""
+    whole = _jst_refs(get_verse(real_store, book, chapter, include_jst=True))
+    for verse, refs in whole.items():
+        assert refs == _jst_refs(get_verse(real_store, book, chapter, verse, include_jst=True))[verse], (book, chapter, verse)
+
+
+def test_include_jst_passage_with_several_compare_refs(real_store):
+    ex = _jst_refs(get_verse(real_store, "Ex", 33, include_jst=True))
+    assert "JST Ex. 33:20, 23" in ex[20] and "JST Ex. 33:20, 23" in ex[23]
+    cor = _jst_refs(get_verse(real_store, "1 Cor", 7, include_jst=True))
+    for v in (1, 5, 26, 29, 38):
+        assert "JST 1 Cor. 7:1–2, 5, 26, 29–33, 38" in cor[v], v
+    for v in (3, 27):
+        assert "JST 1 Cor. 7:1–2, 5, 26, 29–33, 38" not in cor.get(v, []), v
+    matt = get_verse(real_store, "Matt", 4, 1, include_jst=True)["verses"][0]["jst"]
+    assert "JST Matt. 4:1, 5–6, 8–9" in [j["reference"] for j in matt]    # a gapped passage is cited as printed

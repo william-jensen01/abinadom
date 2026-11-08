@@ -149,31 +149,63 @@ def _attach_footnotes(store: ScriptureStore, chapter_id: int, lo: int, hi: int, 
 
 def _attach_jst(store: ScriptureStore, b: dict, chapter: int, chapter_id: int, lo: int, hi: int,
                 by_verse: dict) -> None:
-    """The JST verses the Church links to each KJV verse: its `jst` footnotes, then the appendix passages whose
-    "Compare" range covers it. Text is core.db's full verse."""
-    found: dict[int, dict[int, dict]] = {}      # KJV verse -> jst_verse_id -> row, footnotes first
+    """What the Church links to each KJV verse as JST, kept bounded. First the targets of its `jst` footnotes, one
+    {reference, text} per JST verse with core.db's full text. Then one entry per appendix passage whose "Compare"
+    range covers the verse: the passage's JST range as the reference, its verses joined as the text. The text is in
+    full only on the first verse of the response the passage covers; later verses get a short pointer to it."""
+    found: dict[int, dict[int, dict]] = {}      # KJV verse -> jst_verse_id -> row
     for r in store.db.select(
             "SELECT v.verse AS kjv_verse, jv.* FROM footnote_ref r JOIN footnote f ON f.footnote_id = r.footnote_id "
             f"JOIN jst_verse jv ON jv.jst_verse_id = r.target_jst_verse_id {_IN_RANGE} AND r.category = 'jst' "
             "ORDER BY v.verse, f.footnote_id, r.seq", (chapter_id, lo, hi)):
         found.setdefault(r["kjv_verse"], {}).setdefault(r["jst_verse_id"], r)
+    out = {v: [{"reference": _jst_reference(j), "text": j["text"]} for j in rows.values()] for v, rows in found.items()}
 
+    passages: dict[int, Optional[tuple]] = {}   # passage_id -> (reference, text, jst ids), built once
+    holders: dict[int, str] = {}                 # passage_id -> the verse carrying its full text
+    carried: dict[int, set[int]] = {}            # KJV verse -> passage_ids already attached to it
     for c in store.db.select(
             "SELECT * FROM jst_passage_ref WHERE rel = 'compare' AND target_book_id = ? AND target_chapter <= ? "
             "AND COALESCE(target_chapter_end, target_chapter) >= ? ORDER BY passage_id, seq",
             (b["book_id"], chapter, chapter)):
+        pid = c["passage_id"]
         first = (c["target_chapter"], c["target_verse_start"] or 0)
         last = (c["target_chapter_end"] or c["target_chapter"], c["target_verse_end"] or c["target_verse_start"] or _ALL)
-        covered = [v for v in by_verse if first <= (chapter, v) <= last]
-        if covered:
-            rows = store.db.select("SELECT jv.* FROM jst_passage_verse pv JOIN jst_verse jv USING (jst_verse_id) "
-                                   "WHERE pv.passage_id = ? ORDER BY jv.chapter, jv.verse", (c["passage_id"],))
-            for v in covered:
-                for jv in rows:
-                    found.setdefault(v, {}).setdefault(jv["jst_verse_id"], jv)
+        covered = [v for v in by_verse if first <= (chapter, v) <= last and pid not in carried.get(v, ())]
+        if not covered:
+            continue
+        if pid not in passages:
+            passages[pid] = _jst_passage(store, pid)
+        if passages[pid] is None:
+            continue
+        reference, text, ids = passages[pid]
+        for v in covered:
+            carried.setdefault(v, set()).add(pid)
+            if ids <= set(found.get(v, ())):     # the verse's footnotes already carry all of it
+                continue
+            holder = holders.setdefault(pid, by_verse[v]["reference"])
+            out.setdefault(v, []).append({"reference": reference, "text": text if holder == by_verse[v]["reference"]
+                                          else f"See {reference} under {holder}."})
+    for verse, entries in out.items():
+        by_verse[verse]["jst"] = entries
 
-    for verse, rows in found.items():
-        by_verse[verse]["jst"] = [{"reference": _jst_reference(j), "text": j["text"]} for j in rows.values()]
+
+def _jst_passage(store: ScriptureStore, passage_id: int) -> Optional[tuple]:
+    """(reference, text, jst_verse_ids) of an appendix passage. The reference is the passage's printed verse spec in
+    cite form ("JST Gen. 9:10–15", "JST Matt. 4:1, 5–6, 8–9"); its text is its JST verses joined in order."""
+    rows = store.db.select("SELECT jv.* FROM jst_passage_verse pv JOIN jst_verse jv USING (jst_verse_id) "
+                           "WHERE pv.passage_id = ? ORDER BY jv.chapter, jv.verse", (passage_id,))
+    if not rows:
+        return None
+    spec = store.db.scalar("SELECT verse_spec FROM jst_passage WHERE passage_id = ?", (passage_id,), None)
+    if spec:
+        reference = f"JST {CORE_BOOKS.get(rows[0]['core_book_id'], (None, None, '?'))[2]} {spec.strip()}"
+    else:
+        reference = _jst_reference(rows[0])
+        if (rows[0]["chapter"], rows[0]["verse"]) != (rows[-1]["chapter"], rows[-1]["verse"]):
+            tail = (f"{rows[-1]['chapter']}:" if rows[-1]["chapter"] != rows[0]["chapter"] else "") + str(rows[-1]["verse"])
+            reference += f"–{tail}"
+    return reference, " ".join(j["text"] for j in rows), {j["jst_verse_id"] for j in rows}
 
 
 def _get_jst_verses(store: ScriptureStore, b: dict, chapter: int, verse_start: Optional[int],
