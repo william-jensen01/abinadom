@@ -48,7 +48,7 @@ def book_abbr(book_path: str) -> str:
     return book_path.rsplit("/", 1)[-1].replace("-", " ")
 
 
-# core.db BookID -> (volume segment, book path, cite_abbr): names a book the build has no `book` row for.
+# core.db BookID -> (volume segment, book path, cite_abbr). Names a JST row's book even when the store has no row for it.
 CORE_BOOKS = {core_id: (vol, path, cite) for (vol, path), (cite, core_id) in BOOK_CROSSWALK.items()}
 
 

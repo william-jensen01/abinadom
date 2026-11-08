@@ -75,14 +75,8 @@ from config.pipeline_config import (
 )
 from config.embedding import resolve_embedding_url, get_embedding_function
 from db.scripture import open_scripture_db
-from tools.scripture_tools import (
-    NOT_AVAILABLE as SCRIPTURE_NOT_AVAILABLE,
-    ScriptureStore,
-    build_scripture_filter,
-    format_scripture_result,
-    get_chapter_overview as scripture_chapter_overview,
-    get_verse as scripture_verse,
-)
+from tools import scripture_tools
+from tools.scripture_tools import NOT_AVAILABLE as SCRIPTURE_NOT_AVAILABLE, ScriptureStore
 
 # ---------------------------------------------------------------------------
 # Logging — must be configured before anything else writes to stderr (INTG-01)
@@ -104,8 +98,7 @@ logger = logging.getLogger(__name__)
 class AppContext:
     client: weaviate.WeaviateClient
     scripture: ScriptureStore | None = None   # None: scripture.db is not available (talk tools are unaffected)
-    scripture_loaded: bool = True             # (startup sets it) the three Scripture* collections exist in Weaviate
-    scripture_status: dict | None = None      # reported by /health
+    scripture_loaded: bool = True             # the three Scripture* collections exist in Weaviate
 
 
 # Per-collection property extractor: maps collection key -> text snippet from Weaviate properties.
@@ -185,16 +178,21 @@ def _startup() -> AppContext:
         sys.exit(1)
     _check_embedding()
     _validate_collections(client)
-    scripture = _open_scripture()
-    loaded, status = _scripture_status(client, scripture)
-    return AppContext(client=client, scripture=scripture, scripture_loaded=loaded, scripture_status=status)
+    try:
+        database = open_scripture_db()      # SCRIPTURE_DB_PATH, read now
+        scripture = ScriptureStore.open(database) if database is not None else None
+    except Exception as exc:  # noqa: BLE001 — scripture is optional; never block the talk tools
+        logger.warning("scripture.db unavailable: %s", exc)
+        scripture = None
+    loaded, _scripture_report["scripture"] = _scripture_status(client, scripture)
+    return AppContext(client=client, scripture=scripture, scripture_loaded=loaded)
 
 
-_SCRIPTURE_COLLECTIONS = (*WEAVIATE_SCRIPTURE_COLLECTION_NAMES.values(), WEAVIATE_SCRIPTURE_META_COLLECTION)
+_scripture_report: dict = {}    # {"scripture": status} after startup; /health reports it
 
 
 def _scripture_status(client, scripture: ScriptureStore | None) -> tuple[bool, dict]:
-    """(collections present, /health report). Compares the file's build_id with ScriptureMeta; never raises.
+    """(collections present, /health report). Compares the file's build_id with ScriptureMeta's; never raises.
 
     A mismatch only logs a warning. A ScriptureMeta with `loading_build_id` and no `build_id` (a `--book` slice)
     is "no finished load": loaded_build_id is None, which is not a mismatch.
@@ -204,7 +202,8 @@ def _scripture_status(client, scripture: ScriptureStore | None) -> tuple[bool, d
     try:
         if scripture is not None:
             status["file_build_id"] = scripture.db.scalar("SELECT value FROM build_meta WHERE key = 'build_id'")
-        status["collections"] = all(client.collections.exists(n) for n in _SCRIPTURE_COLLECTIONS)
+        names = (*WEAVIATE_SCRIPTURE_COLLECTION_NAMES.values(), WEAVIATE_SCRIPTURE_META_COLLECTION)
+        status["collections"] = all(client.collections.exists(n) for n in names)
         if status["collections"]:
             for obj in client.collections.use(WEAVIATE_SCRIPTURE_META_COLLECTION).iterator():
                 status["loaded_build_id"] = obj.properties.get("build_id") or None
@@ -218,17 +217,7 @@ def _scripture_status(client, scripture: ScriptureStore | None) -> tuple[bool, d
         status["mismatch"] = True
         logger.warning("scripture build mismatch: scripture.db build_id %s, Weaviate ScriptureMeta build_id %s",
                        file_id, loaded_id)
-    return bool(status["collections"]), status
-
-
-def _open_scripture() -> ScriptureStore | None:
-    """Open scripture.db read-only from SCRIPTURE_DB_PATH (read now, at startup). None when it is unusable."""
-    try:
-        database = open_scripture_db()
-        return ScriptureStore.open(database) if database is not None else None
-    except Exception as exc:  # noqa: BLE001 — scripture is optional; never block the talk tools
-        logger.warning("scripture.db unavailable: %s", exc)
-        return None
+    return status["collections"], status
 
 
 # ---------------------------------------------------------------------------
@@ -392,11 +381,9 @@ MCP_INSTRUCTIONS = (
 
 @asynccontextmanager
 async def _lifespan(server: FastMCP):
-    global _scripture_report
     app_ctx: AppContext | None = None     # initialize before try — prevents NameError
     try:
         app_ctx = _startup()
-        _scripture_report = app_ctx.scripture_status
     except SystemExit:
         raise
     except Exception as e:
@@ -407,9 +394,6 @@ async def _lifespan(server: FastMCP):
     finally:
         if app_ctx is not None:           # guard — app_ctx may be None if startup failed
             app_ctx.client.close()
-
-
-_scripture_report: dict | None = None   # set by the lifespan; /health reads it
 
 
 mcp = FastMCP("lds-scripture-index", instructions=MCP_INSTRUCTIONS, auth=_auth, lifespan=_lifespan)
@@ -442,9 +426,7 @@ async def health_handler(request: Request) -> JSONResponse:
         status["weaviate"] = "unreachable"
         http_status = 503
 
-    payload = {"status": "ok" if http_status == 200 else "degraded", **status}
-    if _scripture_report is not None:
-        payload["scripture"] = _scripture_report
+    payload = {"status": "ok" if http_status == 200 else "degraded", **status, **_scripture_report}
     return JSONResponse(payload, status_code=http_status)
 
 
@@ -512,21 +494,15 @@ async def search(
     """
     app: AppContext = ctx.lifespan_context["app"]
 
-    scripture_key = None
-    if collection in ("scripture_verses", "scripture_chapters"):
-        scripture_key = collection.split("_", 1)[1]
-        col_name = WEAVIATE_SCRIPTURE_COLLECTION_NAMES[scripture_key]
-    else:
-        col_name = WEAVIATE_COLLECTION_NAMES.get(collection)
+    scripture_key = collection.removeprefix("scripture_") if collection in ("scripture_verses", "scripture_chapters") else None
+    col_name = WEAVIATE_SCRIPTURE_COLLECTION_NAMES[scripture_key] if scripture_key else WEAVIATE_COLLECTION_NAMES.get(collection)
     if col_name is None:
         return f"Unknown collection '{collection}'. Valid: talks, paragraphs, citations, footnotes."
-    if scripture_key is not None and not app.scripture_loaded:
+    if scripture_key and not app.scripture_loaded:
         return SCRIPTURE_NOT_AVAILABLE
-    if scripture_key is None and any(x is not None for x in (book, volume, chapter, variant)):
+    if not scripture_key and any(x is not None for x in (book, volume, chapter, variant)):
         return "book, volume, chapter and variant apply only to the scripture_verses and scripture_chapters collections."
-    if scripture_key is not None and any(
-        x is not None for x in (speaker, year, season, session, cites_scripture, year_from, year_to)
-    ):
+    if scripture_key and any(x is not None for x in (speaker, year, season, session, cites_scripture, year_from, year_to)):
         return "speaker, year, season, session, cites_scripture and year_from/to apply only to talk collections."
     if scripture_key == "chapters" and variant is not None:
         return "variant applies only to the scripture_verses collection."
@@ -540,12 +516,13 @@ async def search(
     limit = max(1, min(limit, 20))
     offset = max(0, offset)
     results_per_talk = max(1, min(results_per_talk, 10))
-    if scripture_key is not None:
-        weaviate_filter = build_scripture_filter(
-            app.scripture, scripture_key, book=book, volume=volume, chapter=chapter, variant=variant,
-        )
+    fmt = _format_search_result
+    if scripture_key:
+        weaviate_filter = scripture_tools.build_scripture_filter(
+            app.scripture, scripture_key, book=book, volume=volume, chapter=chapter, variant=variant)
         if isinstance(weaviate_filter, str):
             return weaviate_filter
+        fmt = lambda _snippet, props, **kw: scripture_tools.format_scripture_result(scripture_key, props, **kw)  # noqa: E731
     else:
         weaviate_filter = _build_weaviate_filters(
             year, season, speaker,
@@ -556,10 +533,6 @@ async def search(
         )
     col = app.client.collections.use(col_name)
     snippet_fn = _SNIPPET_PROP.get(collection, lambda p: "")
-    fmt = _format_search_result
-    if scripture_key is not None:
-        # scripture rows carry `reference`, not talk fields
-        fmt = lambda document, meta, **kw: format_scripture_result(scripture_key, meta, **kw)  # noqa: E731
 
     # Compute total count for pagination envelope (best-effort; None on failure)
     total = None
@@ -1049,8 +1022,9 @@ async def get_verse(
     app: AppContext = ctx.lifespan_context["app"]
     if app.scripture is None:
         return SCRIPTURE_NOT_AVAILABLE
-    result = scripture_verse(app.scripture, book, chapter, verse_start, verse_end,
-                             include_footnotes=include_footnotes, include_jst=include_jst, numbering=numbering)
+    result = scripture_tools.get_verse(app.scripture, book, chapter, verse_start, verse_end,
+                                       include_footnotes=include_footnotes, include_jst=include_jst,
+                                       numbering=numbering)
     return result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
 
 
@@ -1070,7 +1044,7 @@ async def get_chapter_overview(
     app: AppContext = ctx.lifespan_context["app"]
     if app.scripture is None:
         return SCRIPTURE_NOT_AVAILABLE
-    result = scripture_chapter_overview(app.scripture, book, chapter)
+    result = scripture_tools.get_chapter_overview(app.scripture, book, chapter)
     return result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
 
 

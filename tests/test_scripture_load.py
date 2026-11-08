@@ -3,9 +3,11 @@ scripts/run_scripture_pipeline.py against embedded Weaviate with a fake embedder
 import hashlib
 import json
 import math
+import os
 import re
 import shutil
 import socket
+import sqlite3
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -17,26 +19,26 @@ from tests.scripture_world import FakeAPI, build_world, q1
 from tests.test_scripture_build import ALMA_32_21
 
 VERSES, CHAPTERS, META = "ScriptureVerses", "ScriptureChapters", "ScriptureMeta"
-DIM = 64
+BUILD_ID = "SELECT value FROM build_meta WHERE key='build_id'"
 
 
 # ---------------------------------------------------------------------------
 # Pure transforms
 # ---------------------------------------------------------------------------
 
-def _verse(n, chapter=1, book_uri="/scriptures/bofm/enos"):
-    return dict(book="Enos", book_uri=book_uri, cite_abbr="Enos", volume="The Book of Mormon", chapter=chapter,
-                verse=n, text=f"text {n}", aid=str(n), footnote_count=0)
+def _verse(n, chapter=1):
+    return dict(book="Enos", book_uri="/scriptures/bofm/enos", cite_abbr="Enos", volume="The Book of Mormon",
+                chapter=chapter, verse=n, text=f"text {n}", aid=str(n), footnote_count=0)
 
 
 def test_window_is_chapter_bounded_and_skip_does_not_shift_it():
     verses = [_verse(n) for n in (1, 2, 3)] + [_verse(1, chapter=2)]
-    recs = {r[2]: r for r in prepare_verse_records(verses, [], radius=1)}
-    assert recs["verse_/scriptures/bofm/enos_1_1"][0] == "Enos 1:1\ntext 1\ntext 2"
-    assert recs["verse_/scriptures/bofm/enos_1_2"][0] == "Enos 1:2\ntext 1\ntext 2\ntext 3"
-    assert recs["verse_/scriptures/bofm/enos_2_1"][0] == "Enos 2:1\ntext 1"
+    recs = {r[2]: r[0] for r in prepare_verse_records(verses, [], radius=1)}
+    assert recs["verse_/scriptures/bofm/enos_1_1"] == "Enos 1:1\ntext 1\ntext 2"
+    assert recs["verse_/scriptures/bofm/enos_1_2"] == "Enos 1:2\ntext 1\ntext 2\ntext 3"
+    assert recs["verse_/scriptures/bofm/enos_2_1"] == "Enos 2:1\ntext 1"
     only = prepare_verse_records(verses, [], radius=1, skip=lambda d: not d.endswith("_1_2"))
-    assert [r[2] for r in only] == ["verse_/scriptures/bofm/enos_1_2"] and only[0][0] == recs["verse_/scriptures/bofm/enos_1_2"][0]
+    assert [(r[2], r[0]) for r in only] == [("verse_/scriptures/bofm/enos_1_2", recs["verse_/scriptures/bofm/enos_1_2"])]
     assert prepare_verse_records(verses, [], radius=0)[1][0] == "Enos 1:2\ntext 2"
 
 
@@ -47,9 +49,9 @@ def test_jst_verse_is_embedded_alone_and_skipped_records_are_not_embedded():
     recs = prepare_verse_records([_verse(1)], jst, embed_fn=lambda t: seen.extend(t) or [[0.0]] * len(t),
                                  skip=lambda d: d.startswith("verse_"))
     assert seen == ["JST Genesis 8:13\njst text"] and len(recs) == 1
-    meta = recs[0][1]
+    _, meta, doc_id, _ = recs[0]
     assert meta["variant"] == "jst" and meta["reference"] == "JST Gen. 8:13" and meta["kjv_refs"] == ["Gen. 6:6"]
-    assert recs[0][2] == "jst_/scriptures/ot/gen_8_13"
+    assert doc_id == "jst_/scriptures/ot/gen_8_13"
 
 
 def test_chapter_records():
@@ -58,19 +60,29 @@ def test_chapter_records():
             dict(page_uri="/scriptures/bofm/title-page", kind="front_matter", number=None, cite_abbr=None, book=None,
                  volume="The Book of Mormon", title="Title Page", summary=None, intro=None, verse_count=0)]
     a, t = prepare_chapter_records(rows)
-    assert a[1]["reference"] == "Alma 32" and a[0] == "Alma 32: Alma 32\n\nS" and a[2] == "chapter_/scriptures/bofm/alma/32"
+    assert a[:3] == ("Alma 32: Alma 32\n\nS", a[1], "chapter_/scriptures/bofm/alma/32") and a[1]["reference"] == "Alma 32"
     assert t[1]["reference"] == "Title Page" and "book" not in t[1] and t[1]["verse_count"] == 0
+
+
+def test_jst_rows_of_an_unknown_book_fail_loudly(tmp_path, built_db):
+    from scripts.run_scripture_pipeline import read_store
+    db = tmp_path / "orphan.db"
+    shutil.copy(built_db, db)
+    with sqlite3.connect(db) as conn:
+        conn.execute("UPDATE jst_verse SET book_id = NULL, core_book_id = 999 WHERE jst_verse_id = 1")
+    with pytest.raises(SystemExit, match=r"CORE_BOOKS: \[999\]"):
+        read_store(str(db))
 
 
 # ---------------------------------------------------------------------------
 # Embedded Weaviate + fake embedder
 # ---------------------------------------------------------------------------
 
-def _vector(text):
-    v = [0.0] * DIM
+def _vector(text, dim=64):
+    v = [0.0] * dim
     for w in re.findall(r"[a-z]+", text.lower()):
         h = int(hashlib.md5(w.encode()).hexdigest(), 16)
-        v[h % DIM] += 1.0 if (h >> 8) & 1 else -1.0
+        v[h % dim] += 1.0 if (h >> 8) & 1 else -1.0
     n = math.sqrt(sum(x * x for x in v)) or 1.0
     return [x / n for x in v]
 
@@ -83,32 +95,16 @@ class _Embed(BaseHTTPRequestHandler):
         pass
 
     def do_POST(self):
-        body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
-        inputs = body.get("input", [])
-        if type(self).fail_after is not None and type(self).calls + len(inputs) > type(self).fail_after:
-            self.send_response(500)
-            self.send_header("Content-Length", "0")
-            self.end_headers()
-            return
-        type(self).calls += len(inputs)
-        out = json.dumps({"data": [{"index": i, "embedding": _vector(t)} for i, t in enumerate(inputs)]}).encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
+        inputs = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}").get("input", [])
+        if _Embed.fail_after is not None and _Embed.calls + len(inputs) > _Embed.fail_after:
+            out, status = b"", 500
+        else:
+            _Embed.calls += len(inputs)
+            out, status = json.dumps({"data": [{"index": i, "embedding": _vector(t)} for i, t in enumerate(inputs)]}).encode(), 200
+        self.send_response(status)
         self.send_header("Content-Length", str(len(out)))
         self.end_headers()
         self.wfile.write(out)
-
-
-def run_script(script, *args, env=None):
-    """scripture_world.run_script with extra environment variables for the run."""
-    import os
-    old = dict(os.environ)
-    os.environ.update(env or {})
-    try:
-        return scripture_world.run_script(script, *args)
-    finally:
-        os.environ.clear()
-        os.environ.update(old)
 
 
 def _free_port():
@@ -132,6 +128,17 @@ def weaviate_env(tmp_path_factory):
     srv.shutdown()
 
 
+def run_script(env, script, *args):
+    """scripture_world.run_script with the embedded Weaviate and fake embedder in the environment."""
+    old = dict(os.environ)
+    os.environ.update(env)
+    try:
+        return scripture_world.run_script(script, *args)
+    finally:
+        os.environ.clear()
+        os.environ.update(old)
+
+
 def objects(client, name):
     return list(client.collections.use(name).iterator(include_vector=True))
 
@@ -146,30 +153,26 @@ def drop(client):
             client.collections.delete(n)
 
 
+@pytest.fixture
+def fresh(tmp_path, built_db, weaviate_env):
+    """(db copy, client, env) with the scripture collections dropped before and after."""
+    client, env = weaviate_env
+    drop(client)
+    db = tmp_path / "s.db"
+    shutil.copy(built_db, db)
+    yield db, client, env
+    drop(client)
+
+
 @pytest.fixture(scope="module")
 def loaded(tmp_path_factory, built_db, weaviate_env):
     client, env = weaviate_env
     drop(client)
     db = tmp_path_factory.mktemp("loaded") / "scripture.db"
     shutil.copy(built_db, db)
-    code, out = run_script("run_scripture_pipeline.py", "--db", db, env=env)
+    code, out = run_script(env, "run_scripture_pipeline.py", "--db", db)
     assert code == 0, out[-1500:]
     return db, client, env
-
-
-def test_one_book_slice_writes_no_meta(tmp_path, built_db, weaviate_env):
-    client, env = weaviate_env
-    drop(client)
-    db = tmp_path / "s.db"
-    shutil.copy(built_db, db)
-    code, out = run_script("run_scripture_pipeline.py", "--db", db, "--book", "Enos", env=env)
-    assert code == 0, out[-1500:]
-    std = [o for o in objects(client, VERSES) if o.properties["variant"] == "standard"]
-    assert len(std) == 27 and {o.properties["chapter"] for o in std} == {1}
-    meta = [o.properties for o in objects(client, META)]
-    assert len(meta) == 1 and not meta[0].get("build_id")
-    assert meta[0]["loading_build_id"] == q1(db, "SELECT value FROM build_meta WHERE key='build_id'")
-    drop(client)
 
 
 def _rebuild(db, uri, old, new):
@@ -178,84 +181,81 @@ def _rebuild(db, uri, old, new):
     page = world[uri]["content"]
     assert old in page["body"]
     page["body"] = page["body"].replace(old, new, 1)
-    old_id = q1(db, "SELECT value FROM build_meta WHERE key='build_id'")
+    old_id = q1(db, BUILD_ID)
     with FakeAPI(world):
-        assert run_script("fetch_scriptures.py", "--db", db, "--refresh")[0] == 0
-    assert run_script("build_scriptures.py", "--db", db)[0] == 0
-    new_id = q1(db, "SELECT value FROM build_meta WHERE key='build_id'")
-    assert new_id != old_id
-    return new_id
+        assert scripture_world.run_script("fetch_scriptures.py", "--db", db, "--refresh")[0] == 0
+    assert scripture_world.run_script("build_scriptures.py", "--db", db)[0] == 0
+    assert q1(db, BUILD_ID) != old_id
+    return q1(db, BUILD_ID)
 
 
-def _full_load_is_fresh(db, client, env, ref, marker, new_id):
-    code, out = run_script("run_scripture_pipeline.py", "--db", db, env=env)
+def _full_load_is_fresh(db, client, env, ref, marker):
+    code, out = run_script(env, "run_scripture_pipeline.py", "--db", db)
     assert code == 0, out[-1500:]
     refs = by_ref(client)
     assert marker in refs[ref]["text"], "a resume kept an object from the old build"
     assert len([p for p in refs.values() if p["variant"] == "standard"]) == q1(db, "SELECT COUNT(*) FROM verse")
     meta = [o.properties for o in objects(client, META)]
-    assert len(meta) == 1 and meta[0]["build_id"] == new_id
+    assert len(meta) == 1 and meta[0]["build_id"] == q1(db, BUILD_ID)
 
 
-def test_interrupted_load_then_rebuild_reloads(tmp_path, built_db, weaviate_env):
-    client, env = weaviate_env
-    drop(client)
-    db = tmp_path / "i.db"
-    shutil.copy(built_db, db)
-    # Genesis is the first book; let its records embed, then fail in the next book
-    gen = q1(db, "SELECT book_id FROM book WHERE uri = '/scriptures/ot/gen'")
-    n_gen = (q1(db, f"SELECT COUNT(*) FROM verse WHERE book_id = {gen}")
-             + q1(db, f"SELECT COUNT(*) FROM jst_verse WHERE book_id = {gen} AND source_flag = 'F'")
-             + q1(db, f"SELECT COUNT(*) FROM chapter WHERE book_id = {gen}"))
+def test_slice_writes_no_build_id_and_force_replaces_it(fresh):
+    db, client, env = fresh
+    assert run_script(env, "run_scripture_pipeline.py", "--db", db, "--book", "Enos")[0] == 0
+    std = [o for o in objects(client, VERSES) if o.properties["variant"] == "standard"]
+    assert len(std) == 27 and {o.properties["chapter"] for o in std} == {1}
+    meta = [o.properties for o in objects(client, META)]
+    assert len(meta) == 1 and not meta[0].get("build_id") and meta[0]["loading_build_id"] == q1(db, BUILD_ID)
+    n = len(objects(client, VERSES)) + len(objects(client, CHAPTERS))
+    _Embed.calls = 0
+    assert run_script(env, "run_scripture_pipeline.py", "--db", db, "--book", "Enos", "--force")[0] == 0
+    assert _Embed.calls == n and len(objects(client, VERSES)) + len(objects(client, CHAPTERS)) == n
+
+
+def test_interrupted_load_then_rebuild_reloads(fresh):
+    db, client, env = fresh
+    # Genesis is the first book: let all its records embed, then fail in the next book
+    n_gen = q1(db, "SELECT (SELECT COUNT(*) FROM verse WHERE book_id = b.book_id) + (SELECT COUNT(*) FROM jst_verse "
+                   "WHERE book_id = b.book_id AND source_flag = 'F') + (SELECT COUNT(*) FROM chapter WHERE book_id = "
+                   "b.book_id) FROM book b WHERE uri = '/scriptures/ot/gen'")
     _Embed.calls, _Embed.fail_after = 0, n_gen + 1
     try:
-        code, _ = run_script("run_scripture_pipeline.py", "--db", db, env=env)
+        assert run_script(env, "run_scripture_pipeline.py", "--db", db)[0] != 0
     finally:
         _Embed.fail_after = None
-    assert code != 0
     assert "Gen. 1:1" in by_ref(client) and not any(o.properties.get("build_id") for o in objects(client, META))
-    new_id = _rebuild(db, "/scriptures/ot/gen/1", '<span class="verse-number">1 </span>In the ',
-                      '<span class="verse-number">1 </span>In the (stale test) ')
-    _full_load_is_fresh(db, client, env, "Gen. 1:1", "(stale test)", new_id)
-    drop(client)
+    _rebuild(db, "/scriptures/ot/gen/1", '<span class="verse-number">1 </span>In the ',
+             '<span class="verse-number">1 </span>In the (stale test) ')
+    _full_load_is_fresh(db, client, env, "Gen. 1:1", "(stale test)")
 
 
-def test_slice_then_rebuild_then_full_load_reloads(tmp_path, built_db, weaviate_env):
-    client, env = weaviate_env
-    drop(client)
-    db = tmp_path / "b.db"
-    shutil.copy(built_db, db)
-    assert run_script("run_scripture_pipeline.py", "--db", db, "--book", "Enos", env=env)[0] == 0
+def test_slice_then_rebuild_then_full_load_reloads(fresh):
+    db, client, env = fresh
+    assert run_script(env, "run_scripture_pipeline.py", "--db", db, "--book", "Enos")[0] == 0
     assert "Enos 1:1" in by_ref(client)
-    new_id = _rebuild(db, "/scriptures/bofm/enos/1", "Behold, it came to pass", "Behold, it came to pass (stale test)")
-    _full_load_is_fresh(db, client, env, "Enos 1:1", "(stale test)", new_id)
-    drop(client)
+    _rebuild(db, "/scriptures/bofm/enos/1", "Behold, it came to pass", "Behold, it came to pass (stale test)")
+    _full_load_is_fresh(db, client, env, "Enos 1:1", "(stale test)")
 
 
 def test_counts_properties_and_windows(loaded):
+    from weaviate.classes.query import Filter
     db, client, _ = loaded
-    n_f = q1(db, "SELECT COUNT(*) FROM jst_verse WHERE source_flag='F'")
     variants = [o.properties["variant"] for o in objects(client, VERSES)]
-    assert variants.count("standard") == q1(db, "SELECT COUNT(*) FROM verse") and variants.count("jst") == n_f
+    assert variants.count("standard") == q1(db, "SELECT COUNT(*) FROM verse")
+    assert variants.count("jst") == q1(db, "SELECT COUNT(*) FROM jst_verse WHERE source_flag='F'")
     refs = by_ref(client)
     a = refs["Alma 32:21"]
     assert a["text"] == ALMA_32_21 and a["footnote_count"] == 3 and a["has_jst"] is False and a["aid"] == "128351643"
     assert a["context_window"] == f"Alma 32:21\n{refs['Alma 32:20']['text']}\n{ALMA_32_21}\n{refs['Alma 32:22']['text']}"
     assert refs["Alma 32:1"]["context_window"].count("\n") == 2
     assert all(o.vector["default"] for o in objects(client, VERSES))
-    for ref in ("1 Ne. 3:7", "D&C 45:32", "Jude 1:3", "Enos 1:3", "John 3:16"):
-        assert ref in refs
+    assert {"1 Ne. 3:7", "D&C 45:32", "Jude 1:3", "Enos 1:3", "John 3:16"} <= set(refs)
+    # SCR-05 filters `context_window == ""`; with word tokenization Weaviate rejects that as a stopwords-only term
+    empty = Filter.by_property("context_window").equal("")
+    assert client.collections.use(VERSES).aggregate.over_all(total_count=True, filters=empty).total_count == 0
 
 
-def test_empty_context_window_is_filterable(loaded):
-    """SCR-05 filters `context_window == ""`; with word tokenization Weaviate rejects that as a stopwords-only term."""
-    from weaviate.classes.query import Filter
-    _, client, _ = loaded
-    col = client.collections.use(VERSES)
-    assert col.aggregate.over_all(total_count=True, filters=Filter.by_property("context_window").equal("")).total_count == 0
-
-
-def test_jst_links_and_chapters_and_meta(loaded):
+def test_jst_links_chapters_and_meta(loaded):
     db, client, _ = loaded
     refs = by_ref(client)
     assert refs["Ex. 7:3"]["has_jst"] is True and "JST Ex. 7:3" in refs["Ex. 7:3"]["jst_refs"]
@@ -263,15 +263,15 @@ def test_jst_links_and_chapters_and_meta(loaded):
     assert j["variant"] == "jst" and "Gen. 6:6" in j["kjv_refs"] and j["context_window"].count("\n") == 1
     ch = {o.properties["reference"]: o.properties for o in objects(client, CHAPTERS)}
     assert ch["Alma 32"]["verse_count"] == 43 and {"D&C 45", "Gen. 1"} <= set(ch)
-    assert any(p["kind"] == "declaration" for p in ch.values()) and any(p["kind"] == "front_matter" for p in ch.values())
+    assert {"declaration", "front_matter"} <= {p["kind"] for p in ch.values()}
     assert len(ch) == q1(db, "SELECT COUNT(*) FROM chapter")
     meta = objects(client, META)
-    assert len(meta) == 1 and meta[0].properties["build_id"] == q1(db, "SELECT value FROM build_meta WHERE key='build_id'")
+    assert len(meta) == 1 and meta[0].properties["build_id"] == q1(db, BUILD_ID)
 
 
 def test_verify_script_passes_on_a_full_load(loaded):
     db, _, env = loaded
-    code, out = run_script("verify_weaviate_scripture.py", "--db", db, env=env)
+    code, out = run_script(env, "verify_weaviate_scripture.py", "--db", db)
     assert code == 0 and "ALL PASS" in out and "FAIL " not in out, out[-3000:]
     for name in ("SCR-01", "SCR-02 chapters", "SCR-02 volumes", "SCR-03 Ex. 7:3", "SCR-04 variants", "SCR-04 has_jst",
                  "SCR-05 vectors verses", "SCR-05 vectors chapters", "SCR-06 semantic", "META"):
@@ -280,19 +280,16 @@ def test_verify_script_passes_on_a_full_load(loaded):
 
 def test_verify_script_fails_when_counts_differ_from_the_db(loaded, tmp_path):
     """One chapter row and one has_jst verse fewer in the db than were loaded: equality, not >=, must catch both."""
-    import sqlite3
     db, _, env = loaded
     other = tmp_path / "other.db"
     shutil.copy(db, other)
-    conn = sqlite3.connect(other)
-    conn.execute("DELETE FROM chapter WHERE chapter_id = (SELECT MIN(chapter_id) FROM chapter "
-                 "WHERE chapter_id NOT IN (SELECT chapter_id FROM verse))")
-    conn.execute("DELETE FROM footnote_ref WHERE category = 'jst' AND footnote_id IN (SELECT f.footnote_id FROM footnote f "
-                 "WHERE f.verse_id = (SELECT verse_id FROM verse WHERE book_id = (SELECT book_id FROM book WHERE "
-                 "uri = '/scriptures/ot/ex') AND chapter = 7 AND verse = 3))")
-    conn.commit()
-    conn.close()
-    code, out = run_script("verify_weaviate_scripture.py", "--db", other, env=env)
+    with sqlite3.connect(other) as conn:
+        conn.execute("DELETE FROM chapter WHERE chapter_id = (SELECT MIN(chapter_id) FROM chapter "
+                     "WHERE chapter_id NOT IN (SELECT chapter_id FROM verse))")
+        conn.execute("DELETE FROM footnote_ref WHERE category = 'jst' AND footnote_id IN (SELECT footnote_id FROM "
+                     "footnote WHERE verse_id = (SELECT verse_id FROM verse v JOIN book b USING (book_id) "
+                     "WHERE b.uri = '/scriptures/ot/ex' AND v.chapter = 7 AND v.verse = 3))")
+    code, out = run_script(env, "verify_weaviate_scripture.py", "--db", other)
     assert code == 1, out[-3000:]
     assert "FAIL SCR-02 chapters:" in out and "FAIL SCR-04 has_jst:" in out and "PASS SCR-01:" in out, out[-3000:]
     assert "FAILED: " in out
@@ -302,19 +299,9 @@ def test_resume_skips_and_a_changed_build_reloads(loaded):
     db, client, env = loaded
     before = len(objects(client, VERSES))
     _Embed.calls = 0
-    assert run_script("run_scripture_pipeline.py", "--db", db, env=env)[0] == 0
+    assert run_script(env, "run_scripture_pipeline.py", "--db", db)[0] == 0
     assert len(objects(client, VERSES)) == before and _Embed.calls == 0
-
-    world = build_world()
-    jude = world["/scriptures/nt/jude/1"]["content"]
-    jude["body"] = jude["body"].replace("Beloved, when I gave", "Beloved (edition test), when I gave")
-    old_id = q1(db, "SELECT value FROM build_meta WHERE key='build_id'")
-    with FakeAPI(world):
-        assert run_script("fetch_scriptures.py", "--db", db, "--refresh")[0] == 0
-    assert run_script("build_scriptures.py", "--db", db)[0] == 0
-    new_id = q1(db, "SELECT value FROM build_meta WHERE key='build_id'")
-    assert new_id != old_id
-    code, out = run_script("run_scripture_pipeline.py", "--db", db, env=env)
-    assert code == 0, out[-1500:]
+    new_id = _rebuild(db, "/scriptures/nt/jude/1", "Beloved, when I gave", "Beloved (edition test), when I gave")
+    assert run_script(env, "run_scripture_pipeline.py", "--db", db)[0] == 0
     assert "(edition test)" in by_ref(client)["Jude 1:3"]["text"]
     assert objects(client, META)[0].properties["build_id"] == new_id and len(objects(client, VERSES)) == before

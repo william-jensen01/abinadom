@@ -33,28 +33,30 @@ SPOTS = {"John 3:16": "For God so loved the world", "Alma 32:21": "And now as I 
 def _load_env() -> None:
     path = os.path.join(ROOT, ".env")
     if os.path.exists(path):
-        for line in open(path, encoding="utf-8").read().splitlines():
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, v = line.split("=", 1)
-                os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+        with open(path, encoding="utf-8") as f:
+            for line in (ln.strip() for ln in f):
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
 
 
 def expected(db_path: str) -> dict:
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     one = lambda sql: conn.execute(sql).fetchone()[0]  # noqa: E731
-    out = {
-        "build_id": one("SELECT value FROM build_meta WHERE key='build_id'"),
-        "verses": one("SELECT COUNT(*) FROM verse"),
-        "jst_f": one("SELECT COUNT(*) FROM jst_verse WHERE source_flag='F'"),
-        "chapters": one("SELECT COUNT(*) FROM chapter"),
-        "volumes": dict(conn.execute("SELECT vo.title, COUNT(*) FROM verse v JOIN book b ON b.book_id = v.book_id "
-                                     "JOIN volume vo ON vo.volume_id = b.volume_id GROUP BY vo.volume_id").fetchall()),
-        "has_jst": one("SELECT COUNT(DISTINCT f.verse_id) FROM footnote_ref r JOIN footnote f ON f.footnote_id=r.footnote_id "
-                       "WHERE r.category='jst' AND r.target_jst_verse_id IS NOT NULL"),
-    }
-    conn.close()
-    return out
+    try:
+        return {
+            "build_id": one("SELECT value FROM build_meta WHERE key='build_id'"),
+            "verses": one("SELECT COUNT(*) FROM verse"),
+            "jst_f": one("SELECT COUNT(*) FROM jst_verse WHERE source_flag='F'"),
+            "chapters": one("SELECT COUNT(*) FROM chapter"),
+            "volumes": dict(conn.execute(
+                "SELECT vo.title, COUNT(*) FROM verse v JOIN book b ON b.book_id = v.book_id "
+                "JOIN volume vo ON vo.volume_id = b.volume_id GROUP BY vo.volume_id").fetchall()),
+            "has_jst": one("SELECT COUNT(DISTINCT f.verse_id) FROM footnote_ref r JOIN footnote f "
+                           "ON f.footnote_id = r.footnote_id WHERE r.category='jst' AND r.target_jst_verse_id IS NOT NULL"),
+        }
+    finally:
+        conn.close()
 
 
 def main() -> int:
@@ -77,37 +79,33 @@ def main() -> int:
 
     client = get_weaviate_client()
     try:
-        verses = client.collections.use("ScriptureVerses")
-        chapters = client.collections.use("ScriptureChapters")
+        verses, chapters = client.collections.use("ScriptureVerses"), client.collections.use("ScriptureChapters")
+        std = Filter.by_property("variant").equal("standard")
 
         def count(col, flt=None) -> int:
             return col.aggregate.over_all(total_count=True, filters=flt).total_count
 
         def one(ref):
-            r = verses.query.fetch_objects(filters=Filter.by_property("reference").equal(ref), limit=2).objects
+            r = verses.query.fetch_objects(filters=Filter.by_property("reference").equal(ref), limit=1).objects
             return r[0].properties if r else None
 
-        got = count(verses)
+        got, jst, n_std = count(verses), count(verses, Filter.by_property("variant").equal("jst")), count(verses, std)
         check("SCR-01", got == exp["verses"] + exp["jst_f"], f"ScriptureVerses {got} == {exp['verses']} + {exp['jst_f']} F")
-        jst = count(verses, Filter.by_property("variant").equal("jst"))
         check("SCR-01 jst", jst == exp["jst_f"], f"variant=jst {jst} == {exp['jst_f']}")
         got_c = count(chapters)
         check("SCR-02 chapters", got_c == exp["chapters"], f"ScriptureChapters {got_c} == {exp['chapters']} chapter pages")
-        std = Filter.by_property("variant").equal("standard")
         groups = verses.aggregate.over_all(group_by=GroupByAggregate(prop="volume"), total_count=True, filters=std).groups
         vols = {g.grouped_by.value: g.total_count for g in groups}
         check("SCR-02 volumes", len(exp["volumes"]) == 5 and vols == exp["volumes"],
               f"standard verses per volume {vols} == db {exp['volumes']}")
 
         for ref, start in SPOTS.items():
-            props = one(ref)
-            text = props["text"] if props else None
-            check(f"SCR-03 {ref}", bool(text) and text.startswith(start), repr((text or "")[:50]))
-        ex = one("Ex. 7:3")
-        check("SCR-03 Ex. 7:3", bool(ex) and ex["has_jst"] and "JST Ex. 7:3" in ex["jst_refs"],
-              f"has_jst={ex and ex['has_jst']} jst_refs={ex and ex['jst_refs']}")
+            text = (one(ref) or {}).get("text") or ""
+            check(f"SCR-03 {ref}", text.startswith(start), repr(text[:50]))
+        ex = one("Ex. 7:3") or {}
+        check("SCR-03 Ex. 7:3", bool(ex.get("has_jst")) and "JST Ex. 7:3" in (ex.get("jst_refs") or []),
+              f"has_jst={ex.get('has_jst')} jst_refs={ex.get('jst_refs')}")
 
-        n_std = count(verses, std)
         check("SCR-04 variants", n_std == exp["verses"] and jst == exp["jst_f"],
               f"variant=standard {n_std} == {exp['verses']} verse rows, variant=jst {jst} == {exp['jst_f']} F rows")
         has = count(verses, Filter.by_property("has_jst").equal(True))
@@ -118,8 +116,7 @@ def main() -> int:
             seen = missing = 0
             for o in col.iterator(include_vector=True):
                 seen += 1
-                if not (o.vector and all(len(v) for v in o.vector.values())):
-                    missing += 1
+                missing += not (o.vector and all(len(v) for v in o.vector.values()))
             check(f"SCR-05 vectors {name}", seen > 0 and missing == 0, f"{missing} of {seen} objects without a vector")
 
         ef = get_embedding_function(task="query")
@@ -130,9 +127,10 @@ def main() -> int:
         crefs = [o.properties["reference"] for o in chapters.query.near_vector(ef(["plan of salvation"])[0], limit=10).objects]
         check("SCR-06 chapters", bool(PLAN & set(crefs)), f"'plan of salvation' -> {crefs}")
 
-        meta = list(client.collections.use("ScriptureMeta").iterator())
-        check("META", len(meta) == 1 and meta[0].properties.get("build_id") == exp["build_id"],
-              f"{len(meta)} object(s), build_id {(meta[0].properties.get('build_id') or '')[:12] if meta else None} vs db {exp['build_id'][:12]}")
+        meta = [o.properties for o in client.collections.use("ScriptureMeta").iterator()]
+        loaded = (meta[0].get("build_id") or "") if meta else None
+        check("META", len(meta) == 1 and loaded == exp["build_id"],
+              f"{len(meta)} object(s), build_id {loaded and loaded[:12]} vs db {exp['build_id'][:12]}")
     finally:
         client.close()
     print("ALL PASS" if not failures else f"FAILED: {', '.join(failures)}")

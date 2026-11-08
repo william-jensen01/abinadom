@@ -15,17 +15,13 @@ def store(built_db):
     return ScriptureStore.open(open_scripture_db(str(built_db)))
 
 
-def _parts(f):
-    """(property, operator, value) leaves of a Weaviate filter, flattened."""
-    if f is None:
-        return []
-    if getattr(f, "filters", None):
-        return [p for sub in f.filters for p in _parts(sub)]
-    return [(f.target, str(f.operator), f.value)]
-
-
 def _names(f):
-    return {p[0]: p[2] for p in _parts(f)}
+    """{property: value} of a Weaviate filter's leaves."""
+    if f is None:
+        return {}
+    if getattr(f, "filters", None):
+        return {k: v for sub in f.filters for k, v in _names(sub).items()}
+    return {f.target: f.value}
 
 
 def test_verse_filter_defaults_to_standard(store):

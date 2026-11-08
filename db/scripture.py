@@ -2,7 +2,6 @@
 
 The same `db.Database` as core.db: a read-only connection, the 5s query timeout, and a slow query returns `[]`.
 The path comes from `SCRIPTURE_DB_PATH`, read when `open_scripture_db` is called (server startup), never at import.
-No embedder or Weaviate is involved: scripture.db is the source for `get_verse` and `get_chapter_overview`.
 """
 import logging
 import os
@@ -11,8 +10,6 @@ from typing import Optional
 from db import DEFAULT_TIMEOUT, Database
 
 log = logging.getLogger("sci-db")
-
-SCRIPTURE_DB_TIMEOUT = DEFAULT_TIMEOUT  # seconds, same as core.db
 
 # Tables and key columns the server reads (normalized layer, SPEC-v2 §4.2)
 EXPECTED_SCRIPTURE_TABLES = {
@@ -28,17 +25,10 @@ EXPECTED_SCRIPTURE_TABLES = {
 }
 
 
-def scripture_db_path() -> Optional[str]:
-    """`SCRIPTURE_DB_PATH` now, or None when it is unset."""
-    return os.environ.get("SCRIPTURE_DB_PATH") or None
-
-
-def open_scripture_db(path: Optional[str] = None, timeout: int = SCRIPTURE_DB_TIMEOUT) -> Optional[Database]:
-    """A read-only Database on scripture.db, or None when the file is missing, empty, or not a built store.
-
-    Never raises: scripture is optional at startup and the talk tools must not depend on it.
-    """
-    path = path or scripture_db_path()
+def open_scripture_db(path: Optional[str] = None, timeout: int = DEFAULT_TIMEOUT) -> Optional[Database]:
+    """A read-only Database on scripture.db (default: `SCRIPTURE_DB_PATH`), or None when it is unset, missing,
+    empty, or not a built store. Never raises: scripture is optional and the talk tools must not depend on it."""
+    path = path or os.environ.get("SCRIPTURE_DB_PATH")
     if not path:
         return None
     if not os.path.isfile(path) or os.path.getsize(path) == 0:
@@ -53,8 +43,3 @@ def open_scripture_db(path: Optional[str] = None, timeout: int = SCRIPTURE_DB_TI
         database.close()
         return None
     return database
-
-
-def build_id(database: Database) -> Optional[str]:
-    """The store's `build_meta.build_id`."""
-    return database.scalar("SELECT value FROM build_meta WHERE key = 'build_id'")
