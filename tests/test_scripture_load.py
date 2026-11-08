@@ -1,21 +1,14 @@
 """Loading the built scripture.db into Weaviate: transforms (pure), then ScriptureLoader and
 scripts/run_scripture_pipeline.py against embedded Weaviate with a fake embedder (no network, no real Weaviate)."""
-import hashlib
-import json
-import math
 import os
-import re
 import shutil
-import socket
 import sqlite3
-import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
 from loaders.shared_transforms import prepare_chapter_records, prepare_verse_records
 from tests import scripture_world
-from tests.scripture_world import FakeAPI, build_world, q1
+from tests.scripture_world import EmbedHandler as _Embed, FakeAPI, build_world, q1
 from tests.test_scripture_build import ALMA_32_21
 
 VERSES, CHAPTERS, META = "ScriptureVerses", "ScriptureChapters", "ScriptureMeta"
@@ -77,56 +70,6 @@ def test_jst_rows_of_an_unknown_book_fail_loudly(tmp_path, built_db):
 # ---------------------------------------------------------------------------
 # Embedded Weaviate + fake embedder
 # ---------------------------------------------------------------------------
-
-def _vector(text, dim=64):
-    v = [0.0] * dim
-    for w in re.findall(r"[a-z]+", text.lower()):
-        h = int(hashlib.md5(w.encode()).hexdigest(), 16)
-        v[h % dim] += 1.0 if (h >> 8) & 1 else -1.0
-    n = math.sqrt(sum(x * x for x in v)) or 1.0
-    return [x / n for x in v]
-
-
-class _Embed(BaseHTTPRequestHandler):
-    calls = 0
-    fail_after = None       # answer 500 once this many inputs were embedded (an interrupted load)
-
-    def log_message(self, *a):
-        pass
-
-    def do_POST(self):
-        inputs = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}").get("input", [])
-        if _Embed.fail_after is not None and _Embed.calls + len(inputs) > _Embed.fail_after:
-            out, status = b"", 500
-        else:
-            _Embed.calls += len(inputs)
-            out, status = json.dumps({"data": [{"index": i, "embedding": _vector(t)} for i, t in enumerate(inputs)]}).encode(), 200
-        self.send_response(status)
-        self.send_header("Content-Length", str(len(out)))
-        self.end_headers()
-        self.wfile.write(out)
-
-
-def _free_port():
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
-
-@pytest.fixture(scope="module")
-def weaviate_env(tmp_path_factory):
-    import weaviate
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), _Embed)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    port, grpc = _free_port(), _free_port()
-    client = weaviate.connect_to_embedded(
-        port=port, grpc_port=grpc, persistence_data_path=str(tmp_path_factory.mktemp("weaviate")),
-        environment_variables={"DISABLE_TELEMETRY": "true", "LOG_LEVEL": "error"})
-    yield client, {"WEAVIATE_HOST": "localhost", "WEAVIATE_PORT": str(port), "WEAVIATE_GRPC_PORT": str(grpc),
-                   "EMBEDDING_URL": f"http://127.0.0.1:{srv.server_address[1]}"}
-    client.close()
-    srv.shutdown()
-
 
 def run_script(env, script, *args):
     """scripture_world.run_script with the embedded Weaviate and fake embedder in the environment."""
@@ -305,3 +248,41 @@ def test_resume_skips_and_a_changed_build_reloads(loaded):
     assert run_script(env, "run_scripture_pipeline.py", "--db", db)[0] == 0
     assert "(edition test)" in by_ref(client)["Jude 1:3"]["text"]
     assert objects(client, META)[0].properties["build_id"] == new_id and len(objects(client, VERSES)) == before
+
+
+# ---------------------------------------------------------------------------
+# Further properties of the loaded objects (the parts the tests above do not pin down)
+# ---------------------------------------------------------------------------
+
+def test_object_properties_and_chapter_bounded_window(loaded):
+    _, client, _ = loaded
+    refs = by_ref(client)
+    p = refs["Alma 32:21"]
+    assert p["chapter"] == 32 and p["verse"] == 21 and p["has_jst"] is False
+    assert p["volume"] and p["book"] and p["cite_abbr"]
+    cw = p["context_window"]
+    assert cw.startswith("Alma 32:21") and cw.index(refs["Alma 32:20"]["text"]) < cw.index(ALMA_32_21) \
+        < cw.index(refs["Alma 32:22"]["text"])
+    first = refs["Alma 32:1"]["context_window"]
+    assert first.startswith("Alma 32:1") and refs["Alma 32:1"]["text"] in first and refs["Alma 32:2"]["text"] in first \
+        and refs["Alma 32:3"]["text"] not in first, "window is chapter-bounded with radius 1: 32:1 holds only 32:1 and 32:2"
+
+
+def test_jst_objects_are_embedded_alone_and_flag_their_kjv_verses(loaded):
+    db, client, _ = loaded
+    refs = by_ref(client)
+    jp = refs["JST Gen. 8:13"]
+    assert jp["variant"] == "jst" and jp["chapter"] == 8 and jp["verse"] == 13
+    assert jp["context_window"].startswith("JST ") and jp["context_window"].rstrip().endswith(jp["text"].strip()) \
+        and jp["context_window"].count("\n") == 1, "JST objects are embedded alone: 'JST {book} {c}:{v}\\n{text}'"
+    std_with_jst = q1(db, "SELECT COUNT(DISTINCT f.verse_id) FROM footnote_ref r JOIN footnote f ON f.footnote_id=r.footnote_id "
+                          "WHERE r.category='jst'")
+    has = sum(1 for p in refs.values() if p.get("has_jst"))
+    assert has >= std_with_jst, f"{has} has_jst objects < {std_with_jst} verses carrying jst footnotes"
+
+
+def test_chapter_summary_and_declaration_kind(loaded):
+    _, client, _ = loaded
+    ch = {o.properties["reference"]: o.properties for o in objects(client, CHAPTERS)}
+    assert ch["Alma 32"]["summary"].startswith("Alma teaches the poor")
+    assert any(p.get("kind") == "declaration" for p in ch.values()), "OD 1 belongs in ScriptureChapters"

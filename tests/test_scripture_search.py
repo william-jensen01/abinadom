@@ -103,3 +103,71 @@ def test_search_rejects_mixed_filters():
     assert "only to talk" in _search(ctx, query="x", collection="scripture_verses", speaker="Holland")
     assert "only to the scripture_verses" in _search(ctx, query="x", collection="scripture_chapters", variant="jst")
     assert "Unknown collection" in _search(ctx, query="x", collection="nope")
+
+
+# ---------------------------------------------------------------------------
+# search() through the MCP server against loaded collections (embedded Weaviate, fake embedder)
+# ---------------------------------------------------------------------------
+
+from tests.scripture_world import blob, call_tools  # noqa: E402
+
+
+def s(**kw):
+    kw.setdefault("limit", 10)
+    return ("search", kw)
+
+
+def refs(r):
+    assert isinstance(r, dict) and "results" in r, f"search must return its JSON envelope: {blob(r)[:300]}"
+    return [x.get("reference", "") for x in r["results"]]
+
+
+def test_server_keyword_search_on_kjv_phrasing(loaded):
+    _, _, env = loaded
+    (r,) = call_tools(env, [s(query="charity suffereth long", collection="scripture_verses", alpha=0.0)])
+    top = refs(r)[:3]
+    assert {"1 Cor. 13:4", "Moro. 7:45"} & set(top), f"BM25 'charity suffereth long' top 3: {top}"
+
+
+def test_server_variant_filter(loaded):
+    _, _, env = loaded
+    d, j, b = call_tools(env, [
+        s(query="Pharaoh hardened his heart", collection="scripture_verses", alpha=0.0),
+        s(query="Pharaoh hardened his heart", collection="scripture_verses", alpha=0.0, variant="jst"),
+        s(query="Pharaoh hardened his heart", collection="scripture_verses", alpha=0.0, variant="both", limit=20),
+    ])
+    assert refs(d) and not any(x.startswith("JST") for x in refs(d)), f"default variant is standard: {refs(d)}"
+    assert refs(j) and all(x.startswith("JST") for x in refs(j)), f"variant='jst' returns only JST objects: {refs(j)}"
+    assert any(x.startswith("JST") for x in refs(b)) and any(not x.startswith("JST") for x in refs(b)), refs(b)
+
+
+def test_server_book_chapter_volume_filters(loaded):
+    _, _, env = loaded
+    book, chap, vol1, vol2 = call_tools(env, [
+        s(query="faith", collection="scripture_verses", alpha=0.0, book="Alma"),
+        s(query="faith", collection="scripture_verses", alpha=0.0, book="Moroni", chapter=7),
+        s(query="faith", collection="scripture_verses", alpha=0.0, volume="bofm"),
+        s(query="faith", collection="scripture_verses", alpha=0.0, volume="Book of Mormon"),
+    ])
+    assert refs(book) and all(x.startswith("Alma 32:") for x in refs(book)), refs(book)
+    assert refs(chap) and all(x.startswith("Moro. 7:") for x in refs(chap)), refs(chap)
+    bom = ("1 Ne.", "Enos", "Alma", "3 Ne.", "Moro.")
+    ok = [v for v in (vol1, vol2) if isinstance(v, dict) and v.get("results")
+          and all(x.startswith(bom) for x in refs(v))]
+    assert ok, f"volume filter (as 'bofm' or 'Book of Mormon') must keep only BoM verses: {blob(vol1)[:200]} / {blob(vol2)[:200]}"
+
+
+def test_server_hybrid_and_chapter_search(loaded):
+    _, _, env = loaded
+    h, c = call_tools(env, [
+        s(query="faith is not a perfect knowledge", collection="scripture_verses"),
+        s(query="faith compared to a seed", collection="scripture_chapters", alpha=0.0, limit=5),
+    ])
+    assert "Alma 32:21" in refs(h)[:5], f"default hybrid search: {refs(h)[:5]}"
+    assert "Alma 32" in refs(c), f"chapter search should find Alma 32 (its summary): {refs(c)}"
+
+
+def test_server_talk_search_unchanged(loaded):
+    _, _, env = loaded
+    (r,) = call_tools(env, [s(query="seed", collection="paragraphs", alpha=0.0)])
+    assert isinstance(r, dict) and "results" in r, f"talk search must still work: {blob(r)[:200]}"

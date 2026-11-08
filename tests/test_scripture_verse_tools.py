@@ -83,3 +83,96 @@ def test_chapter_overview(store):
     assert all(isinstance(t["reference"], str) for t in a["top_cross_references"])
     d = get_chapter_overview(store, "Doctrine and Covenants", 45)
     assert d["reference"] == "D&C 45" and "Revelation given through Joseph Smith" in d["intro"]
+
+
+# ---------------------------------------------------------------------------
+# The same tools through the MCP server (embedded Weaviate, fake embedder, scripture.db copy)
+# ---------------------------------------------------------------------------
+
+from tests.scripture_world import blob, call_tools, find_verse  # noqa: E402
+from tests.test_scripture_build import ALMA_32_21, NEPHI_3_7  # noqa: E402
+
+
+def gv(**kw):
+    return ("get_verse", kw)
+
+
+def test_server_get_verse_basics_and_footnotes(loaded):
+    _, _, env = loaded
+    r, rng, nofn = call_tools(env, [
+        gv(book="Alma", chapter=32, verse_start=21),
+        gv(book="Alma", chapter=32, verse_start=20, verse_end=22),
+        gv(book="Alma", chapter=32, verse_start=21, include_footnotes=False),
+    ])
+    assert isinstance(r, dict), f"get_verse must return JSON, got {str(r)[:300]}"
+    assert r["reference"] == "Alma 32:21", r.get("reference")
+    assert r["chapter_summary"].startswith("Alma teaches the poor")
+    v = find_verse(r, 21)
+    assert v and v["text"] == ALMA_32_21 and v["reference"] == "Alma 32:21"
+    fns = {f["marker"]: f for f in v["footnotes"]}
+    assert set(fns) == {"21a", "21b", "21c"} and fns["21a"]["context"] == "faith", f"footnotes {list(fns)}"
+    labels = [x["label"] for x in fns["21a"]["refs"]]
+    assert any("John 20:29" in l for l in labels) and any(x.get("target") for x in fns["21a"]["refs"]), fns["21a"]
+    assert [x["verse"] for x in rng["verses"]] == [20, 21, 22], "a range returns its verses in order"
+    assert not find_verse(nofn, 21).get("footnotes"), "include_footnotes=False must leave footnotes out"
+
+
+def test_server_book_resolver_inputs(loaded):
+    _, _, env = loaded
+    calls = [gv(book=b, chapter=3, verse_start=7) for b in ("1 Nephi", "First Nephi", "1 Ne.", "1 ne", "1 NEPHI")]
+    calls += [gv(book=b, chapter=45, verse_start=32) for b in ("D&C", "Doctrine and Covenants", "d&c")]
+    calls += [gv(book="Jude", chapter=3), gv(book="Enos", chapter=3), gv(book="Psalms", chapter=23)]
+    out = call_tools(env, calls)
+    for r in out[:5]:
+        assert isinstance(r, dict) and r["reference"] == "1 Ne. 3:7" and find_verse(r, 7)["text"] == NEPHI_3_7, blob(r)[:300]
+    for r in out[5:8]:
+        assert isinstance(r, dict) and r["reference"] == "D&C 45:32", blob(r)[:300]
+        assert find_verse(r, 32)["text"].startswith("But my disciples shall stand in holy places")
+    jude, enos, ps = out[8:]
+    assert jude["reference"] == "Jude 1:3" and find_verse(jude, 3)["text"].startswith("Beloved, when I gave all diligence"), \
+        "single-chapter shorthand: ('Jude', 3) is Jude 1:3"
+    assert enos["reference"] == "Enos 1:3"
+    assert [v["verse"] for v in ps["verses"]] == list(range(1, 7)), "Psalms 23 (no verses given) returns the whole chapter"
+
+
+def test_server_include_jst_and_jst_numbering(loaded):
+    _, _, env = loaded
+    ex, appx, jgen, plain = call_tools(env, [
+        gv(book="Exodus", chapter=7, verse_start=3, include_jst=True),
+        gv(book="Genesis", chapter=9, verse_start=5, include_jst=True),
+        gv(book="JST Genesis", chapter=8, verse_start=19),
+        gv(book="Exodus", chapter=7, verse_start=3),
+    ])
+    j = find_verse(ex, 3).get("jst") or []
+    assert any("JST Ex. 7:3" in x["reference"] for x in j), f"include_jst on Ex 7:3: {j}"
+    jt = next(x for x in j if "7:3" in x["reference"])["text"]
+    assert "harden his heart" in jt and "…" not in jt, "JST text is core.db's full verse, not the footnote's excerpt"
+    ja = find_verse(appx, 5).get("jst") or []
+    assert ja and all(x["reference"].startswith("JST Gen. 9:") for x in ja), \
+        f"KJV Gen 9:5 is linked only by the appendix passage 'JST Gen 9:10–15 compare Gen 9:4–9': {ja}"
+    assert isinstance(jgen, dict) and jgen["reference"] == "JST Gen. 8:19" and "ark" in find_verse(jgen, 19)["text"].lower(), \
+        f"JST numbering input: {blob(jgen)[:300]}"
+    assert not find_verse(plain, 3).get("jst"), "include_jst defaults to False"
+
+
+def test_server_get_verse_works_without_embedder_and_rejects_nonsense(loaded):
+    _, _, env = loaded
+    r, bad = call_tools(dict(env, EMBEDDING_URL="http://127.0.0.1:9"), [
+        gv(book="John", chapter=3, verse_start=16), gv(book="Hezekiah", chapter=1)])
+    assert isinstance(r, dict) and find_verse(r, 16)["text"].startswith("For God so loved the world"), \
+        "get_verse reads scripture.db and must work with the embedder down"
+    assert not (isinstance(bad, dict) and bad.get("verses")) and "TOOL ERROR" not in blob(bad)[:12], \
+        f"an unknown book returns a clear message, not verses or a crash: {blob(bad)[:200]}"
+
+
+def test_server_chapter_overview(loaded):
+    _, _, env = loaded
+    a, d = call_tools(env, [("get_chapter_overview", {"book": "Alma", "chapter": 32}),
+                            ("get_chapter_overview", {"book": "D&C", "chapter": 45})])
+    assert isinstance(a, dict), blob(a)[:300]
+    s = blob(a)
+    assert a.get("verse_count") == 43 and "Alma teaches the poor" in s, s[:300]
+    top = a.get("top_cross_references") or a.get("cross_references") or a.get("most_referenced") or \
+        next((v for k, v in a.items() if "ref" in k and isinstance(v, list)), None)
+    assert top, f"overview must list the most-referenced cross-ref targets: keys {list(a)}"
+    assert "Revelation given through Joseph Smith the Prophet" in blob(d), "D&C overview includes the section intro"
