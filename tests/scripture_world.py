@@ -5,15 +5,20 @@ pages in tests/fixtures/scriptures/. Tests of the real store (db/scripture.db) a
 user-built db/core.<version>.db skip when those files are missing or empty.
 """
 import contextlib
+import hashlib
 import io
 import json
+import math
 import os
 import re
 import runpy
 import shutil
+import socket
 import sqlite3
 import sys
+import threading
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
@@ -146,10 +151,10 @@ class FakeAPI:
 # Running the scripts in-process
 # ---------------------------------------------------------------------------
 
-def run_script(script: str, *args, fast: bool = True) -> tuple[int, str]:
+def run_script(script: str, *args, env: dict | None = None, fast: bool = True) -> tuple[int, str]:
     """runpy a script under scripts/ with argv; returns (exit code, combined output).
 
-    fast=True removes the church_api throttle and retry delay for the duration of the run (restored afterwards).
+    env is merged into os.environ for the run (restored afterwards). fast=True removes the church_api throttle and retry delay for the duration of the run (restored afterwards).
     """
     import utils.church_api as ca
 
@@ -161,6 +166,8 @@ def run_script(script: str, *args, fast: bool = True) -> tuple[int, str]:
     code = 0
     try:
         sys.argv = [str(path), *map(str, args)]
+        if env:
+            os.environ.update({k: str(v) for k, v in env.items()})
         if fast:
             ca.MIN_INTERVAL = 0.0
             ca.RETRY_DELAY = 0.0
@@ -277,3 +284,183 @@ def full_built(tmp_path_factory, full_store):
     print(out[-3000:])
     assert code == 0, f"build_scriptures.py failed on the full store ({code}):\n{out[-2500:]}"
     return db, out
+
+
+# ---------------------------------------------------------------------------
+# Embedded Weaviate + fake embedder (no network, no real Weaviate)
+# ---------------------------------------------------------------------------
+
+DIM = 64
+
+
+def fake_vector(text: str, dim: int = DIM) -> list[float]:
+    """Hashed bag of words: deterministic, and texts that share words land close together."""
+    v = [0.0] * dim
+    for w in re.findall(r"[a-z]+", text.lower()):
+        h = int(hashlib.md5(w.encode()).hexdigest(), 16)
+        v[h % dim] += 1.0 if (h >> 8) & 1 else -1.0
+    n = math.sqrt(sum(x * x for x in v)) or 1.0
+    return [x / n for x in v]
+
+
+class EmbedHandler(BaseHTTPRequestHandler):
+    """llama-server /v1/embeddings shape. calls counts embedded texts; fail_after interrupts a load with a 500."""
+    calls = 0
+    fail_after = None
+
+    def log_message(self, *a):
+        pass
+
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(b'{"status":"ok"}')
+
+    def do_POST(self):
+        inputs = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}").get("input", [])
+        if isinstance(inputs, str):
+            inputs = [inputs]
+        if EmbedHandler.fail_after is not None and EmbedHandler.calls + len(inputs) > EmbedHandler.fail_after:
+            out, status = b"", 500
+        else:
+            EmbedHandler.calls += len(inputs)
+            out = json.dumps({"data": [{"index": i, "embedding": fake_vector(t), "object": "embedding"}
+                                       for i, t in enumerate(inputs)]}).encode()
+            status = 200
+        self.send_response(status)
+        self.send_header("Content-Length", str(len(out)))
+        self.end_headers()
+        self.wfile.write(out)
+
+
+def free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+@pytest.fixture(scope="session")
+def weaviate_env(tmp_path_factory):
+    """(client, env) for an embedded Weaviate and a fake embedder, shared by the whole session (two embedded
+    instances cannot run side by side). Seeded with the talk collections so server.py can start against it."""
+    import weaviate
+    from weaviate.classes.config import Configure, DataType, Property
+    from config.pipeline_config import WEAVIATE_COLLECTION_NAMES
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), EmbedHandler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    port, grpc = free_port(), free_port()
+    client = weaviate.connect_to_embedded(
+        port=port, grpc_port=grpc, persistence_data_path=str(tmp_path_factory.mktemp("weaviate")),
+        environment_variables={"DISABLE_TELEMETRY": "true", "LOG_LEVEL": "error"})
+    for name in WEAVIATE_COLLECTION_NAMES.values():
+        if not client.collections.exists(name):
+            client.collections.create(name, vector_config=Configure.Vectors.self_provided(),
+                                      properties=[Property(name="text", data_type=DataType.TEXT)])
+        client.collections.use(name).data.insert({"text": "seed"}, vector=[0.1] * DIM)
+    yield client, {"WEAVIATE_HOST": "localhost", "WEAVIATE_PORT": str(port), "WEAVIATE_GRPC_PORT": str(grpc),
+                   "EMBEDDING_URL": f"http://127.0.0.1:{srv.server_address[1]}"}
+    client.close()
+    srv.shutdown()
+
+
+@pytest.fixture(scope="module")
+def loaded(tmp_path_factory, built_db, weaviate_env):
+    """built_db loaded into the embedded Weaviate by run_scripture_pipeline.py. Returns (db, client, env), where
+    env also points the server at the db copy (SCRIPTURE_DB_PATH)."""
+    client, env = weaviate_env
+    for n in ("ScriptureVerses", "ScriptureChapters", "ScriptureMeta"):
+        if client.collections.exists(n):
+            client.collections.delete(n)
+    db = tmp_path_factory.mktemp("loaded") / "scripture.db"
+    shutil.copy(built_db, db)
+    e = dict(env, SCRIPTURE_DB_PATH=str(db))
+    code, out = run_script("run_scripture_pipeline.py", "--db", db, env=e)
+    assert code == 0, f"run_scripture_pipeline.py failed ({code}):\n{out[-2000:]}"
+    return db, client, e
+
+
+# ---------------------------------------------------------------------------
+# Calling the MCP tools on the real server module, in-process
+# ---------------------------------------------------------------------------
+
+def _tool_text(result) -> str:
+    parts = [t for t in (getattr(c, "text", None) for c in (getattr(result, "content", result) or [])) if t is not None]
+    if not parts and getattr(result, "data", None) is not None:
+        d = result.data
+        return d if isinstance(d, str) else json.dumps(d)
+    return "\n".join(parts)
+
+
+@contextlib.contextmanager
+def _server_env(env: dict, unset: tuple = ()):
+    old = dict(os.environ)
+    for k in unset:
+        os.environ.pop(k, None)
+    os.environ.update({k: str(v) for k, v in env.items()})
+    try:
+        yield
+    finally:
+        os.environ.clear()
+        os.environ.update(old)
+
+
+def call_tools(env: dict, calls: list[tuple[str, dict]], unset: tuple = ()) -> list:
+    """Start server.py's lifespan once under env, run each (tool, args), return the parsed results.
+
+    A result is the tool's JSON (dict/list) when it parses, else the raw text.
+    """
+    import asyncio
+    import importlib
+
+    async def go():
+        from fastmcp import Client
+        import server
+        importlib.reload(server)
+        out = []
+        async with Client(server.mcp) as c:
+            for name, args in calls:
+                try:
+                    txt = _tool_text(await c.call_tool(name, args, raise_on_error=False))
+                except Exception as e:  # noqa: BLE001
+                    txt = f"TOOL ERROR: {e}"
+                try:
+                    out.append(json.loads(txt))
+                except Exception:
+                    out.append(txt)
+        return out
+
+    with _server_env(env, unset):
+        return asyncio.run(go())
+
+
+def health(env: dict, unset: tuple = ()) -> tuple[int, str]:
+    """Start the server lifespan under env, then call its /health handler; returns (status, body)."""
+    import asyncio
+    import importlib
+
+    async def go():
+        from fastmcp import Client
+        from starlette.requests import Request
+        import server
+        importlib.reload(server)
+        async with Client(server.mcp) as c:
+            await c.list_tools()
+            req = Request({"type": "http", "method": "GET", "path": "/health", "headers": [], "query_string": b""})
+            resp = await server.health_handler(req)
+            return resp.status_code, resp.body.decode()
+
+    with _server_env(env, unset):
+        return asyncio.run(go())
+
+
+def find_verse(result, verse: int):
+    for v in (result or {}).get("verses", []):
+        if int(v.get("verse", -1)) == verse:
+            return v
+    return None
+
+
+def blob(x) -> str:
+    return json.dumps(x, ensure_ascii=False) if not isinstance(x, str) else x

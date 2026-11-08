@@ -211,4 +211,4 @@ def talk_bundle() -> TalkBundle:
 
 
 # Scripture tests: fake Church API world and fetched/built scripture.db fixtures
-from tests.scripture_world import world, fetched_db, built_db, full_store, full_built  # noqa: E402,F401
+from tests.scripture_world import world, fetched_db, built_db, full_store, full_built, weaviate_env, loaded  # noqa: E402,F401

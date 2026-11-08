@@ -86,6 +86,7 @@ CREATE TABLE jst_verse (               -- every core.db J/F row, in JST numberin
   core_id       INTEGER,               -- core.db scripture.ID
   book_id       INTEGER,               -- the KJV book of the same name (book.core_book_id = core.db BookID);
                                        -- NULL when the build has no such book row
+  core_book_id  INTEGER,               -- core.db BookID of the row (extra column: names the book when book_id is NULL)
   chapter       INTEGER,               -- JST chapter
   verse         INTEGER,               -- JST verse
   source_flag   TEXT,                  -- F = in the Church edition, J = rest of the Inspired Version

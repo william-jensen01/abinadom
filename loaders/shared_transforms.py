@@ -10,7 +10,7 @@ import logging
 import sys
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, NamedTuple
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -299,3 +299,98 @@ def load_talk_bundles(bundles: list[TalkBundle], loader) -> dict:
         "skipped_talks": skipped_talks,
         "skipped_count": len(skipped_talks),
     }
+
+
+# =============================================================================
+# Scriptures
+# =============================================================================
+
+class ScriptureBundle(NamedTuple):
+    """One unit of a scripture load (a book, a JST-only book, or the front matter), read out of scripture.db.
+
+    verses:     canonical verse rows, ordered by (chapter, verse). Keys: book, book_uri, cite_abbr, volume, chapter,
+                verse, text, aid, footnote_count, jst_refs (list[str]), has_jst (bool)
+    jst_verses: the `F` JST verse rows in JST numbering. Keys: book, book_uri, cite_abbr, volume, chapter, verse,
+                text, kjv_refs (list[str])
+    chapters:   chapter/section/document pages. Keys: page_uri, book (or None), volume, number (or None),
+                cite_abbr (or None), title, summary, intro, kind, verse_count
+    """
+    verses: list
+    jst_verses: list
+    chapters: list
+
+
+def _records(pending: list, skip, embed_fn) -> list[tuple[str, dict[str, Any], str, list[float] | None]]:
+    """pending = [(embed string, metadata, doc_id)]: drop the skipped ones, then embed the rest in one call."""
+    pending = [(text, rich_metadata(meta), doc_id) for text, meta, doc_id in pending if not (skip and skip(doc_id))]
+    vectors = embed_fn([p[0] for p in pending]) if embed_fn is not None and pending else [None] * len(pending)
+    return [(*p, vec) for p, vec in zip(pending, vectors)]
+
+
+def prepare_verse_records(
+    verses: list[dict],
+    jst_verses: list[dict],
+    embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
+    radius: int = 1,
+    skip: Callable[[str], bool] | None = None,
+) -> list[tuple[str, dict[str, Any], str, list[float] | None]]:
+    """
+    Transform scripture verse rows into (document, metadata, doc_id, vector|None) tuples for ScriptureVerses.
+
+    Canonical verses embed "{book} {chapter}:{verse}\\n{prev}\\n{this}\\n{next}": the window holds `radius` neighbours
+    each side, never crosses a chapter, and is stored as `context_window`. JST (`F`) verses embed alone as
+    "JST {book} {chapter}:{verse}\\n{text}". `skip(doc_id)` drops a record already loaded before anything is embedded;
+    windows are built from the whole chapter, so skipping never changes the rest.
+    """
+    pending = []
+    chapters: dict[Any, list[dict]] = {}
+    for v in verses:
+        chapters.setdefault((v["book_uri"], v["chapter"]), []).append(v)
+    for chapter in chapters.values():
+        for i, v in enumerate(chapter):
+            doc_id = f"verse_{v['book_uri']}_{v['chapter']}_{v['verse']}"
+            near = chapter[max(0, i - radius): i + radius + 1]
+            window = f"{v['book']} {v['chapter']}:{v['verse']}\n" + "\n".join(n["text"] for n in near)
+            pending.append((window, {
+                "variant": "standard", "book": v["book"], "book_uri": v["book_uri"], "cite_abbr": v["cite_abbr"],
+                "volume": v["volume"], "chapter": v["chapter"], "verse": v["verse"],
+                "reference": f"{v['cite_abbr']} {v['chapter']}:{v['verse']}", "text": v["text"],
+                "has_jst": bool(v.get("has_jst")), "jst_refs": list(v.get("jst_refs") or []), "aid": v.get("aid"),
+                "footnote_count": v.get("footnote_count", 0), "context_window": window, "doc_id_str": doc_id,
+            }, doc_id))
+    for j in jst_verses:
+        doc_id = f"jst_{j['book_uri']}_{j['chapter']}_{j['verse']}"
+        window = f"JST {j['book']} {j['chapter']}:{j['verse']}\n{j['text']}"
+        pending.append((window, {
+            "variant": "jst", "book": j["book"], "book_uri": j["book_uri"], "cite_abbr": j["cite_abbr"],
+            "volume": j["volume"], "chapter": j["chapter"], "verse": j["verse"],
+            "reference": f"JST {j['cite_abbr']} {j['chapter']}:{j['verse']}", "text": j["text"],
+            "kjv_refs": list(j.get("kjv_refs") or []), "footnote_count": 0, "context_window": window,
+            "doc_id_str": doc_id,
+        }, doc_id))
+    return _records(pending, skip, embed_fn)
+
+
+def prepare_chapter_records(
+    chapters: list[dict],
+    embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
+    skip: Callable[[str], bool] | None = None,
+) -> list[tuple[str, dict[str, Any], str, list[float] | None]]:
+    """
+    Transform chapter/section/document page rows into ScriptureChapters tuples.
+
+    The reference is "{cite_abbr} {number}" ("Alma 32", "D&C 45"); a page with no book or number (front matter) is
+    referenced by its title. The vector is over "{reference}: {title}\\n{intro}\\n{summary}".
+    """
+    pending = []
+    for c in chapters:
+        doc_id = f"chapter_{c['page_uri']}"
+        has_number = c.get("cite_abbr") and c.get("number") is not None
+        reference = f"{c['cite_abbr']} {c['number']}" if has_number else c["title"]
+        text = f"{reference}: {c.get('title') or ''}\n{c.get('intro') or ''}\n{c.get('summary') or ''}"
+        pending.append((text, {
+            "book": c.get("book"), "volume": c.get("volume"), "chapter": c.get("number"), "reference": reference,
+            "title": c.get("title"), "summary": c.get("summary"), "intro": c.get("intro"), "kind": c["kind"],
+            "verse_count": c.get("verse_count", 0), "uri": c["page_uri"], "doc_id_str": doc_id,
+        }, doc_id))
+    return _records(pending, skip, embed_fn)

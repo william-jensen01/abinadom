@@ -50,6 +50,16 @@ WEAVIATE_COLLECTION_NAMES = {
     "footnotes": "ConferenceTalkFootnotes",
 }
 
+# --- Scripture collections ---
+WEAVIATE_SCRIPTURE_COLLECTION_NAMES = {
+    "verses": "ScriptureVerses",
+    "chapters": "ScriptureChapters",
+}
+# One object: the build_id being loaded (loading_build_id) and the one completely loaded (build_id).
+WEAVIATE_SCRIPTURE_META_COLLECTION = "ScriptureMeta"
+# Neighbours on each side of a verse in its embedded context window. Changing it needs --force.
+SCRIPTURE_WINDOW_RADIUS = 1
+
 # --- ChromaDB backward-compatibility (verify_chromadb_pipeline.py) ---
 # Production now uses Weaviate (Phase 24). These names are kept for operators
 # who still run ChromaDB instances and use verify_chromadb_pipeline.py.

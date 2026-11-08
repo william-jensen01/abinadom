@@ -68,8 +68,15 @@ from weaviate.classes.aggregate import GroupByAggregate
 from weaviate.util import generate_uuid5
 
 from config.weaviate_client import get_weaviate_client
-from config.pipeline_config import WEAVIATE_COLLECTION_NAMES
+from config.pipeline_config import (
+    WEAVIATE_COLLECTION_NAMES,
+    WEAVIATE_SCRIPTURE_COLLECTION_NAMES,
+    WEAVIATE_SCRIPTURE_META_COLLECTION,
+)
 from config.embedding import resolve_embedding_url, get_embedding_function
+from db.scripture import open_scripture_db
+from tools import scripture_tools
+from tools.scripture_tools import NOT_AVAILABLE as SCRIPTURE_NOT_AVAILABLE, ScriptureStore
 
 # ---------------------------------------------------------------------------
 # Logging — must be configured before anything else writes to stderr (INTG-01)
@@ -90,6 +97,8 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AppContext:
     client: weaviate.WeaviateClient
+    scripture: ScriptureStore | None = None   # None: scripture.db is not available (talk tools are unaffected)
+    scripture_loaded: bool = True             # the three Scripture* collections exist in Weaviate
 
 
 # Per-collection property extractor: maps collection key -> text snippet from Weaviate properties.
@@ -169,7 +178,47 @@ def _startup() -> AppContext:
         sys.exit(1)
     _check_embedding()
     _validate_collections(client)
-    return AppContext(client=client)
+    try:
+        database = open_scripture_db()      # SCRIPTURE_DB_PATH, read now
+        scripture = ScriptureStore.open(database) if database is not None else None
+    except Exception as exc:  # noqa: BLE001 — scripture is optional; never block the talk tools
+        logger.warning("scripture.db unavailable: %s", exc)
+        scripture = None
+    loaded, _scripture_report["scripture"] = _scripture_status(client, scripture)
+    return AppContext(client=client, scripture=scripture, scripture_loaded=loaded)
+
+
+_scripture_report: dict = {}    # {"scripture": status} after startup; /health reports it
+
+
+def _scripture_status(client, scripture: ScriptureStore | None) -> tuple[bool, dict]:
+    """(collections present, /health report). Compares the file's build_id with ScriptureMeta's; never raises.
+
+    A mismatch only logs a warning. A ScriptureMeta with `loading_build_id` and no `build_id` (a `--book` slice)
+    is "no finished load": loaded_build_id is None, which is not a mismatch.
+    """
+    status: dict = {"db": scripture is not None, "collections": False,
+                    "file_build_id": None, "loaded_build_id": None, "mismatch": False}
+    try:
+        if scripture is not None:
+            status["file_build_id"] = scripture.db.scalar("SELECT value FROM build_meta WHERE key = 'build_id'")
+        names = (*WEAVIATE_SCRIPTURE_COLLECTION_NAMES.values(), WEAVIATE_SCRIPTURE_META_COLLECTION)
+        status["collections"] = all(client.collections.exists(n) for n in names)
+        if status["collections"]:
+            for obj in client.collections.use(WEAVIATE_SCRIPTURE_META_COLLECTION).iterator():
+                status["loaded_build_id"] = obj.properties.get("build_id") or None
+                if not status["loaded_build_id"]:
+                    status["loading_build_id"] = obj.properties.get("loading_build_id") or None
+                break
+    except Exception as exc:  # noqa: BLE001 — scripture is optional
+        logger.warning("scripture status check failed: %s", exc)
+    file_id, loaded_id = status["file_build_id"], status["loaded_build_id"]
+    if file_id and loaded_id and file_id != loaded_id:
+        status["mismatch"] = True
+        status["hint"] = "re-run `run_scripture_pipeline.py` to reload Weaviate from scripture.db"
+        logger.warning("scripture build mismatch: scripture.db build_id %s, Weaviate ScriptureMeta build_id %s; "
+                       "re-run `run_scripture_pipeline.py`", file_id, loaded_id)
+    return status["collections"], status
 
 
 # ---------------------------------------------------------------------------
@@ -378,7 +427,7 @@ async def health_handler(request: Request) -> JSONResponse:
         status["weaviate"] = "unreachable"
         http_status = 503
 
-    payload = {"status": "ok" if http_status == 200 else "degraded", **status}
+    payload = {"status": "ok" if http_status == 200 else "degraded", **status, **_scripture_report}
     return JSONResponse(payload, status_code=http_status)
 
 
@@ -394,7 +443,7 @@ async def search(
     season: str | None = None,
     collection: str = "paragraphs",
     limit: int = 5,
-    alpha: float = 0.7,
+    alpha: float | None = None,
     group_by_talk: bool = False,
     session: str | None = None,
     cites_scripture: bool | None = None,
@@ -404,12 +453,19 @@ async def search(
     offset: int = 0,
     sort_by: str | None = None,
     results_per_talk: int = 3,
+    book: str | None = None,
+    volume: str | None = None,
+    chapter: int | None = None,
+    variant: str | None = None,
     ctx: Context = None,
 ) -> str:
     """Search LDS General Conference content by meaning.
 
     Use collection='paragraphs' for passage text, 'talks' for talk discovery,
     'citations' for scripture references, 'footnotes' for footnote content.
+    Use collection='scripture_verses' to search the scripture text itself (KJV wording
+    matters, so alpha=0.0 gives exact-phrase keyword search) and 'scripture_chapters'
+    to find which chapter is about a topic.
 
     Args:
         query: Natural language search query.
@@ -418,7 +474,8 @@ async def search(
         season: Optional conference season filter ("April" or "October").
         collection: Collection to search - "talks", "paragraphs" (default), "citations", or "footnotes".
         limit: Number of results to return (default 5, max 20).
-        alpha: Blend of vector (1.0) and keyword/BM25 (0.0). Default 0.7 (hybrid).
+        alpha: Blend of vector (1.0) and keyword/BM25 (0.0). Default 0.7 (hybrid); 0.4 for
+            scripture_verses, where people remember KJV wording and keyword matches should weigh more.
         group_by_talk: If True (paragraphs only), cluster results by talk_id.
             Grouped results are always vector-ranked (search_mode "vector_grouped")
             regardless of alpha, and require the embedding service; alpha applies
@@ -431,27 +488,50 @@ async def search(
         offset: Number of results to skip for pagination (default 0).
         sort_by: Sort order for browse path only — 'date_desc' (newest first) or 'date_asc' (oldest first).
         results_per_talk: Max passages per talk when group_by_talk=True (default 3, max 10).
+        book: Scripture collections only. Book name or abbreviation ("Alma", "1 Ne.", "D&C").
+        volume: Scripture collections only. Volume title or short name ("Book of Mormon", "bofm").
+        chapter: Scripture collections only. Chapter or section number.
+        variant: scripture_verses only. "standard" (default), "jst" or "both".
     """
     app: AppContext = ctx.lifespan_context["app"]
 
-    col_name = WEAVIATE_COLLECTION_NAMES.get(collection)
+    scripture_key = collection.removeprefix("scripture_") if collection in ("scripture_verses", "scripture_chapters") else None
+    col_name = WEAVIATE_SCRIPTURE_COLLECTION_NAMES[scripture_key] if scripture_key else WEAVIATE_COLLECTION_NAMES.get(collection)
     if col_name is None:
         return f"Unknown collection '{collection}'. Valid: talks, paragraphs, citations, footnotes."
+    if scripture_key and not app.scripture_loaded:
+        return SCRIPTURE_NOT_AVAILABLE
+    if not scripture_key and any(x is not None for x in (book, volume, chapter, variant)):
+        return "book, volume, chapter and variant apply only to the scripture_verses and scripture_chapters collections."
+    if scripture_key and any(x is not None for x in (speaker, year, season, session, cites_scripture, year_from, year_to)):
+        return "speaker, year, season, session, cites_scripture and year_from/to apply only to talk collections."
+    if scripture_key == "chapters" and variant is not None:
+        return "variant applies only to the scripture_verses collection."
 
     if group_by_talk and collection != "paragraphs":
         return "group_by_talk is only supported for the paragraphs collection."
 
+    if alpha is None:
+        alpha = 0.4 if scripture_key == "verses" else 0.7
     alpha = max(0.0, min(1.0, alpha))
     limit = max(1, min(limit, 20))
     offset = max(0, offset)
     results_per_talk = max(1, min(results_per_talk, 10))
-    weaviate_filter = _build_weaviate_filters(
-        year, season, speaker,
-        session=session,
-        cites_scripture=cites_scripture,
-        year_from=year_from,
-        year_to=year_to,
-    )
+    fmt = _format_search_result
+    if scripture_key:
+        weaviate_filter = scripture_tools.build_scripture_filter(
+            app.scripture, scripture_key, book=book, volume=volume, chapter=chapter, variant=variant)
+        if isinstance(weaviate_filter, str):
+            return weaviate_filter
+        fmt = lambda _snippet, props, **kw: scripture_tools.format_scripture_result(scripture_key, props, **kw)  # noqa: E731
+    else:
+        weaviate_filter = _build_weaviate_filters(
+            year, season, speaker,
+            session=session,
+            cites_scripture=cites_scripture,
+            year_from=year_from,
+            year_to=year_to,
+        )
     col = app.client.collections.use(col_name)
     snippet_fn = _SNIPPET_PROP.get(collection, lambda p: "")
 
@@ -488,7 +568,7 @@ async def search(
         if not result.objects:
             return "No results found."
         results = [
-            _format_search_result(snippet_fn(obj.properties), obj.properties)
+            fmt(snippet_fn(obj.properties), obj.properties)
             for obj in result.objects
         ]
         has_more = bool(total is not None and (offset + len(results)) < total)
@@ -566,7 +646,7 @@ async def search(
                 meta = obj.metadata
                 relevance = getattr(meta, "certainty", None)
                 dist = getattr(meta, "distance", None)
-                paragraphs.append(_format_search_result(
+                paragraphs.append(fmt(
                     snippet_fn(props), props,
                     relevance=relevance, score_type="vector_certainty", distance=dist,
                 ))
@@ -625,19 +705,19 @@ async def search(
         if effective_alpha == 1.0:
             relevance = getattr(meta, "certainty", None)
             dist = getattr(meta, "distance", None)
-            row = _format_search_result(
+            row = fmt(
                 snippet_fn(props), props,
                 relevance=relevance, score_type="vector_certainty", distance=dist,
             )
         elif effective_alpha == 0.0:
             relevance = getattr(meta, "score", None)
-            row = _format_search_result(
+            row = fmt(
                 snippet_fn(props), props,
                 relevance=relevance, score_type="bm25",
             )
         else:
             relevance = getattr(meta, "score", None)
-            row = _format_search_result(
+            row = fmt(
                 snippet_fn(props), props,
                 relevance=relevance, score_type="hybrid_fusion",
             )
@@ -909,6 +989,64 @@ async def get_talk_citations(
         })
 
     return json.dumps(results, ensure_ascii=False, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# Scripture tools — read scripture.db directly (no embedding, no Weaviate)
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def get_verse(
+    book: str,
+    chapter: int,
+    verse_start: int | None = None,
+    verse_end: int | None = None,
+    include_footnotes: bool = True,
+    include_jst: bool = False,
+    numbering: str = "standard",
+    ctx: Context = None,
+) -> str:
+    """Return scripture verses with their chapter summary, footnotes and optionally the JST. No embedding needed.
+
+    Args:
+        book: Book name or abbreviation ("Alma", "1 Nephi", "1 Ne.", "First Nephi", "D&C", "Psalms").
+            "JST Genesis" reads the Joseph Smith Translation in its own chapter and verse numbering.
+        chapter: Chapter (or D&C section) number. For a one-chapter book ("Jude", 3) means Jude 1:3.
+        verse_start: First verse; omit for the whole chapter.
+        verse_end: Last verse of a range (default: verse_start).
+        include_footnotes: Attach each verse's footnotes with their references (default true).
+        include_jst: Attach the JST verses the Church links to each verse (its JST footnotes and appendix).
+        numbering: "standard" (default) or "jst" (same as a "JST ..." book).
+
+    Returns JSON {reference, chapter_summary, verses: [{reference, verse, text, jst?, footnotes?}]}.
+    """
+    app: AppContext = ctx.lifespan_context["app"]
+    if app.scripture is None:
+        return SCRIPTURE_NOT_AVAILABLE
+    result = scripture_tools.get_verse(app.scripture, book, chapter, verse_start, verse_end,
+                                       include_footnotes=include_footnotes, include_jst=include_jst,
+                                       numbering=numbering)
+    return result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+
+
+@mcp.tool()
+async def get_chapter_overview(
+    book: str,
+    chapter: int,
+    ctx: Context = None,
+) -> str:
+    """Orient on a chapter before reading it: title, intro, summary, verse count and its most-referenced
+    cross-reference targets. No embedding needed.
+
+    Args:
+        book: Book name or abbreviation ("Alma", "1 Ne.", "D&C").
+        chapter: Chapter (or D&C section) number.
+    """
+    app: AppContext = ctx.lifespan_context["app"]
+    if app.scripture is None:
+        return SCRIPTURE_NOT_AVAILABLE
+    result = scripture_tools.get_chapter_overview(app.scripture, book, chapter)
+    return result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
 
 
 if __name__ == "__main__":
