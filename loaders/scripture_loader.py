@@ -82,7 +82,9 @@ class ScriptureLoader(BaseLoader):
             Property(name="kjv_refs", data_type=DataType.TEXT_ARRAY, tokenization=Tokenization.FIELD),
             _text("aid", exact=True),
             Property(name="footnote_count", data_type=DataType.INT),
-            _text("context_window"), _text("doc_id_str", exact=True),
+            # context_window is stored and embedded, not keyword-searched (`text` is): FIELD tokenization keeps
+            # `context_window == ""` filterable, which SCR-05 needs (word tokenization makes Weaviate reject it).
+            _text("context_window", exact=True), _text("doc_id_str", exact=True),
         ]
 
     def _chapter_properties(self) -> list:

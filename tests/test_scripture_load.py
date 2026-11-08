@@ -247,6 +247,14 @@ def test_counts_properties_and_windows(loaded):
         assert ref in refs
 
 
+def test_empty_context_window_is_filterable(loaded):
+    """SCR-05 filters `context_window == ""`; with word tokenization Weaviate rejects that as a stopwords-only term."""
+    from weaviate.classes.query import Filter
+    _, client, _ = loaded
+    col = client.collections.use(VERSES)
+    assert col.aggregate.over_all(total_count=True, filters=Filter.by_property("context_window").equal("")).total_count == 0
+
+
 def test_jst_links_and_chapters_and_meta(loaded):
     db, client, _ = loaded
     refs = by_ref(client)
@@ -259,6 +267,35 @@ def test_jst_links_and_chapters_and_meta(loaded):
     assert len(ch) == q1(db, "SELECT COUNT(*) FROM chapter")
     meta = objects(client, META)
     assert len(meta) == 1 and meta[0].properties["build_id"] == q1(db, "SELECT value FROM build_meta WHERE key='build_id'")
+
+
+def test_verify_script_passes_on_a_full_load(loaded):
+    db, _, env = loaded
+    code, out = run_script("verify_weaviate_scripture.py", "--db", db, env=env)
+    assert code == 0 and "ALL PASS" in out and "FAIL " not in out, out[-3000:]
+    for name in ("SCR-01", "SCR-02 chapters", "SCR-02 volumes", "SCR-03 Ex. 7:3", "SCR-04 variants", "SCR-04 has_jst",
+                 "SCR-05 vectors verses", "SCR-05 vectors chapters", "SCR-06 semantic", "META"):
+        assert f"PASS {name}:" in out, name
+
+
+def test_verify_script_fails_when_counts_differ_from_the_db(loaded, tmp_path):
+    """One chapter row and one has_jst verse fewer in the db than were loaded: equality, not >=, must catch both."""
+    import sqlite3
+    db, _, env = loaded
+    other = tmp_path / "other.db"
+    shutil.copy(db, other)
+    conn = sqlite3.connect(other)
+    conn.execute("DELETE FROM chapter WHERE chapter_id = (SELECT MIN(chapter_id) FROM chapter "
+                 "WHERE chapter_id NOT IN (SELECT chapter_id FROM verse))")
+    conn.execute("DELETE FROM footnote_ref WHERE category = 'jst' AND footnote_id IN (SELECT f.footnote_id FROM footnote f "
+                 "WHERE f.verse_id = (SELECT verse_id FROM verse WHERE book_id = (SELECT book_id FROM book WHERE "
+                 "uri = '/scriptures/ot/ex') AND chapter = 7 AND verse = 3))")
+    conn.commit()
+    conn.close()
+    code, out = run_script("verify_weaviate_scripture.py", "--db", other, env=env)
+    assert code == 1, out[-3000:]
+    assert "FAIL SCR-02 chapters:" in out and "FAIL SCR-04 has_jst:" in out and "PASS SCR-01:" in out, out[-3000:]
+    assert "FAILED: " in out
 
 
 def test_resume_skips_and_a_changed_build_reloads(loaded):
