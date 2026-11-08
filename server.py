@@ -68,7 +68,11 @@ from weaviate.classes.aggregate import GroupByAggregate
 from weaviate.util import generate_uuid5
 
 from config.weaviate_client import get_weaviate_client
-from config.pipeline_config import WEAVIATE_COLLECTION_NAMES, WEAVIATE_SCRIPTURE_COLLECTION_NAMES
+from config.pipeline_config import (
+    WEAVIATE_COLLECTION_NAMES,
+    WEAVIATE_SCRIPTURE_COLLECTION_NAMES,
+    WEAVIATE_SCRIPTURE_META_COLLECTION,
+)
 from config.embedding import resolve_embedding_url, get_embedding_function
 from db.scripture import open_scripture_db
 from tools.scripture_tools import (
@@ -100,6 +104,8 @@ logger = logging.getLogger(__name__)
 class AppContext:
     client: weaviate.WeaviateClient
     scripture: ScriptureStore | None = None   # None: scripture.db is not available (talk tools are unaffected)
+    scripture_loaded: bool = True             # (startup sets it) the three Scripture* collections exist in Weaviate
+    scripture_status: dict | None = None      # reported by /health
 
 
 # Per-collection property extractor: maps collection key -> text snippet from Weaviate properties.
@@ -179,7 +185,40 @@ def _startup() -> AppContext:
         sys.exit(1)
     _check_embedding()
     _validate_collections(client)
-    return AppContext(client=client, scripture=_open_scripture())
+    scripture = _open_scripture()
+    loaded, status = _scripture_status(client, scripture)
+    return AppContext(client=client, scripture=scripture, scripture_loaded=loaded, scripture_status=status)
+
+
+_SCRIPTURE_COLLECTIONS = (*WEAVIATE_SCRIPTURE_COLLECTION_NAMES.values(), WEAVIATE_SCRIPTURE_META_COLLECTION)
+
+
+def _scripture_status(client, scripture: ScriptureStore | None) -> tuple[bool, dict]:
+    """(collections present, /health report). Compares the file's build_id with ScriptureMeta; never raises.
+
+    A mismatch only logs a warning. A ScriptureMeta with `loading_build_id` and no `build_id` (a `--book` slice)
+    is "no finished load": loaded_build_id is None, which is not a mismatch.
+    """
+    status: dict = {"db": scripture is not None, "collections": False,
+                    "file_build_id": None, "loaded_build_id": None, "mismatch": False}
+    try:
+        if scripture is not None:
+            status["file_build_id"] = scripture.db.scalar("SELECT value FROM build_meta WHERE key = 'build_id'")
+        status["collections"] = all(client.collections.exists(n) for n in _SCRIPTURE_COLLECTIONS)
+        if status["collections"]:
+            for obj in client.collections.use(WEAVIATE_SCRIPTURE_META_COLLECTION).iterator():
+                status["loaded_build_id"] = obj.properties.get("build_id") or None
+                if not status["loaded_build_id"]:
+                    status["loading_build_id"] = obj.properties.get("loading_build_id") or None
+                break
+    except Exception as exc:  # noqa: BLE001 — scripture is optional
+        logger.warning("scripture status check failed: %s", exc)
+    file_id, loaded_id = status["file_build_id"], status["loaded_build_id"]
+    if file_id and loaded_id and file_id != loaded_id:
+        status["mismatch"] = True
+        logger.warning("scripture build mismatch: scripture.db build_id %s, Weaviate ScriptureMeta build_id %s",
+                       file_id, loaded_id)
+    return bool(status["collections"]), status
 
 
 def _open_scripture() -> ScriptureStore | None:
@@ -353,9 +392,11 @@ MCP_INSTRUCTIONS = (
 
 @asynccontextmanager
 async def _lifespan(server: FastMCP):
+    global _scripture_report
     app_ctx: AppContext | None = None     # initialize before try — prevents NameError
     try:
         app_ctx = _startup()
+        _scripture_report = app_ctx.scripture_status
     except SystemExit:
         raise
     except Exception as e:
@@ -366,6 +407,9 @@ async def _lifespan(server: FastMCP):
     finally:
         if app_ctx is not None:           # guard — app_ctx may be None if startup failed
             app_ctx.client.close()
+
+
+_scripture_report: dict | None = None   # set by the lifespan; /health reads it
 
 
 mcp = FastMCP("lds-scripture-index", instructions=MCP_INSTRUCTIONS, auth=_auth, lifespan=_lifespan)
@@ -399,6 +443,8 @@ async def health_handler(request: Request) -> JSONResponse:
         http_status = 503
 
     payload = {"status": "ok" if http_status == 200 else "degraded", **status}
+    if _scripture_report is not None:
+        payload["scripture"] = _scripture_report
     return JSONResponse(payload, status_code=http_status)
 
 
@@ -474,6 +520,8 @@ async def search(
         col_name = WEAVIATE_COLLECTION_NAMES.get(collection)
     if col_name is None:
         return f"Unknown collection '{collection}'. Valid: talks, paragraphs, citations, footnotes."
+    if scripture_key is not None and not app.scripture_loaded:
+        return SCRIPTURE_NOT_AVAILABLE
     if scripture_key is None and any(x is not None for x in (book, volume, chapter, variant)):
         return "book, volume, chapter and variant apply only to the scripture_verses and scripture_chapters collections."
     if scripture_key is not None and any(
