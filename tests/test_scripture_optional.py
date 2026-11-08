@@ -1,4 +1,4 @@
-"""_scripture_status: build-id comparison and "no finished load" handling (SPEC-v2 §9.3)."""
+"""_scripture_status: build-id comparison and "no finished load" handling."""
 from types import SimpleNamespace
 
 import server
@@ -35,7 +35,7 @@ def test_slice_without_finished_build_is_not_a_mismatch():
 
 def test_not_available_message_has_exact_phrase():
     from tools.scripture_tools import NOT_AVAILABLE
-    assert "scripture corpus not available" in NOT_AVAILABLE   # GOAL.md: exact, case-sensitive
+    assert "scripture corpus not available" in NOT_AVAILABLE
 
 
 def test_missing_collections_and_db():

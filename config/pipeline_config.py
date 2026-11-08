@@ -50,7 +50,7 @@ WEAVIATE_COLLECTION_NAMES = {
     "footnotes": "ConferenceTalkFootnotes",
 }
 
-# --- Scripture collections (docs/scriptures/SPEC-v2.md section 6) ---
+# --- Scripture collections ---
 WEAVIATE_SCRIPTURE_COLLECTION_NAMES = {
     "verses": "ScriptureVerses",
     "chapters": "ScriptureChapters",

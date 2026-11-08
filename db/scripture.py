@@ -1,4 +1,4 @@
-"""Read-only access to scripture.db for the MCP server (SPEC-v2 §9).
+"""Read-only access to scripture.db for the MCP server.
 
 The same `db.Database` as core.db: a read-only connection, the 5s query timeout, and a slow query returns `[]`.
 The path comes from `SCRIPTURE_DB_PATH`, read when `open_scripture_db` is called (server startup), never at import.
@@ -11,7 +11,7 @@ from db import DEFAULT_TIMEOUT, Database
 
 log = logging.getLogger("sci-db")
 
-# Tables and key columns the server reads (normalized layer, SPEC-v2 §4.2)
+# Tables and key columns the server reads (normalized layer)
 EXPECTED_SCRIPTURE_TABLES = {
     "book": ["book_id", "uri", "name", "cite_abbr", "core_book_id", "num_chapters"],
     "chapter": ["chapter_id", "page_id", "book_id", "number", "title", "summary", "intro"],

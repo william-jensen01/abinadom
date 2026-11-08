@@ -1,4 +1,4 @@
-"""`get_verse`, `get_chapter_overview` and the scripture side of `search` (SPEC-v2 §9).
+"""`get_verse`, `get_chapter_overview` and the scripture side of `search`.
 
 The tool functions take a `ScriptureStore` and return a dict (the tool serializes it) or a string (a message for the
 caller: unknown book, no such chapter, ...). get_verse and get_chapter_overview read only scripture.db.
@@ -31,7 +31,7 @@ class ScriptureStore:
 
 
 # ---------------------------------------------------------------------------
-# References in cite form (SPEC-v2 §13)
+# References in cite form
 # ---------------------------------------------------------------------------
 
 def _span(a: int, b: Optional[int]) -> str:

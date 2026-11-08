@@ -302,7 +302,7 @@ def load_talk_bundles(bundles: list[TalkBundle], loader) -> dict:
 
 
 # =============================================================================
-# Scriptures (docs/scriptures/SPEC-v2.md sections 6 and 7)
+# Scriptures
 # =============================================================================
 
 class ScriptureBundle(NamedTuple):

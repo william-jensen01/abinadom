@@ -193,7 +193,7 @@ def test_counts_properties_and_windows(loaded):
     assert refs["Alma 32:1"]["context_window"].count("\n") == 2
     assert all(o.vector["default"] for o in objects(client, VERSES))
     assert {"1 Ne. 3:7", "D&C 45:32", "Jude 1:3", "Enos 1:3", "John 3:16"} <= set(refs)
-    # SCR-05 filters `context_window == ""`; with word tokenization Weaviate rejects that as a stopwords-only term
+    # The verify script filters `context_window == ""`; with word tokenization Weaviate rejects that as a stopwords-only term
     empty = Filter.by_property("context_window").equal("")
     assert client.collections.use(VERSES).aggregate.over_all(total_count=True, filters=empty).total_count == 0
 
@@ -216,8 +216,8 @@ def test_verify_script_passes_on_a_full_load(loaded):
     db, _, env = loaded
     code, out = run_script(env, "verify_weaviate_scripture.py", "--db", db)
     assert code == 0 and "ALL PASS" in out and "FAIL " not in out, out[-3000:]
-    for name in ("SCR-01", "SCR-02 chapters", "SCR-02 volumes", "SCR-03 Ex. 7:3", "SCR-04 variants", "SCR-04 has_jst",
-                 "SCR-05 vectors verses", "SCR-05 vectors chapters", "SCR-06 semantic", "META"):
+    for name in ("verse count", "chapter count", "volume counts", "has_jst Ex. 7:3", "variant counts", "has_jst count",
+                 "vectors verses", "vectors chapters", "search semantic", "meta build_id"):
         assert f"PASS {name}:" in out, name
 
 
@@ -234,7 +234,7 @@ def test_verify_script_fails_when_counts_differ_from_the_db(loaded, tmp_path):
                      "WHERE b.uri = '/scriptures/ot/ex' AND v.chapter = 7 AND v.verse = 3))")
     code, out = run_script(env, "verify_weaviate_scripture.py", "--db", other)
     assert code == 1, out[-3000:]
-    assert "FAIL SCR-02 chapters:" in out and "FAIL SCR-04 has_jst:" in out and "PASS SCR-01:" in out, out[-3000:]
+    assert "FAIL chapter count:" in out and "FAIL has_jst count:" in out and "PASS verse count:" in out, out[-3000:]
     assert "FAILED: " in out
 
 

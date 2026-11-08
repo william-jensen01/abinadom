@@ -1,4 +1,4 @@
-"""Book resolver (SPEC-v2 §13): free-text book input -> a `book` row of scripture.db.
+"""Book resolver: free-text book input -> a `book` row of scripture.db.
 
 Built from the API TOC (the `book` table: name, URI segment, cite abbreviation, core_book_id), not from core.db.
 Accepts full names, URI segments, cite abbreviations, word/digit ordinals ("First Nephi" / "1 Nephi" / "1 Ne."),

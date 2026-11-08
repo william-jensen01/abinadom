@@ -1,5 +1,5 @@
 """
-Scripture loader: ScriptureVerses, ScriptureChapters and ScriptureMeta in Weaviate (SPEC-v2 sections 6-8).
+Scripture loader: ScriptureVerses, ScriptureChapters and ScriptureMeta in Weaviate.
 
 Vectors are computed here (embed_fn, the document-task embedder) and passed explicitly. UUIDs are deterministic
 (generate_uuid5 over the doc_id string), so a re-load replaces an object, and "already loaded" means "that UUID is
@@ -39,7 +39,7 @@ def _text(name: str, exact: bool = True) -> Property:
     """A TEXT property; `exact` (FIELD tokenization) indexes the whole value as one token, so filters match it exactly.
 
     `context_window` is exact too: it is embedded, not keyword-searched (`text` is), and FIELD keeps
-    `context_window == ""` filterable (SCR-05), which word tokenization makes Weaviate reject.
+    `context_window == ""` filterable, which word tokenization makes Weaviate reject.
     """
     return Property(name=name, data_type=DataType.TEXT, tokenization=Tokenization.FIELD if exact else Tokenization.WORD)
 

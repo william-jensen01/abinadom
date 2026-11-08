@@ -1,4 +1,4 @@
-"""The real load in the configured Weaviate passes the post-load checks (SCR-01..06).
+"""The real load in the configured Weaviate passes the post-load checks.
 
 Opt-in: needs the real Weaviate and embedder from .env (or the environment), so it is skipped unless
 SCRIPTURE_LIVE_WEAVIATE=1. It only reads Weaviate; the real scripture.db is read through a temp copy.
@@ -67,7 +67,7 @@ def _one(client, ref):
     from weaviate.classes.query import Filter
     r = client.collections.use("ScriptureVerses").query.fetch_objects(
         filters=Filter.by_property("reference").equal(ref), limit=2, include_vector=True)
-    assert r.objects, f"SCR-03: no object for {ref}"
+    assert r.objects, f"no object for {ref}"
     return r.objects[0]
 
 
@@ -78,16 +78,16 @@ def test_scr01_02_counts(wv, db):
     f = q1(db, "SELECT COUNT(*) FROM jst_verse WHERE source_flag='F'")
     got = _count(wv, "ScriptureVerses")
     print(f"ScriptureVerses {got} (expected {verses} + {f})")
-    assert got == verses + f, f"SCR-01: ScriptureVerses {got} != canonical {verses} + F {f}"
+    assert got == verses + f, f"ScriptureVerses {got} != canonical {verses} + F {f}"
     assert _count(wv, "ScriptureVerses", Filter.by_property("variant").equal("jst")) == f
     chapters = q1(db, "SELECT COUNT(*) FROM chapter")
     got_c = _count(wv, "ScriptureChapters")
-    assert got_c >= chapters, f"SCR-02: ScriptureChapters {got_c} < {chapters} chapter rows"
+    assert got_c >= chapters, f"ScriptureChapters {got_c} < {chapters} chapter rows"
     groups = wv.collections.use("ScriptureVerses").aggregate.over_all(
         group_by=GroupByAggregate(prop="volume"), total_count=True).groups
     vols = {g.grouped_by.value: g.total_count for g in groups}
     print("verses per volume:", vols)
-    assert len([v for v in vols.values() if v > 500]) >= 5, f"SCR-02: all five volumes must be present: {vols}"
+    assert len([v for v in vols.values() if v > 500]) >= 5, f"all five volumes must be present: {vols}"
 
 
 def test_scr03_spot_checks(wv):
@@ -95,7 +95,7 @@ def test_scr03_spot_checks(wv):
                        "1 Ne. 3:7": "And it came to pass that I, Nephi", "D&C 45:32": "But my disciples shall stand"}.items():
         assert _one(wv, ref).properties["text"].startswith(start), ref
     ex = _one(wv, "Ex. 7:3").properties
-    assert ex["has_jst"] and "JST Ex. 7:3" in ex["jst_refs"], f"SCR-03: Ex. 7:3 {ex.get('has_jst')} {ex.get('jst_refs')}"
+    assert ex["has_jst"] and "JST Ex. 7:3" in ex["jst_refs"], f"Ex. 7:3 {ex.get('has_jst')} {ex.get('jst_refs')}"
 
 
 def test_scr04_05_flags_windows_vectors(wv, db):
@@ -103,12 +103,12 @@ def test_scr04_05_flags_windows_vectors(wv, db):
     has = _count(wv, "ScriptureVerses", Filter.by_property("has_jst").equal(True))
     expected = q1(db, "SELECT COUNT(DISTINCT f.verse_id) FROM footnote_ref r JOIN footnote f ON f.footnote_id=r.footnote_id "
                       "WHERE r.category='jst' AND r.target_jst_verse_id IS NOT NULL")
-    assert has >= expected, f"SCR-04: has_jst {has} < {expected} verses with resolved jst footnotes"
+    assert has >= expected, f"has_jst {has} < {expected} verses with resolved jst footnotes"
     col = wv.collections.use("ScriptureVerses")
     empty = col.aggregate.over_all(total_count=True, filters=Filter.by_property("context_window").equal("")).total_count
-    assert empty == 0, f"SCR-05: {empty} empty context_window"
+    assert empty == 0, f"{empty} empty context_window"
     sample = col.query.fetch_objects(limit=300, include_vector=True).objects
-    assert sample and all(o.vector for o in sample), "SCR-05: objects without vectors"
+    assert sample and all(o.vector for o in sample), "objects without vectors"
 
 
 def test_scr06_semantic_and_keyword_sanity(wv):
@@ -119,12 +119,12 @@ def test_scr06_semantic_and_keyword_sanity(wv):
     std = Filter.by_property("variant").equal("standard")
     hits = col.query.near_vector(ef(["faith as a seed"])[0], limit=10, filters=std).objects
     refs = [o.properties["reference"] for o in hits]
-    assert any(r.startswith("Alma 32:") for r in refs), f"SCR-06: 'faith as a seed' -> {refs}"
+    assert any(r.startswith("Alma 32:") for r in refs), f"'faith as a seed' -> {refs}"
     bm = [o.properties["reference"] for o in col.query.bm25("charity suffereth long", limit=5, filters=std).objects]
-    assert {"1 Cor. 13:4", "Moro. 7:45"} & set(bm), f"SCR-06: BM25 'charity suffereth long' -> {bm}"
+    assert {"1 Cor. 13:4", "Moro. 7:45"} & set(bm), f"BM25 'charity suffereth long' -> {bm}"
     ch = wv.collections.use("ScriptureChapters").query.near_vector(ef(["plan of salvation"])[0], limit=10).objects
     crefs = [o.properties["reference"] for o in ch]
-    assert PLAUSIBLE_PLAN & set(crefs), f"SCR-06: chapter search 'plan of salvation' -> {crefs}"
+    assert PLAUSIBLE_PLAN & set(crefs), f"chapter search 'plan of salvation' -> {crefs}"
 
 
 def test_meta_and_repo_verifier(wv, db, live_env):
