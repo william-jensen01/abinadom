@@ -1,0 +1,184 @@
+{
+ "note": "one entry from songsFilteredList bookQueryList=[hymns]; full list total=341",
+ "entry": {
+  "title": "The Morning Breaks",
+  "slug": "the-morning-breaks",
+  "bookSlug": "hymns",
+  "bookSectionTitle": "Restoration",
+  "songNumber": "1",
+  "arrangers": [],
+  "artists": [],
+  "authors": [
+   {
+    "personName": "Parley P. Pratt"
+   }
+  ],
+  "composers": [
+   {
+    "personName": "George Careless"
+   }
+  ],
+  "instrumentations": [
+   {
+    "name": "Piano"
+   }
+  ],
+  "musicalFeatures": [],
+  "recordingAvailable": true,
+  "sheetMusicAvailable": true,
+  "videoAvailable": false,
+  "tags": [
+   "Jesus Christ",
+   "Restoration",
+   "Zion",
+   "baptism",
+   "faith",
+   "family",
+   "gathering of Israel",
+   "missionary work",
+   "priesthood",
+   "scriptures",
+   "temples",
+   "truth"
+  ],
+  "voicings": [
+   {
+    "name": "SATB"
+   }
+  ],
+  "assets": [
+   {
+    "assetType": "AUDIO_ACCOMPANIMENT",
+    "distributionUrl": "https://assets.churchofjesuschrist.org/bd/d7/bdd7dcd5d8a94395d308725f03f1c2f0337056f1/the_morning_breaks_accompaniment_eng.mp3",
+    "duration": 232000,
+    "lang": "eng",
+    "title": "The Morning Breaks",
+    "description": "“The Morning Breaks” from Hymns (English).",
+    "seoDescription": "“The Morning Breaks” from Hymns (English).",
+    "seoTitle": "The Morning Breaks",
+    "shareableTitle": "The Morning Breaks",
+    "thumbnail": {
+     "description": "Hymnal Audio Cover Art",
+     "distributionUrl": "https://www.churchofjesuschrist.org/imgs/5023629405813dccd787ddcc8056bcf16a1d791f/full/1280,/0/default",
+     "seoDescription": "Hymnal Audio Cover Art",
+     "seoTitle": "No Title",
+     "shareableTitle": "No Title",
+     "title": "No Title",
+     "renditions": [
+      {
+       "distributionUrl": "https://www.churchofjesuschrist.org/imgs/5023629405813dccd787ddcc8056bcf16a1d791f/full/!320%2C320/0/default",
+       "width": 320,
+       "height": 320
+      },
+      {
+       "distributionUrl": "https://www.churchofjesuschrist.org/imgs/5023629405813dccd787ddcc8056bcf16a1d791f/full/!640%2C640/0/default",
+       "width": 640,
+       "height": 640
+      },
+      {
+       "distributionUrl": "https://www.churchofjesuschrist.org/imgs/5023629405813dccd787ddcc8056bcf16a1d791f/full/!800%2C800/0/default",
+       "width": 800,
+       "height": 800
+      },
+      {
+       "distributionUrl": "https://www.churchofjesuschrist.org/imgs/5023629405813dccd787ddcc8056bcf16a1d791f/full/!1280%2C1280/0/default",
+       "width": 1280,
+       "height": 1280
+      },
+      {
+       "distributionUrl": "https://www.churchofjesuschrist.org/imgs/5023629405813dccd787ddcc8056bcf16a1d791f/full/!60%2C60/0/default",
+       "width": 60,
+       "height": 60
+      },
+      {
+       "distributionUrl": "https://www.churchofjesuschrist.org/imgs/5023629405813dccd787ddcc8056bcf16a1d791f/full/!250%2C250/0/default",
+       "width": 250,
+       "height": 250
+      },
+      {
+       "distributionUrl": "https://www.churchofjesuschrist.org/imgs/5023629405813dccd787ddcc8056bcf16a1d791f/full/!200%2C200/0/default",
+       "width": 200,
+       "height": 200
+      },
+      {
+       "distributionUrl": "https://www.churchofjesuschrist.org/imgs/5023629405813dccd787ddcc8056bcf16a1d791f/full/!100%2C100/0/default",
+       "width": 100,
+       "height": 100
+      },
+      {
+       "distributionUrl": "https://www.churchofjesuschrist.org/imgs/5023629405813dccd787ddcc8056bcf16a1d791f/full/!500%2C500/0/default",
+       "width": 500,
+       "height": 500
+      }
+     ]
+    }
+   },
+   {
+    "assetType": "AUDIO_VOCAL_CONGREGATION",
+    "distributionUrl": "https://assets.churchofjesuschrist.org/1b/13/1b13523680a0201653cfc366afbef38cde7fe1aa/the_morning_breaks_vocal_accompaniment_eng.mp3",
+    "duration": 231000,
+    "lang": "eng",
+    "title": "The Morning Breaks",
+    "description": "“The Morning Breaks” from Hymns (English).",
+    "seoDescription": "“The Morning Breaks” from Hymns (English).",
+    "seoTitle": "The Morning Breaks",
+    "shareableTitle": "The Morning Breaks",
+    "thumbnail": {
+     "description": "Composite art featuring the cover of the Hymn book. See parent image for copyright information.",
+     "distributionUrl": "https://www.churchofjesuschrist.org/imgs/1152b5ae7a454e3060399caf127ea104bdca60a3/full/1280,/0/default",
+     "seoDescription": "Composite art featuring the cover of the Hymn book.  See parent image for copyright information.",
+     "seoTitle": "No Title",
+     "shareableTitle": "No Title",
+     "title": "No Title",
+     "renditions": [
+      {
+       "distributionUrl": "https://www.churchofjesuschrist.org/imgs/1152b5ae7a454e3060399caf127ea104bdca60a3/full/!320%2C320/0/default",
+       "width": 320,
+       "height": 320
+      },
+      {
+       "distributionUrl": "https://www.churchofjesuschrist.org/imgs/1152b5ae7a454e3060399caf127ea104bdca60a3/full/!640%2C640/0/default",
+       "width": 640,
+       "height": 640
+      },
+      {
+       "distributionUrl": "https://www.churchofjesuschrist.org/imgs/1152b5ae7a454e3060399caf127ea104bdca60a3/full/!800%2C800/0/default",
+       "width": 800,
+       "height": 800
+      },
+      {
+       "distributionUrl": "https://www.churchofjesuschrist.org/imgs/1152b5ae7a454e3060399caf127ea104bdca60a3/full/!1280%2C1280/0/default",
+       "width": 1280,
+       "height": 1280
+      },
+      {
+       "distributionUrl": "https://www.churchofjesuschrist.org/imgs/1152b5ae7a454e3060399caf127ea104bdca60a3/full/!60%2C60/0/default",
+       "width": 60,
+       "height": 60
+      },
+      {
+       "distributionUrl": "https://www.churchofjesuschrist.org/imgs/1152b5ae7a454e3060399caf127ea104bdca60a3/full/!250%2C250/0/default",
+       "width": 250,
+       "height": 250
+      },
+      {
+       "distributionUrl": "https://www.churchofjesuschrist.org/imgs/1152b5ae7a454e3060399caf127ea104bdca60a3/full/!200%2C200/0/default",
+       "width": 200,
+       "height": 200
+      },
+      {
+       "distributionUrl": "https://www.churchofjesuschrist.org/imgs/1152b5ae7a454e3060399caf127ea104bdca60a3/full/!100%2C100/0/default",
+       "width": 100,
+       "height": 100
+      },
+      {
+       "distributionUrl": "https://www.churchofjesuschrist.org/imgs/1152b5ae7a454e3060399caf127ea104bdca60a3/full/!500%2C500/0/default",
+       "width": 500,
+       "height": 500
+      }
+     ]
+    }
+   }
+  ]
+ }
+}
