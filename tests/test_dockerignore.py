@@ -39,6 +39,14 @@ def test_db_package_is_in_the_image():
         assert not _excluded(needed, rules), f"{needed} must be in the build context"
 
 
+def test_database_paths_are_excluded_even_before_they_exist():
+    """A fresh clone has no .db files on disk, so check the paths the server mounts or builds by name."""
+    rules = _rules()
+    for path in ("db/scripture.db", "db/core.55.db", "db/content.55.db", "db/scripture.db-wal",
+                 "db/scripture.db-shm", "db/sci/core.55.db", "data/other.sqlite"):
+        assert _excluded(path, rules), f"{path} would be baked into the image"
+
+
 def test_no_sqlite_file_is_in_the_image():
     rules = _rules()
     leaked = []
