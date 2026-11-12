@@ -1690,6 +1690,31 @@ class TestCorpusStats:
             asyncio.run(corpus_stats(collection="paragraphs", ctx=ctx))
             mock_gef.assert_not_called()
 
+    def test_scripture_collections(self):
+        """The scripture collections aggregate their own Weaviate collections."""
+        from server import corpus_stats
+
+        ctx, mock_client = _make_mock_ctx()
+        mock_client.collections.use.return_value.aggregate.over_all.return_value.total_count = 43354
+
+        for collection, weaviate_name in (("scripture_verses", "ScriptureVerses"),
+                                          ("scripture_chapters", "ScriptureChapters")):
+            parsed = json.loads(asyncio.run(corpus_stats(collection=collection, ctx=ctx)))
+            assert parsed == {"collection": collection, "total": 43354}
+            mock_client.collections.use.assert_called_with(weaviate_name)
+
+    def test_scripture_not_loaded(self):
+        """Without the scripture collections, corpus_stats says so and does not query Weaviate."""
+        from server import corpus_stats
+
+        ctx, mock_client = _make_mock_ctx()
+        ctx.lifespan_context["app"].scripture_loaded = False
+
+        result = asyncio.run(corpus_stats(collection="scripture_verses", group_by="volume", ctx=ctx))
+
+        assert "scripture corpus not available" in result
+        mock_client.collections.use.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # get_talk_citations tool tests

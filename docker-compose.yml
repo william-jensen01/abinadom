@@ -3,6 +3,20 @@ services:
     image: h5wyxaa9vrvo/lds-mcp:latest
     env_file:
       - .env
+    environment:
+      # The image holds code only. Every SQLite file the server reads is mounted
+      # read-only from the host (paths below are relative to this file).
+      SCRIPTURE_DB_PATH: /data/scripture.db
+      SCI_DB_VERSION: ${SCI_DB_VERSION:-55}
+      # Weaviate is reached by its compose service name, on its in-network port.
+      WEAVIATE_HOST: weaviate
+      WEAVIATE_PORT: "8080"
+    volumes:
+      - ./db/scripture.db:/data/scripture.db:ro
+      # core/content are mounted as single files: a directory mounted over
+      # /app/db would hide the db package baked into the image.
+      - ./db/core.${SCI_DB_VERSION:-55}.db:/app/db/core.${SCI_DB_VERSION:-55}.db:ro
+      - ./db/content.${SCI_DB_VERSION:-55}.db:/app/db/content.${SCI_DB_VERSION:-55}.db:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7363/health"]
       interval: 30s

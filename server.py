@@ -909,16 +909,24 @@ async def corpus_stats(
     """Returns aggregate counts across a collection, optionally grouped by a field (e.g. speaker_name, conference_year, conference_month); no embedding needed.
 
     Args:
-        collection: Collection to aggregate - "talks" (default), "paragraphs", "citations", or "footnotes".
-        group_by: Optional property name to group by (e.g. "speaker_name", "conference_year", "conference_month").
+        collection: Collection to aggregate - "talks" (default), "paragraphs", "citations", "footnotes",
+            "scripture_verses" or "scripture_chapters".
+        group_by: Optional property name to group by (e.g. "speaker_name", "conference_year", "conference_month";
+            for the scripture collections "volume" or "book", and "has_jst" on scripture_verses).
         limit: Maximum number of groups to return when group_by is set (default 20).
     """
     app: AppContext = ctx.lifespan_context["app"]
 
-    if collection not in WEAVIATE_COLLECTION_NAMES:
+    if collection in ("scripture_verses", "scripture_chapters"):
+        if not app.scripture_loaded:
+            return SCRIPTURE_NOT_AVAILABLE
+        col_name = WEAVIATE_SCRIPTURE_COLLECTION_NAMES[collection.removeprefix("scripture_")]
+    elif collection in WEAVIATE_COLLECTION_NAMES:
+        col_name = WEAVIATE_COLLECTION_NAMES[collection]
+    else:
         return f"Unknown collection '{collection}'. Valid: talks, paragraphs, citations, footnotes."
 
-    col = app.client.collections.use(WEAVIATE_COLLECTION_NAMES[collection])
+    col = app.client.collections.use(col_name)
 
     if group_by is None:
         res = col.aggregate.over_all(total_count=True)
@@ -1004,6 +1012,7 @@ async def get_verse(
     include_footnotes: bool = True,
     include_jst: bool = False,
     numbering: str = "standard",
+    include_citing_talks: bool = False,
     ctx: Context = None,
 ) -> str:
     """Return scripture verses with their chapter summary, footnotes and optionally the JST. No embedding needed.
@@ -1017,15 +1026,19 @@ async def get_verse(
         include_footnotes: Attach each verse's footnotes with their references (default true).
         include_jst: Attach the JST verses the Church links to each verse (its JST footnotes and appendix).
         numbering: "standard" (default) or "jst" (same as a "JST ..." book).
+        include_citing_talks: Add citing_talks: every titled talk in core.db that cites these verses (conference
+            or not; a verse's JST citations through the JST verses its footnotes name), each with talk_id, title,
+            date, the references it cites and get_talk_available. get_talk fetches only the entries with
+            get_talk_available=true. untitled_talks_omitted counts untitled citing talks left out, when there are any.
 
-    Returns JSON {reference, chapter_summary, verses: [{reference, verse, text, jst?, footnotes?}]}.
+    Returns JSON {reference, chapter_summary, verses: [{reference, verse, text, jst?, footnotes?}], citing_talks?}.
     """
     app: AppContext = ctx.lifespan_context["app"]
     if app.scripture is None:
         return SCRIPTURE_NOT_AVAILABLE
     result = scripture_tools.get_verse(app.scripture, book, chapter, verse_start, verse_end,
                                        include_footnotes=include_footnotes, include_jst=include_jst,
-                                       numbering=numbering)
+                                       numbering=numbering, include_citing_talks=include_citing_talks)
     return result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
 
 
@@ -1046,6 +1059,31 @@ async def get_chapter_overview(
     if app.scripture is None:
         return SCRIPTURE_NOT_AVAILABLE
     result = scripture_tools.get_chapter_overview(app.scripture, book, chapter)
+    return result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+
+
+@mcp.tool()
+async def find_cross_references(
+    book: str,
+    chapter: int,
+    verse: int,
+    ctx: Context = None,
+) -> str:
+    """One hop of the footnote graph around a verse: the scripture its footnotes point to (grouped by footnote)
+    and the other verses whose footnotes point here. Reads scripture.db only; no embedding needed.
+
+    Args:
+        book: Book name or abbreviation ("Alma", "1 Ne.", "D&C").
+        chapter: Chapter (or D&C section) number.
+        verse: Verse number.
+
+    Returns JSON {reference, outgoing: [{marker, context, text, targets: [{category, label, target}]}],
+    incoming: [{reference, footnotes: [{marker, context, text}]}]}.
+    """
+    app: AppContext = ctx.lifespan_context["app"]
+    if app.scripture is None:
+        return SCRIPTURE_NOT_AVAILABLE
+    result = scripture_tools.find_cross_references(app.scripture, book, chapter, verse)
     return result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
 
 

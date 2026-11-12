@@ -1,13 +1,16 @@
 """`get_verse`, `get_chapter_overview` and the scripture side of `search`.
 
 The tool functions take a `ScriptureStore` and return a dict (the tool serializes it) or a string (a message for the
-caller: unknown book, no such chapter, ...). get_verse and get_chapter_overview read only scripture.db.
+caller: unknown book, no such chapter, ...). get_verse, get_chapter_overview and find_cross_references read only
+scripture.db; get_verse's citing talks also read core.db.
 """
+import sqlite3
 from dataclasses import dataclass
 from typing import Optional
 
 from config.book_resolver import BookResolver
 from config.scripture_books import BOOK_CROSSWALK, CORE_BOOKS
+import db as sci_db
 from db import Database
 
 NOT_AVAILABLE = (
@@ -92,13 +95,18 @@ def _bounds(verse_start: Optional[int], verse_end: Optional[int]) -> tuple[int, 
 
 def get_verse(store: ScriptureStore, book: str, chapter: int, verse_start: Optional[int] = None,
               verse_end: Optional[int] = None, include_footnotes: bool = True, include_jst: bool = False,
-              numbering: str = "standard"):
+              numbering: str = "standard", include_citing_talks: bool = False):
     found = store.resolver.resolve(book)
     if found is None:
         return _unknown_book(book)
     b, jst = found
     if jst or (numbering or "").lower() == "jst":
-        return _get_jst_verses(store, b, chapter, verse_start, verse_end)
+        result = _get_jst_verses(store, b, chapter, verse_start, verse_end)
+        if include_citing_talks and isinstance(result, dict) and b["core_book_id"] is not None:
+            # core.db numbers Flag='J' citations in JST chapters and verses, as read here
+            _attach_citing_talks(result, {("J", b["core_book_id"], chapter, v["verse"]): v["reference"]
+                                          for v in result["verses"]})
+        return result
 
     ch = _chapter(store, b, chapter)
     if ch is None and b["num_chapters"] == 1 and verse_start is None and verse_end is None:
@@ -128,7 +136,10 @@ def get_verse(store: ScriptureStore, book: str, chapter: int, verse_start: Optio
 
     last = verses[-1]["verse"] if verse_end is not None else verse_start
     reference = format_reference(b["cite_abbr"], chapter, verse_start, last if verse_start is not None else None)
-    return {"reference": reference, "chapter_summary": ch["summary"] or "", "verses": list(by_verse.values())}
+    result = {"reference": reference, "chapter_summary": ch["summary"] or "", "verses": list(by_verse.values())}
+    if include_citing_talks:
+        _attach_citing_talks(result, _citation_keys(store, b, chapter, ch["chapter_id"], lo, hi, by_verse))
+    return result
 
 
 _IN_RANGE = "JOIN verse v ON v.verse_id = f.verse_id WHERE v.chapter_id = ? AND v.verse BETWEEN ? AND ?"
@@ -210,6 +221,62 @@ def _jst_passage(store: ScriptureStore, passage_id: int) -> Optional[tuple]:
     return reference, " ".join(j["text"] for j in rows), {j["jst_verse_id"] for j in rows}
 
 
+def _citation_keys(store: ScriptureStore, b: dict, chapter: int, chapter_id: int, lo: int, hi: int,
+                   by_verse: dict) -> dict:
+    """{(flag, core BookID, chapter, verse): reference} for the core.db citations of these KJV verses. Flag "" is an
+    ordinary citation of the verse itself; flag "J" a JST citation of a JST verse that one of the verse's `jst`
+    footnotes names (core.db numbers those in JST chapters and verses)."""
+    keys = {}
+    if b["core_book_id"] is not None:
+        keys = {("", b["core_book_id"], chapter, v): row["reference"] for v, row in by_verse.items()}
+    for r in store.db.select(
+            "SELECT DISTINCT jv.core_book_id, jv.chapter, jv.verse FROM footnote_ref r "
+            "JOIN footnote f ON f.footnote_id = r.footnote_id "
+            f"JOIN jst_verse jv ON jv.jst_verse_id = r.target_jst_verse_id {_IN_RANGE} AND r.category = 'jst'",
+            (chapter_id, lo, hi)):
+        keys["J", r["core_book_id"], r["chapter"], r["verse"]] = _jst_reference(r)
+    return keys
+
+
+def _attach_citing_talks(result: dict, keys: dict) -> None:
+    """Set result["citing_talks"]: the core.db talks with a citation matching `keys` (see _citation_keys), oldest
+    first, one entry per talk: {talk_id ("talk_N"), title, date, cites (the references it cites),
+    get_talk_available}. Every titled talk is listed, conference or not; get_talk serves only conference talks, so
+    get_talk_available is true exactly for talks with a conference_talk row. Untitled talks (no title, no date) are
+    left out and counted in result["untitled_talks_omitted"] when there are any. A citation names its verses in
+    citation_verse, so a range citation (John 3:14–16) matches each verse it names. If core.db cannot be read, the
+    list is empty and citing_talks_note says why; the verses are returned either way."""
+    by_chapter: dict[tuple, list[int]] = {}
+    for flag, book_id, ch, v in keys:
+        by_chapter.setdefault((flag, book_id, ch), []).append(v)
+    talks: dict[int, dict] = {}
+    untitled: set[int] = set()
+    try:
+        for (flag, book_id, ch), verses in by_chapter.items():
+            for r in sci_db.core_db.select(
+                    "SELECT DISTINCT c.TalkID, cv.Verse, t.Title, t.Date, "
+                    "EXISTS (SELECT 1 FROM conference_talk ct WHERE ct.TalkID = c.TalkID) AS conference "
+                    "FROM citation c JOIN citation_verse cv ON cv.CitationID = c.ID JOIN talk t ON t.ID = c.TalkID "
+                    f"WHERE c.BookID = ? AND c.Chapter = ? AND cv.Verse IN ({','.join('?' * len(verses))}) "
+                    f"AND IFNULL(c.Flag, '') {'=' if flag == 'J' else '!='} 'J'", (book_id, ch, *verses)):
+                if not r["Title"]:
+                    untitled.add(r["TalkID"])
+                    continue
+                t = talks.setdefault(r["TalkID"], {"talk_id": f"talk_{r['TalkID']}", "title": r["Title"],
+                                                   "date": r["Date"], "cites": [],
+                                                   "get_talk_available": bool(r["conference"])})
+                ref = keys[flag, book_id, ch, r["Verse"]]
+                if ref not in t["cites"]:
+                    t["cites"].append(ref)
+    except (OSError, sqlite3.Error, sci_db.SchemaError) as exc:
+        result["citing_talks"] = []
+        result["citing_talks_note"] = f"core.db citations are not available on this server ({type(exc).__name__})."
+        return
+    result["citing_talks"] = sorted(talks.values(), key=lambda t: (t["date"] or "", int(t["talk_id"][5:])))
+    if untitled:
+        result["untitled_talks_omitted"] = len(untitled)
+
+
 def _get_jst_verses(store: ScriptureStore, b: dict, chapter: int, verse_start: Optional[int],
                     verse_end: Optional[int]):
     """JST numbering input ("JST Genesis" 8:19): read jst_verse directly, J and F rows alike."""
@@ -259,6 +326,60 @@ def get_chapter_overview(store: ScriptureStore, book: str, chapter: int):
         "verse_count": store.db.scalar("SELECT COUNT(*) FROM verse WHERE chapter_id = ?", (row["chapter_id"],), 0),
         "top_cross_references": [{"reference": _ref_target(store, t), "count": t["n"]} for t in targets],
     }
+
+
+# ---------------------------------------------------------------------------
+# find_cross_references
+# ---------------------------------------------------------------------------
+
+def find_cross_references(store: ScriptureStore, book: str, chapter: int, verse: int):
+    """One hop of the verse graph, from scripture.db alone.
+
+    `outgoing`: the verse's footnotes that point at scripture, each with its marker, context, text and the targets
+    it names (study-help links are left out). `incoming`: the other verses whose footnotes point at this verse
+    (a ref to a verse range covers every verse in it), one entry per source verse with the footnotes that do so.
+    """
+    found = store.resolver.resolve(book)
+    if found is None:
+        return _unknown_book(book)
+    b, jst = found
+    if jst:
+        return "find_cross_references covers the standard works' verses, not the JST numbering."
+    ch = _chapter(store, b, chapter)
+    if ch is None:
+        return _no_chapter(b, chapter)
+    verse_id = store.db.scalar("SELECT verse_id FROM verse WHERE chapter_id = ? AND verse = ?",
+                               (ch["chapter_id"], verse), None)
+    if verse_id is None:
+        return f"No verse {verse} in {format_reference(b['cite_abbr'], chapter)}."
+
+    outgoing: dict[int, dict] = {}
+    for r in store.db.select(
+            "SELECT f.marker, f.context, f.text, r.*, jv.verse AS jst_verse, jv.chapter AS jst_chapter, "
+            "jv.core_book_id AS jst_core_book_id FROM footnote f JOIN footnote_ref r ON r.footnote_id = f.footnote_id "
+            "LEFT JOIN jst_verse jv ON jv.jst_verse_id = r.target_jst_verse_id "
+            "WHERE f.verse_id = ? AND r.target_help IS NULL "
+            "AND (r.target_chapter IS NOT NULL OR r.target_jst_verse_id IS NOT NULL) "
+            "ORDER BY f.footnote_id, r.seq", (verse_id,)):
+        note = outgoing.setdefault(r["footnote_id"], {"marker": r["marker"], "context": r["context"],
+                                                      "text": r["text"], "targets": []})
+        note["targets"].append({"category": r["category"], "label": r["label"], "target": _ref_target(store, r)})
+
+    incoming: dict[int, dict] = {}
+    for r in store.db.select(
+            "SELECT DISTINCT sv.verse_id, sv.chapter, sv.verse, sb.cite_abbr, sb.sort, f.footnote_id, f.marker, "
+            "f.context, f.text FROM footnote_ref r JOIN footnote f ON f.footnote_id = r.footnote_id "
+            "JOIN verse sv ON sv.verse_id = f.verse_id JOIN book sb ON sb.book_id = sv.book_id "
+            "WHERE r.target_book_id = ? AND r.target_chapter = ? AND r.target_help IS NULL "
+            "AND r.target_verse_start <= ? AND COALESCE(r.target_verse_end, r.target_verse_start) >= ? "
+            "AND sv.verse_id != ? ORDER BY sb.sort, sv.chapter, sv.verse, f.footnote_id",
+            (b["book_id"], chapter, verse, verse, verse_id)):
+        source = incoming.setdefault(r["verse_id"], {
+            "reference": format_reference(r["cite_abbr"], r["chapter"], r["verse"]), "footnotes": []})
+        source["footnotes"].append({"marker": r["marker"], "context": r["context"], "text": r["text"]})
+
+    return {"reference": format_reference(b["cite_abbr"], chapter, verse),
+            "outgoing": list(outgoing.values()), "incoming": list(incoming.values())}
 
 
 # ---------------------------------------------------------------------------

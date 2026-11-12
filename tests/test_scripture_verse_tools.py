@@ -6,7 +6,7 @@ import pytest
 
 from db.scripture import open_scripture_db
 from tests.scripture_world import FULL_DB, need_full_db
-from tools.scripture_tools import ScriptureStore, get_chapter_overview, get_verse
+from tools.scripture_tools import ScriptureStore, find_cross_references, get_chapter_overview, get_verse
 
 
 @pytest.fixture(scope="module")
@@ -256,3 +256,27 @@ def test_include_jst_passage_with_several_compare_refs(real_store):
         assert "JST 1 Cor. 7:1–2, 5, 26, 29–33, 38" not in cor.get(v, []), v
     matt = get_verse(real_store, "Matt", 4, 1, include_jst=True)["verses"][0]["jst"]
     assert "JST Matt. 4:1, 5–6, 8–9" in [j["reference"] for j in matt]    # a gapped passage is cited as printed
+
+
+def test_find_cross_references_both_directions(store):
+    r = find_cross_references(store, "Alma", 32, 21)
+    assert r["reference"] == "Alma 32:21"
+    by_marker = {n["marker"]: [t["target"] for t in n["targets"]] for n in r["outgoing"]}
+    assert by_marker["21a"] == ["John 20:29", "Heb. 11:1–40"]
+    assert not any(t.startswith("tg/") for ts in by_marker.values() for t in ts)   # study helps are not scripture
+    json.dumps(r)
+
+    # a ref to a range counts as incoming for every verse in it: Ex 4:16 is pointed at by Ex 7:1 and Moses 1:25
+    incoming = find_cross_references(store, "Exodus", 4, 16)["incoming"]
+    refs = [s["reference"] for s in incoming]
+    assert {"Ex. 7:1", "Moses 1:25"} <= set(refs)
+    assert "Ex. 4:16" not in refs                       # a verse is never its own source
+    assert len(refs) == len(set(refs))                  # one entry per source verse
+    assert all(s["footnotes"] and {"marker", "context", "text"} <= set(s["footnotes"][0]) for s in incoming)
+
+
+def test_find_cross_references_messages(store):
+    assert "Unknown book" in find_cross_references(store, "Hezekiah", 1, 1)
+    assert "No chapter 99" in find_cross_references(store, "Alma", 99, 1)
+    assert find_cross_references(store, "Alma", 32, 500).startswith("No verse 500 in")
+    assert "JST" in find_cross_references(store, "JST Genesis", 8, 13)

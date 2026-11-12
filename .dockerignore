@@ -12,7 +12,8 @@ __pycache__/
 **/*.json
 **/*.txt
 !requirements.txt
-db/
+db/sci/
+db/one-off-migration/
 api/
 process_topic_talks/
 data/
