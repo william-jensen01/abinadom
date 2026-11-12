@@ -264,6 +264,9 @@ def test_find_cross_references_both_directions(store):
     by_marker = {n["marker"]: [t["target"] for t in n["targets"]] for n in r["outgoing"]}
     assert by_marker["21a"] == ["John 20:29", "Heb. 11:1–40"]
     assert not any(t.startswith("tg/") for ts in by_marker.values() for t in ts)   # study helps are not scripture
+    assert "Ether 12:6" in [t for ts in by_marker.values() for t in ts]
+    assert "Ex. 7:1" in [t["target"] for n in find_cross_references(store, "Exodus", 4, 16)["outgoing"]
+                         for t in n["targets"]]
     json.dumps(r)
 
     # a ref to a range counts as incoming for every verse in it: Ex 4:16 is pointed at by Ex 7:1 and Moses 1:25
@@ -273,6 +276,13 @@ def test_find_cross_references_both_directions(store):
     assert "Ex. 4:16" not in refs                       # a verse is never its own source
     assert len(refs) == len(set(refs))                  # one entry per source verse
     assert all(s["footnotes"] and {"marker", "context", "text"} <= set(s["footnotes"][0]) for s in incoming)
+
+
+def test_find_cross_references_incoming_from_other_volumes_and_chapters(store):
+    john = [s["reference"] for s in find_cross_references(store, "John", 3, 16)["incoming"]]
+    assert "D&C 45:5" in john
+    gen = [s["reference"] for s in find_cross_references(store, "Genesis", 6, 18)["incoming"]]
+    assert "Gen. 9:9" in gen
 
 
 def test_find_cross_references_messages(store):

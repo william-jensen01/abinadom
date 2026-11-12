@@ -1,4 +1,5 @@
 """get_verse(include_citing_talks=True) on the fixture scripture store and a small synthetic core.db."""
+import re
 import sqlite3
 
 import pytest
@@ -6,6 +7,7 @@ import pytest
 import db as db_pkg
 from db import Database
 from db.scripture import open_scripture_db
+from tests.scripture_world import core_select, need_core_db
 from tools.scripture_tools import ScriptureStore, get_verse
 
 
@@ -78,3 +80,48 @@ def test_core_db_unavailable(store, tmp_path, monkeypatch):
     r = get_verse(store, "Alma", 32, 21, include_citing_talks=True)
     assert r["citing_talks"] == [] and "not available" in r["citing_talks_note"]
     assert r["verses"][0]["verse"] == 21                # the verses still come back
+
+
+# ---------------------------------------------------------------------------
+# Against the real core.db (skipped when it is missing)
+# ---------------------------------------------------------------------------
+
+def _talk_numbers(result):
+    talks = (result or {}).get("citing_talks") or []
+    ids = set()
+    for t in talks:
+        m = re.search(r"\d+", str(t.get("talk_id") if isinstance(t, dict) else t))
+        if m:
+            ids.add(int(m.group()))
+    return ids, talks
+
+
+def test_real_core_kjv_citations_of_a_verse(store):
+    need_core_db()
+    john = core_select("SELECT ID FROM book WHERE FullName='John'")[0]["ID"]
+    exact = {r["TalkID"] for r in core_select(
+        """SELECT DISTINCT c.TalkID FROM citation c JOIN citation_verse cv ON cv.CitationID=c.ID
+           WHERE c.BookID=? AND c.Chapter=3 AND cv.Verse=16 AND IFNULL(c.Flag,'') != 'J'""", (john,))}
+    loose = {r["TalkID"] for r in core_select(
+        """SELECT DISTINCT TalkID FROM citation WHERE BookID=? AND Chapter=3 AND MinVerse<=16 AND MaxVerse>=16
+           AND IFNULL(Flag,'') != 'J'""", (john,))}
+    assert exact, "core.db should have talks citing John 3:16"
+    r = get_verse(store, "John", 3, 16, include_citing_talks=True)
+    got, talks = _talk_numbers(r)
+    assert exact <= got <= (loose | exact), \
+        f"citing talks: {len(got)} returned; must include all {len(exact)} exact citations and only overlapping ones ({len(loose)})"
+    assert all(isinstance(t, dict) and t.get("title") for t in talks), "each citing talk carries its title"
+    assert not get_verse(store, "John", 3, 16).get("citing_talks"), "include_citing_talks defaults to False"
+
+
+def test_real_core_jst_citations_use_jst_numbering(store):
+    need_core_db()
+    rows = core_select("""SELECT c.TalkID, c.Chapter, c.MinVerse, b.FullName FROM citation c JOIN book b ON b.ID=c.BookID
+                          WHERE c.Flag='J' AND c.MinVerse = c.MaxVerse AND b.FullName IN ('Genesis','John','Exodus')
+                          ORDER BY c.ID LIMIT 3""")
+    assert rows, "core.db has no single-verse Flag='J' citations in Genesis/Exodus/John"
+    for row in rows:
+        r = get_verse(store, f"JST {row['FullName']}", row["Chapter"], row["MinVerse"], include_citing_talks=True)
+        got, _ = _talk_numbers(r)
+        assert row["TalkID"] in got, \
+            f"JST {row['FullName']} {row['Chapter']}:{row['MinVerse']} must list talk {row['TalkID']}: {r}"
