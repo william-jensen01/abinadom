@@ -2,7 +2,7 @@
 
 The tool functions take a `ScriptureStore` and return a dict (the tool serializes it) or a string (a message for the
 caller: unknown book, no such chapter, ...). get_verse, get_chapter_overview and find_cross_references read only
-scripture.db; get_verse's citing talks also read core.db.
+scripture.db; get_verse's citing talk counts and get_citing_talks also read core.db.
 """
 import sqlite3
 from dataclasses import dataclass
@@ -96,17 +96,30 @@ def _bounds(verse_start: Optional[int], verse_end: Optional[int]) -> tuple[int, 
 def get_verse(store: ScriptureStore, book: str, chapter: int, verse_start: Optional[int] = None,
               verse_end: Optional[int] = None, include_footnotes: bool = True, include_jst: bool = False,
               numbering: str = "standard", include_citing_talks: bool = False):
+    result, scope = _read_verses(store, book, chapter, verse_start, verse_end, include_footnotes, include_jst,
+                                 numbering, include_citing_talks)
+    if include_citing_talks and scope is not None:
+        _attach_citing_counts(result, scope)
+    return result
+
+
+def _read_verses(store: ScriptureStore, book: str, chapter: int, verse_start: Optional[int],
+                 verse_end: Optional[int], include_footnotes: bool, include_jst: bool, numbering: str,
+                 want_scope: bool):
+    """(result, scope): get_verse's result (or a message string) and, when `want_scope` and verses were found, the
+    citation scope of those verses (see _citation_keys)."""
     found = store.resolver.resolve(book)
     if found is None:
-        return _unknown_book(book)
+        return _unknown_book(book), None
     b, jst = found
     if jst or (numbering or "").lower() == "jst":
         result = _get_jst_verses(store, b, chapter, verse_start, verse_end)
-        if include_citing_talks and isinstance(result, dict) and b["core_book_id"] is not None:
+        scope = None
+        if want_scope and isinstance(result, dict) and b["core_book_id"] is not None:
             # core.db numbers Flag='J' citations in JST chapters and verses, as read here
-            _attach_citing_talks(result, {("J", b["core_book_id"], chapter, v["verse"]): v["reference"]
-                                          for v in result["verses"]})
-        return result
+            keys = {("J", b["core_book_id"], chapter, v["verse"]): v["reference"] for v in result["verses"]}
+            scope = ([v["reference"] for v in result["verses"]], keys, {k: {ref} for k, ref in keys.items()})
+        return result, scope
 
     ch = _chapter(store, b, chapter)
     if ch is None and b["num_chapters"] == 1 and verse_start is None and verse_end is None:
@@ -114,10 +127,10 @@ def get_verse(store: ScriptureStore, book: str, chapter: int, verse_start: Optio
         ch = _chapter(store, b, 1)
         chapter, verse_start = (1, chapter) if ch else (chapter, None)
     if ch is None:
-        return _no_chapter(b, chapter)
+        return _no_chapter(b, chapter), None
     lo, hi = _bounds(verse_start, verse_end)
     if hi < lo:
-        return f"verse_end {verse_end} is before verse_start {verse_start}."
+        return f"verse_end {verse_end} is before verse_start {verse_start}.", None
 
     verses = store.db.select(
         "SELECT verse_id, verse, text FROM verse WHERE chapter_id = ? AND verse BETWEEN ? AND ? ORDER BY verse",
@@ -125,8 +138,8 @@ def get_verse(store: ScriptureStore, book: str, chapter: int, verse_start: Optio
     if not verses:
         where = format_reference(b["cite_abbr"], chapter)
         if hi == _ALL:
-            return f"No verses in {where}."
-        return f"No verse {lo} in {where}." if lo == hi else f"No verses {lo}–{hi} in {where}."
+            return f"No verses in {where}.", None
+        return (f"No verse {lo} in {where}." if lo == hi else f"No verses {lo}–{hi} in {where}."), None
     by_verse = {v["verse"]: {"reference": format_reference(b["cite_abbr"], chapter, v["verse"]),
                              "verse": v["verse"], "text": v["text"]} for v in verses}
     if include_footnotes:
@@ -137,9 +150,11 @@ def get_verse(store: ScriptureStore, book: str, chapter: int, verse_start: Optio
     last = verses[-1]["verse"] if verse_end is not None else verse_start
     reference = format_reference(b["cite_abbr"], chapter, verse_start, last if verse_start is not None else None)
     result = {"reference": reference, "chapter_summary": ch["summary"] or "", "verses": list(by_verse.values())}
-    if include_citing_talks:
-        _attach_citing_talks(result, _citation_keys(store, b, chapter, ch["chapter_id"], lo, hi, by_verse))
-    return result
+    scope = None
+    if want_scope:
+        keys, origin = _citation_keys(store, b, chapter, ch["chapter_id"], lo, hi, by_verse)
+        scope = ([row["reference"] for row in by_verse.values()], keys, origin)
+    return result, scope
 
 
 _IN_RANGE = "JOIN verse v ON v.verse_id = f.verse_id WHERE v.chapter_id = ? AND v.verse BETWEEN ? AND ?"
@@ -222,59 +237,119 @@ def _jst_passage(store: ScriptureStore, passage_id: int) -> Optional[tuple]:
 
 
 def _citation_keys(store: ScriptureStore, b: dict, chapter: int, chapter_id: int, lo: int, hi: int,
-                   by_verse: dict) -> dict:
-    """{(flag, core BookID, chapter, verse): reference} for the core.db citations of these KJV verses. Flag "" is an
-    ordinary citation of the verse itself; flag "J" a JST citation of a JST verse that one of the verse's `jst`
-    footnotes names (core.db numbers those in JST chapters and verses)."""
-    keys = {}
+                   by_verse: dict) -> tuple[dict, dict]:
+    """(keys, origin) for the core.db citations of these KJV verses. keys is {(flag, core BookID, chapter, verse):
+    reference}: flag "" is an ordinary citation of the verse itself; flag "J" a JST citation of a JST verse that one
+    of the verse's `jst` footnotes names (core.db numbers those in JST chapters and verses). origin maps each key to
+    the set of requested verse references it stands for."""
+    keys, origin = {}, {}
     if b["core_book_id"] is not None:
-        keys = {("", b["core_book_id"], chapter, v): row["reference"] for v, row in by_verse.items()}
+        for v, row in by_verse.items():
+            keys["", b["core_book_id"], chapter, v] = row["reference"]
+            origin["", b["core_book_id"], chapter, v] = {row["reference"]}
     for r in store.db.select(
-            "SELECT DISTINCT jv.core_book_id, jv.chapter, jv.verse FROM footnote_ref r "
+            "SELECT DISTINCT v.verse AS src, jv.core_book_id, jv.chapter, jv.verse FROM footnote_ref r "
             "JOIN footnote f ON f.footnote_id = r.footnote_id "
             f"JOIN jst_verse jv ON jv.jst_verse_id = r.target_jst_verse_id {_IN_RANGE} AND r.category = 'jst'",
             (chapter_id, lo, hi)):
-        keys["J", r["core_book_id"], r["chapter"], r["verse"]] = _jst_reference(r)
-    return keys
+        key = ("J", r["core_book_id"], r["chapter"], r["verse"])
+        keys[key] = _jst_reference(r)
+        origin.setdefault(key, set()).add(by_verse[r["src"]]["reference"])
+    return keys, origin
 
 
-def _attach_citing_talks(result: dict, keys: dict) -> None:
-    """Set result["citing_talks"]: the core.db talks with a citation matching `keys` (see _citation_keys), oldest
-    first, one entry per talk: {talk_id ("talk_N"), title, date, cites (the references it cites),
-    get_talk_available}. Every titled talk is listed, conference or not; get_talk serves only conference talks, so
-    get_talk_available is true exactly for talks with a conference_talk row. Untitled talks (no title, no date) are
-    left out and counted in result["untitled_talks_omitted"] when there are any. A citation names its verses in
-    citation_verse, so a range citation (John 3:14–16) matches each verse it names. If core.db cannot be read, the
-    list is empty and citing_talks_note says why; the verses are returned either way."""
+def _find_citing_talks(keys: dict, origin: dict) -> tuple[dict, set]:
+    """({TalkID: entry}, untitled TalkIDs) for the core.db citations matching `keys` (see _citation_keys). An entry is
+    {talk_id ("talk_N"), title, date, cites (the references it cites), get_talk_available} plus "verses", the
+    requested verse references it reaches. Every titled talk is included, conference or not; get_talk serves only
+    conference talks, so get_talk_available is true exactly for talks with a conference_talk row. Untitled talks (no
+    title, no date) are only counted. A citation names its verses in citation_verse, so a range citation
+    (John 3:14–16) matches each verse it names. Raises OSError, sqlite3.Error or SchemaError if core.db cannot be read."""
     by_chapter: dict[tuple, list[int]] = {}
     for flag, book_id, ch, v in keys:
         by_chapter.setdefault((flag, book_id, ch), []).append(v)
     talks: dict[int, dict] = {}
     untitled: set[int] = set()
+    for (flag, book_id, ch), verses in by_chapter.items():
+        for r in sci_db.core_db.select(
+                "SELECT DISTINCT c.TalkID, cv.Verse, t.Title, t.Date, "
+                "EXISTS (SELECT 1 FROM conference_talk ct WHERE ct.TalkID = c.TalkID) AS conference "
+                "FROM citation c JOIN citation_verse cv ON cv.CitationID = c.ID JOIN talk t ON t.ID = c.TalkID "
+                f"WHERE c.BookID = ? AND c.Chapter = ? AND cv.Verse IN ({','.join('?' * len(verses))}) "
+                f"AND IFNULL(c.Flag, '') {'=' if flag == 'J' else '!='} 'J'", (book_id, ch, *verses)):
+            if not r["Title"]:
+                untitled.add(r["TalkID"])
+                continue
+            key = (flag, book_id, ch, r["Verse"])
+            t = talks.setdefault(r["TalkID"], {"talk_id": f"talk_{r['TalkID']}", "title": r["Title"],
+                                               "date": r["Date"], "cites": [],
+                                               "get_talk_available": bool(r["conference"]), "verses": set()})
+            if keys[key] not in t["cites"]:
+                t["cites"].append(keys[key])
+            t["verses"] |= origin[key]
+    return talks, untitled - talks.keys()
+
+
+def _attach_citing_counts(result, scope) -> None:
+    """Set citing_talks_count (distinct titled talks across the verses), citing_talks_by_verse ([{reference, count}],
+    when there is more than one verse) and untitled_talks_omitted (when any untitled citing talk was left out). The
+    talks themselves come from get_citing_talks. If core.db cannot be read, the count is 0 and citing_talks_note
+    says why; the verses are returned either way."""
+    if not isinstance(result, dict):
+        return
+    refs, keys, origin = scope
     try:
-        for (flag, book_id, ch), verses in by_chapter.items():
-            for r in sci_db.core_db.select(
-                    "SELECT DISTINCT c.TalkID, cv.Verse, t.Title, t.Date, "
-                    "EXISTS (SELECT 1 FROM conference_talk ct WHERE ct.TalkID = c.TalkID) AS conference "
-                    "FROM citation c JOIN citation_verse cv ON cv.CitationID = c.ID JOIN talk t ON t.ID = c.TalkID "
-                    f"WHERE c.BookID = ? AND c.Chapter = ? AND cv.Verse IN ({','.join('?' * len(verses))}) "
-                    f"AND IFNULL(c.Flag, '') {'=' if flag == 'J' else '!='} 'J'", (book_id, ch, *verses)):
-                if not r["Title"]:
-                    untitled.add(r["TalkID"])
-                    continue
-                t = talks.setdefault(r["TalkID"], {"talk_id": f"talk_{r['TalkID']}", "title": r["Title"],
-                                                   "date": r["Date"], "cites": [],
-                                                   "get_talk_available": bool(r["conference"])})
-                ref = keys[flag, book_id, ch, r["Verse"]]
-                if ref not in t["cites"]:
-                    t["cites"].append(ref)
+        talks, untitled = _find_citing_talks(keys, origin)
     except (OSError, sqlite3.Error, sci_db.SchemaError) as exc:
-        result["citing_talks"] = []
+        result["citing_talks_count"] = 0
         result["citing_talks_note"] = f"core.db citations are not available on this server ({type(exc).__name__})."
         return
-    result["citing_talks"] = sorted(talks.values(), key=lambda t: (t["date"] or "", int(t["talk_id"][5:])))
+    result["citing_talks_count"] = len(talks)
+    if len(refs) > 1:
+        result["citing_talks_by_verse"] = [{"reference": ref, "count": sum(ref in t["verses"] for t in talks.values())}
+                                           for ref in refs]
     if untitled:
         result["untitled_talks_omitted"] = len(untitled)
+
+
+MAX_CITING_PAGE = 100
+
+
+def get_citing_talks(store: ScriptureStore, book: str, chapter: int, verse_start: Optional[int] = None,
+                     verse_end: Optional[int] = None, limit: int = 25, offset: int = 0,
+                     conference_only: bool = False, order: str = "newest"):
+    """One page of the talks citing these verses: {reference, total, offset, limit, next_offset (None on the last
+    page), citing_talks: [{talk_id, title, date, cites, get_talk_available}]}, newest first (or oldest first with
+    order="oldest"). Matching is get_verse's (KJV and JST input, `jst` footnote links, untitled talks left out and
+    counted in untitled_talks_omitted when any). conference_only keeps the talks with get_talk_available=true;
+    total counts the talks after that filter. limit is capped at 100."""
+    if (order or "").lower() not in ("newest", "oldest"):
+        return f'order must be "newest" or "oldest", not {order!r}.'
+    result, scope = _read_verses(store, book, chapter, verse_start, verse_end, False, False, "standard", True)
+    if not isinstance(result, dict):
+        return result
+    limit = max(1, min(int(limit), MAX_CITING_PAGE))
+    offset = max(0, int(offset))
+    page = {"reference": result["reference"], "total": 0, "offset": offset, "limit": limit, "next_offset": None,
+            "citing_talks": []}
+    if scope is None:
+        return page
+    try:
+        talks, untitled = _find_citing_talks(scope[1], scope[2])
+    except (OSError, sqlite3.Error, sci_db.SchemaError) as exc:
+        page["citing_talks_note"] = f"core.db citations are not available on this server ({type(exc).__name__})."
+        return page
+    entries = [{k: v for k, v in t.items() if k != "verses"} for _, t in sorted(talks.items())]
+    if conference_only:
+        entries = [t for t in entries if t["get_talk_available"]]
+    entries.sort(key=lambda t: (t["date"] or "", int(t["talk_id"][5:])), reverse=order.lower() == "newest")
+    page["total"] = len(entries)
+    page["citing_talks"] = entries[offset:offset + limit]
+    if offset + limit < len(entries):
+        page["next_offset"] = offset + limit
+    if untitled:
+        page["untitled_talks_omitted"] = len(untitled)
+    return page
 
 
 def _get_jst_verses(store: ScriptureStore, b: dict, chapter: int, verse_start: Optional[int],

@@ -72,3 +72,17 @@ def test_corpus_stats_covers_both_scripture_collections(loaded):
     assert len(_groups(ch)) >= 10, f"scripture_chapters group_by book: {blob(ch)[:300]}"
     (talks,) = call_tools(env, [("corpus_stats", {"collection": "talks"})])
     assert "total" in blob(talks)
+
+
+def test_get_citing_talks_tool_pages_and_get_verse_counts(loaded):
+    _, _, env = loaded
+    page, verse, bad = call_tools(env, [
+        ("get_citing_talks", {"book": "Alma", "chapter": 32, "verse_start": 21, "verse_end": 22, "limit": 1000}),
+        ("get_verse", {"book": "Alma", "chapter": 32, "verse_start": 21, "verse_end": 22, "include_citing_talks": True}),
+        ("get_citing_talks", {"book": "Alma", "chapter": 32, "order": "sideways"}),
+    ])
+    assert isinstance(page, dict) and page["limit"] == 100 and page["offset"] == 0, blob(page)[:300]
+    assert isinstance(page["citing_talks"], list) and "next_offset" in page
+    assert verse["citing_talks_count"] == page["total"] and len(verse["citing_talks_by_verse"]) == 2
+    assert "citing_talks" not in verse
+    assert "order must be" in blob(bad)

@@ -1026,12 +1026,13 @@ async def get_verse(
         include_footnotes: Attach each verse's footnotes with their references (default true).
         include_jst: Attach the JST verses the Church links to each verse (its JST footnotes and appendix).
         numbering: "standard" (default) or "jst" (same as a "JST ..." book).
-        include_citing_talks: Add citing_talks: every titled talk in core.db that cites these verses (conference
-            or not; a verse's JST citations through the JST verses its footnotes name), each with talk_id, title,
-            date, the references it cites and get_talk_available. get_talk fetches only the entries with
-            get_talk_available=true. untitled_talks_omitted counts untitled citing talks left out, when there are any.
+        include_citing_talks: Add citing_talks_count (distinct titled talks in core.db that cite these verses,
+            conference or not; a verse's JST citations count through the JST verses its footnotes name), for more
+            than one verse citing_talks_by_verse [{reference, count}], and untitled_talks_omitted when untitled
+            citing talks were left out. No list of talks: page through them with get_citing_talks.
 
-    Returns JSON {reference, chapter_summary, verses: [{reference, verse, text, jst?, footnotes?}], citing_talks?}.
+    Returns JSON {reference, chapter_summary, verses: [{reference, verse, text, jst?, footnotes?}],
+    citing_talks_count?, citing_talks_by_verse?, untitled_talks_omitted?}.
     """
     app: AppContext = ctx.lifespan_context["app"]
     if app.scripture is None:
@@ -1039,6 +1040,46 @@ async def get_verse(
     result = scripture_tools.get_verse(app.scripture, book, chapter, verse_start, verse_end,
                                        include_footnotes=include_footnotes, include_jst=include_jst,
                                        numbering=numbering, include_citing_talks=include_citing_talks)
+    return result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+
+
+@mcp.tool()
+async def get_citing_talks(
+    book: str,
+    chapter: int,
+    verse_start: int | None = None,
+    verse_end: int | None = None,
+    limit: int = 25,
+    offset: int = 0,
+    conference_only: bool = False,
+    order: str = "newest",
+    ctx: Context = None,
+) -> str:
+    """List the talks in core.db that cite a scripture, one page at a time. No embedding needed.
+
+    Matches what get_verse counts: the verses themselves (KJV or "JST ..." input), and for a KJV verse also the
+    JST citations of the JST verses its footnotes name. Every titled talk is listed, conference or not; untitled
+    talks are left out and counted in untitled_talks_omitted when there are any. get_talk fetches only the
+    entries with get_talk_available=true.
+
+    Args:
+        book: Book name or abbreviation, as for get_verse ("John", "D&C", "JST Genesis").
+        chapter: Chapter (or D&C section) number.
+        verse_start: First verse; omit for the whole chapter.
+        verse_end: Last verse of a range (default: verse_start).
+        limit: Talks per page (default 25, at most 100).
+        offset: Talks to skip; pass the previous page's next_offset to continue.
+        conference_only: Only talks with get_talk_available=true; total counts the talks after this filter.
+        order: "newest" (default) or "oldest" by date.
+
+    Returns JSON {reference, total, offset, limit, next_offset (null on the last page),
+    citing_talks: [{talk_id, title, date, cites, get_talk_available}]}.
+    """
+    app: AppContext = ctx.lifespan_context["app"]
+    if app.scripture is None:
+        return SCRIPTURE_NOT_AVAILABLE
+    result = scripture_tools.get_citing_talks(app.scripture, book, chapter, verse_start, verse_end, limit=limit,
+                                              offset=offset, conference_only=conference_only, order=order)
     return result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
 
 
