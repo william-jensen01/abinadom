@@ -269,6 +269,7 @@ def _find_citing_talks(keys: dict, origin: dict) -> tuple[dict, set]:
     for flag, book_id, ch, v in keys:
         by_chapter.setdefault((flag, book_id, ch), []).append(v)
     talks: dict[int, dict] = {}
+    cited: dict[int, set] = {}
     untitled: set[int] = set()
     for (flag, book_id, ch), verses in by_chapter.items():
         for r in sci_db.core_db.select(
@@ -284,10 +285,29 @@ def _find_citing_talks(keys: dict, origin: dict) -> tuple[dict, set]:
             t = talks.setdefault(r["TalkID"], {"talk_id": f"talk_{r['TalkID']}", "title": r["Title"],
                                                "date": r["Date"], "cites": [],
                                                "get_talk_available": bool(r["conference"]), "verses": set()})
-            if keys[key] not in t["cites"]:
-                t["cites"].append(keys[key])
+            cited.setdefault(r["TalkID"], set()).add(key)
             t["verses"] |= origin[key]
+    for talk_id, t in talks.items():
+        t["cites"] = _merged_cites(cited[talk_id], keys)
     return talks, untitled - talks.keys()
+
+
+def _merged_cites(cited: set, keys: dict) -> list[str]:
+    """The references a talk cites, with consecutive verses of one book and chapter merged into a range ("John
+    3:14–17", "JST Gen. 14:17–40"). This is intentional, to keep the response small: core.db stores each verse of a
+    range citation separately, so unmerged a long range would list every verse. Standard and JST references are
+    never merged together: the flag is part of the grouping, and JST verses are numbered in their own chapters."""
+    out: list[str] = []
+    run: list[tuple] = []
+    for key in sorted(cited) + [None]:
+        if run and key is not None and key[:3] == run[-1][:3] and key[3] == run[-1][3] + 1:
+            run.append(key)
+            continue
+        if run:
+            cite = keys[run[0]].rsplit(" ", 1)[0]       # "John 3:14" -> "John", "JST Gen. 8:13" -> "JST Gen."
+            out.append(format_reference(cite, run[0][2], run[0][3], run[-1][3]))
+        run = [key] if key is not None else []
+    return out
 
 
 def _attach_citing_counts(result, scope) -> None:
@@ -322,7 +342,9 @@ def get_citing_talks(store: ScriptureStore, book: str, chapter: int, verse_start
     page), citing_talks: [{talk_id, title, date, cites, get_talk_available}]}, newest first (or oldest first with
     order="oldest"). Matching is get_verse's (KJV and JST input, `jst` footnote links, untitled talks left out and
     counted in untitled_talks_omitted when any). conference_only keeps the talks with get_talk_available=true;
-    total counts the talks after that filter. limit is capped at 100."""
+    total counts the talks after that filter. limit is capped at 100. A talk's cites merge consecutive verses of one
+    book and chapter into a range ("John 3:14–17"; JST references stay separate from standard ones); this is
+    intentional, to keep the response small, since core.db stores each verse of a range separately."""
     if (order or "").lower() not in ("newest", "oldest"):
         return f'order must be "newest" or "oldest", not {order!r}.'
     result, scope = _read_verses(store, book, chapter, verse_start, verse_end, False, False, "standard", True)

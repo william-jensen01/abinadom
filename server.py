@@ -1060,7 +1060,9 @@ async def get_citing_talks(
     Matches what get_verse counts: the verses themselves (KJV or "JST ..." input), and for a KJV verse also the
     JST citations of the JST verses its footnotes name. Every titled talk is listed, conference or not; untitled
     talks are left out and counted in untitled_talks_omitted when there are any. get_talk fetches only the
-    entries with get_talk_available=true.
+    entries with get_talk_available=true. A talk's cites merge consecutive verses of one book and chapter into a
+    range ("John 3:14–17", "JST Gen. 14:17–40"); this is intentional, to keep the response small, since core.db
+    stores each verse of a range separately. Standard and JST references are never merged together.
 
     Args:
         book: Book name or abbreviation, as for get_verse ("John", "D&C", "JST Genesis").

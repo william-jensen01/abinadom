@@ -169,3 +169,28 @@ def test_real_core_jst_citations_use_jst_numbering(store):
     for row in rows:
         got, _, _ = _all_talks(store, f"JST {row['FullName']}", row["Chapter"], row["MinVerse"])
         assert row["TalkID"] in got, f"JST {row['FullName']} {row['Chapter']}:{row['MinVerse']} must list talk {row['TalkID']}"
+
+
+def test_cites_merge_consecutive_verses_into_ranges(store, core):
+    alma = store.resolver.resolve("Alma")[0]["core_book_id"]
+    c = sqlite3.connect(core)
+    c.execute("INSERT INTO citation VALUES (10, 2, ?, 32, '')", (alma,))
+    c.executemany("INSERT INTO citation_verse VALUES (10, ?)", [(20,), (21,), (22,), (24,)])
+    c.commit()
+    c.close()
+    r = get_citing_talks(store, "Alma", 32, 20, 24)
+    cites = {t["talk_id"]: t["cites"] for t in r["citing_talks"]}
+    assert cites["talk_2"] == ["Alma 32:20–22", "Alma 32:24"]      # 23 is not cited: two runs
+    assert cites["talk_1"] == ["Alma 32:21"]                         # a single verse stays a single verse
+
+
+def test_merged_cites_examples_and_standard_never_merged_with_jst():
+    from tools.scripture_tools import _merged_cites
+    john = {("", 9, 3, v): f"John 3:{v}" for v in range(14, 18)}
+    jst = {("J", 1, 14, v): f"JST Gen. 14:{v}" for v in range(17, 41)}
+    assert _merged_cites(set(john), john) == ["John 3:14–17"]
+    assert _merged_cites(set(jst), jst) == ["JST Gen. 14:17–40"]
+    mixed = {("", 1, 14, 17): "Gen. 14:17", ("", 1, 14, 18): "Gen. 14:18", **jst}
+    assert _merged_cites(set(mixed), mixed) == ["Gen. 14:17–18", "JST Gen. 14:17–40"]
+    other_chapter = {("", 9, 3, 17): "John 3:17", ("", 9, 4, 18): "John 4:18"}
+    assert _merged_cites(set(other_chapter), other_chapter) == ["John 3:17", "John 4:18"]
