@@ -148,7 +148,7 @@ volumes:
   - ./db:/data:ro
 ```
 
-`core.<N>.db` and `content.<N>.db` are resolved inside `SCI_DB_DIR` from `SCI_DB_VERSION`, and `scripture.db` is read from `SCRIPTURE_DB_PATH`, which points into the same directory. Mount nothing at or under `/app/db`: it holds the `db` Python package that is baked into the image.
+`core.<N>.db` and `content.<N>.db` are resolved inside `SCI_DB_DIR` from `SCI_DB_VERSION`, and `scripture.db` is read from `SCRIPTURE_DB_PATH`, which points into the same directory. Mount nothing at or under `/app/db`: it holds the `db` Python package that is baked into the image. The server reads only these three files from the mounted directory.
 
 ### Start the server
 
@@ -203,7 +203,7 @@ docker compose pull
 docker compose up -d
 ```
 
-**Data files.** The files are mounted read-only, so updating means replacing the file on the host, reloading Weaviate, and recreating the container so it opens the new file. The server compares the file's `build_id` with Weaviate's, and decides whether the scripture collections exist, only when it starts; a running server never re-checks. Recreate the container even when the files are replaced in place: the scripture checks run only at startup.
+**Data files.** Updating means replacing the file on the host, reloading Weaviate, and recreating the container. The server compares the file's `build_id` with Weaviate's, and decides whether scripture is available, only when it starts, so recreate the container after every update.
 
 New scripture data (the Church corrected text or footnotes). Work on a copy so the running server keeps a complete file, then `mv` it over:
 
@@ -217,7 +217,7 @@ mv db/scripture.new.db db/scripture.db
 docker compose up -d --force-recreate mcp-server
 ```
 
-A different `build_id` makes `run_scripture_pipeline.py` reset the three scripture collections and reload them in full, so no objects from the old build are kept. The running server does not notice any of this: it compared the two build ids when it started, and neither logs nor reports a mismatch afterwards. From the moment the reload starts until you recreate the container, scripture search can return the new build's objects (incomplete while the reload runs) while footnotes, cross-references and JST text still come from the old file, with no warning. Recreating the container clears this.
+A different `build_id` makes `run_scripture_pipeline.py` reset the three scripture collections and reload them in full. Until the `mv`, scripture search can return the new build's objects (incomplete while the reload runs) while footnotes, cross-references and JST text still come from the old file, with no warning. Recreating the container afterwards re-runs the startup checks against the new build.
 
 New talk release (a new SCI version `<N>`): put the raw files in `db/sci/`, then
 
@@ -230,7 +230,7 @@ pipenv run python scripts/build_scriptures.py --db db/scripture.new.db
 pipenv run python scripts/run_scripture_pipeline.py --db db/scripture.new.db
 pipenv run python scripts/verify_weaviate_scripture.py --db db/scripture.new.db
 mv db/scripture.new.db db/scripture.db
-docker compose up -d --force-recreate mcp-server     # mounts the new core/content and picks up SCI_DB_VERSION
+docker compose up -d --force-recreate mcp-server     # picks up the new SCI_DB_VERSION
 ```
 
 The same applies here: until the container is recreated, the running server answers talk queries with the reloaded Weaviate objects and the old `core.<N>.db`/`content.<N>.db`. See [update/HOW_UPDATES_WORK.md](update/HOW_UPDATES_WORK.md) for what each command does.
