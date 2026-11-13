@@ -4,19 +4,18 @@ services:
     env_file:
       - .env
     environment:
-      # The image holds code only. Every SQLite file the server reads is mounted
-      # read-only from the host (paths below are relative to this file).
+      # The image holds code only. Every SQLite file the server reads (core.<N>.db,
+      # content.<N>.db, scripture.db) sits in one host directory, mounted read-only at /data.
+      SCI_DB_DIR: /data
       SCRIPTURE_DB_PATH: /data/scripture.db
       SCI_DB_VERSION: ${SCI_DB_VERSION:-55}
       # Weaviate is reached by its compose service name, on its in-network port.
       WEAVIATE_HOST: weaviate
       WEAVIATE_PORT: "8080"
+      WEAVIATE_GRPC_PORT: "50051"
     volumes:
-      - ./db/scripture.db:/data/scripture.db:ro
-      # core/content are mounted as single files: a directory mounted over
-      # /app/db would hide the db package baked into the image.
-      - ./db/core.${SCI_DB_VERSION:-55}.db:/app/db/core.${SCI_DB_VERSION:-55}.db:ro
-      - ./db/content.${SCI_DB_VERSION:-55}.db:/app/db/content.${SCI_DB_VERSION:-55}.db:ro
+      # Never mount anything at or under /app/db: it holds the db package baked into the image.
+      - ./db:/data:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7363/health"]
       interval: 30s

@@ -46,16 +46,17 @@ nano .env
 | `EMBEDDING_URL` | Base URL of the embedding server. The container (through `env_file`) and the host-side loading scripts both read this one value, so use a host and port both can reach | `http://<embedder-host>:<port>` |
 | `WEAVIATE_HOST` | Weaviate hostname. The compose file sets it to the service name `weaviate`; set it in `.env` to the host your Weaviate runs on for scripts run on the host | `<weaviate-host>` |
 | `WEAVIATE_PORT` | Weaviate HTTP port. Compose sets it for the container; set it in `.env` to the port your Weaviate listens on for scripts run on the host | `<weaviate-http-port>` |
-| `WEAVIATE_GRPC_PORT` | Weaviate gRPC port. Read by the server and the loading scripts; compose does not set it, so the container gets it from `.env` through `env_file` | `<weaviate-grpc-port>` |
-| `SCI_DB_VERSION` | The SCI release number: selects `db/core.<N>.db` and `db/content.<N>.db` (compose defaults to `55`) | `55` |
-| `SCRIPTURE_DB_PATH` | Where the server reads `scripture.db`. Compose sets it to the mount point `/data/scripture.db`; scripts default to `db/scripture.db` | `/data/scripture.db` |
+| `WEAVIATE_GRPC_PORT` | Weaviate gRPC port. Compose sets it to `50051` for the container; set it in `.env` to the gRPC port your Weaviate listens on for scripts run on the host | `<weaviate-grpc-port>` |
+| `SCI_DB_VERSION` | The SCI release number: selects `core.<N>.db` and `content.<N>.db` (compose defaults to `55`) | `55` |
+| `SCI_DB_DIR` | Directory the server reads `core.<N>.db` and `content.<N>.db` from. Compose sets it to the mount point `/data`; unset, it is the `db/` folder next to the code, which is what scripts use | `/data` |
+| `SCRIPTURE_DB_PATH` | Where the server reads `scripture.db`. Compose sets it to `/data/scripture.db`, in the same mounted directory; scripts default to `db/scripture.db` | `/data/scripture.db` |
 | `FASTMCP_HOST` | Bind address inside container | `0.0.0.0` |
 | `FASTMCP_PORT` | Server port inside container | `7363` |
 | `SCALEKIT_ENVIRONMENT_URL` | ScaleKit environment URL | `https://yourenv.scalekit.com` |
 | `SCALEKIT_RESOURCE_ID` | ScaleKit MCP resource ID | `rid_...` |
 | `MCP_BASE_URL` | Public URL of the MCP server | `https://mcp.yourdomain.com` |
 
-> **Weaviate:** The compose file sets `WEAVIATE_HOST: weaviate` and `WEAVIATE_PORT: "8080"` under `environment:`, and those win over `.env` inside the container. The loading scripts run on the host and read `.env`, so set `WEAVIATE_HOST`, `WEAVIATE_PORT` and `WEAVIATE_GRPC_PORT` there to the host and ports your Weaviate is reachable on from the host (the example compose file publishes `8080` and `50051` on the host).
+> **Weaviate:** The compose file sets `WEAVIATE_HOST: weaviate`, `WEAVIATE_PORT: "8080"` and `WEAVIATE_GRPC_PORT: "50051"` under `environment:`, and those win over `.env` inside the container. The loading scripts run on the host and read `.env`, so set all three there to the host and ports your Weaviate is reachable on from the host (the example compose file publishes `8080` and `50051` on the host).
 
 > **Embedding server:** `pipenv run` loads `.env` and its values win over variables exported in your shell (`EMBEDDING_URL=... pipenv run python ...` still uses the `.env` value), so the loading scripts and the container share the `EMBEDDING_URL` in `.env`. Use whatever host and port the embedding server actually runs on, as long as the name resolves both on the host and inside the container (`localhost` inside the container is the container itself). The embedding server must listen on an address the container can reach, not only on `127.0.0.1`.
 
@@ -63,7 +64,7 @@ nano .env
 
 ## Step 3: Produce the Database Files
 
-Produce every file below on the host, under `db/`, **before** `docker compose up`. Docker's short bind syntax creates a missing source path as an empty directory and mounts that in its place, so a file you forgot to build shows up as a directory rather than an error.
+Produce every file below on the host, under `db/`, **before** `docker compose up`. The whole `db/` directory is mounted, so a file you forgot to build is simply absent in the container.
 
 ### Talks: `core.<N>.db` and `content.<N>.db`
 
@@ -133,20 +134,21 @@ pipenv run python scripts/verify_weaviate_scripture.py    # exit 0 = the load ch
 
 `run_scripture_pipeline.py` creates the `ScriptureVerses`, `ScriptureChapters` and `ScriptureMeta` collections from `db/scripture.db` and embeds every object. It is resumable: an interrupted run continues where it stopped. Useful flags: `--book NAME` loads one book only (try `Jude` first as a smoke test; a partial load never records a finished build), and `--force` reloads instead of resuming. Only a complete load records the file's `build_id` in `ScriptureMeta`.
 
-The scripture load is optional for the server to start: the server decides at startup whether the scripture collections exist and whether `scripture.db` opens. Without the collections, scripture search and `corpus_stats` answer "scripture corpus not available"; without a usable file, `get_verse`, `get_chapter_overview` and `find_cross_references` do. The talk tools are unaffected. Because this is decided once at startup, a load or a file added later takes effect only after the container is recreated.
+The scripture load is optional for the server to start: the server decides at startup whether the scripture collections exist and whether `scripture.db` opens. Without the collections, scripture search and `corpus_stats` answer "scripture corpus not available"; without a usable file, `get_verse`, `get_chapter_overview`, `get_citing_talks` and `find_cross_references` do. The talk tools are unaffected. Because this is decided once at startup, a load or a file added later takes effect only after the container is recreated.
 
 ### Mounts
 
-The image holds code only. `mcp-server` mounts every SQLite file it reads, read-only:
+The image holds code only. `mcp-server` reads every SQLite file from one data directory, mounted once and read-only:
 
 ```yaml
+environment:
+  SCI_DB_DIR: /data
+  SCRIPTURE_DB_PATH: /data/scripture.db
 volumes:
-  - ./db/scripture.db:/data/scripture.db:ro
-  - ./db/core.${SCI_DB_VERSION:-55}.db:/app/db/core.${SCI_DB_VERSION:-55}.db:ro
-  - ./db/content.${SCI_DB_VERSION:-55}.db:/app/db/content.${SCI_DB_VERSION:-55}.db:ro
+  - ./db:/data:ro
 ```
 
-`scripture.db` goes wherever `SCRIPTURE_DB_PATH` says. The core and content files are mounted as single files at `/app/db/`, which is where the server resolves them from `SCI_DB_VERSION`. Never mount a directory over `/app/db`: it holds the `db` Python package that is baked into the image.
+`core.<N>.db` and `content.<N>.db` are resolved inside `SCI_DB_DIR` from `SCI_DB_VERSION`, and `scripture.db` is read from `SCRIPTURE_DB_PATH`, which points into the same directory. Mount nothing at or under `/app/db`: it holds the `db` Python package that is baked into the image.
 
 ### Start the server
 
@@ -201,7 +203,7 @@ docker compose pull
 docker compose up -d
 ```
 
-**Data files.** The files are mounted read-only, so updating means replacing the file on the host, reloading Weaviate, and recreating the container so it opens the new file. The server compares the file's `build_id` with Weaviate's, and decides whether the scripture collections exist, only when it starts; a running server never re-checks. A single-file bind mount also shows the file that was there when the container started, so a file replaced with `mv` is not seen by a container that is still running.
+**Data files.** The files are mounted read-only, so updating means replacing the file on the host, reloading Weaviate, and recreating the container so it opens the new file. The server compares the file's `build_id` with Weaviate's, and decides whether the scripture collections exist, only when it starts; a running server never re-checks. Recreate the container even when the files are replaced in place: the scripture checks run only at startup.
 
 New scripture data (the Church corrected text or footnotes). Work on a copy so the running server keeps a complete file, then `mv` it over:
 
@@ -255,7 +257,7 @@ Common causes:
 - Weaviate is not reachable at `WEAVIATE_HOST`/`WEAVIATE_PORT`.
 - A talk collection is missing or empty: `ERROR: Weaviate collection '…' not found. Run the pipeline first.` or `ERROR: Collection '…' has 0 records. Re-run the pipeline.` Load the talks (Step 5), then start the container again.
 
-A missing or mis-named `core.<N>.db`/`content.<N>.db` does not stop the container: those files are opened when a tool first reads them, so the symptom is tool errors rather than an exit. Check that `SCI_DB_VERSION` matches the files in `db/` and `docker compose exec mcp-server ls -l /app/db/`.
+A missing or mis-named `core.<N>.db`/`content.<N>.db` does not stop the container: those files are opened when a tool first reads them, so the symptom is tool errors rather than an exit. Check that `SCI_DB_VERSION` matches the files in `db/` and `docker compose exec mcp-server ls -l /data/`.
 
 **2. Health returns 503 / `"degraded"`**
 Two common causes:
@@ -270,7 +272,7 @@ cd ~/infra && docker compose up -d
 Then retry starting the MCP stack.
 
 **4. Scripture tools say "scripture corpus not available"**
-Either `scripture.db` is not mounted at `SCRIPTURE_DB_PATH` (check `docker compose exec mcp-server ls -l /data/`; a directory there means the host file did not exist when compose started, so build it and recreate the container), or the `Scripture*` collections were not loaded in Weaviate when the server started (run `run_scripture_pipeline.py`, then recreate the container: the check happens only at startup).
+Either `scripture.db` is not mounted at `SCRIPTURE_DB_PATH` (check `docker compose exec mcp-server ls -l /data/`; if the file is missing there, build it on the host in `db/`, then recreate the container), or the `Scripture*` collections were not loaded in Weaviate when the server started (run `run_scripture_pipeline.py`, then recreate the container: the check happens only at startup).
 
 **5. Cannot reach the embedding server from the container**
 Set `EMBEDDING_URL` to the host and port the embedding server actually runs on, reachable from inside the container (`localhost` there is the container itself). Verify the server listens on that address, not just `127.0.0.1`.

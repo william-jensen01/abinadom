@@ -1,13 +1,15 @@
-"""docker-compose.yml mounts every SQLite file read-only (the image is code only) and reaches Weaviate; the deploy
-and update guides describe the current stack.
+"""docker-compose.yml mounts one read-only data directory (the image is code only) and reaches Weaviate; the
+deploy and update guides describe the current stack.
 
-The image holds code only (.dockerignore excludes *.db), so every SQLite file the server reads at runtime is
-mounted: scripture.db at SCRIPTURE_DB_PATH, and core.<N>.db / content.<N>.db at /app/db/ (db/__init__.py resolves
-them there from SCI_DB_VERSION; the path is not configurable). Mounting the whole db/ directory over /app/db is
-wrong: it hides the `db` Python package baked into the image.
+The image holds code only (.dockerignore excludes *.db). core.<N>.db and content.<N>.db are read from SCI_DB_DIR and
+scripture.db from SCRIPTURE_DB_PATH; compose points both into one directory mounted once, read-only. Nothing may be
+mounted at or under /app/db: it holds the `db` Python package baked into the image.
 """
 import json
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import yaml
@@ -44,34 +46,60 @@ def _env(svc):
     return env
 
 
+def _covering(mounts, path):
+    """The mounts whose target is `path` or a directory above it."""
+    path = path.rstrip("/")
+    return [m for m in mounts if path == m[1].rstrip("/") or path.startswith(m[1].rstrip("/") + "/")]
+
+
 def test_scripture_db_mounted_read_only_at_its_path():
     _, svc = _compose()
     env = _env(svc)
-    assert "SCRIPTURE_DB_PATH" in env and env["SCRIPTURE_DB_PATH"], \
-        f"mcp-server must set SCRIPTURE_DB_PATH under environment: {json.dumps(env)}"
+    assert env.get("SCRIPTURE_DB_PATH"), f"mcp-server must set SCRIPTURE_DB_PATH under environment: {json.dumps(env)}"
     mounts = _mounts(svc)
-    hit = [m for m in mounts if m[1] == env["SCRIPTURE_DB_PATH"]]
-    assert hit, f"SCRIPTURE_DB_PATH={env['SCRIPTURE_DB_PATH']} must be the target of a mount: {mounts}"
-    assert all(ro for _, _, ro in hit), f"the scripture.db mount must be read-only: {hit}"
-    assert any("scripture" in src and src.endswith(".db") for src, _, _ in hit), f"mount a scripture .db file: {hit}"
+    hit = _covering(mounts, env["SCRIPTURE_DB_PATH"])
+    assert hit, f"SCRIPTURE_DB_PATH={env['SCRIPTURE_DB_PATH']} must be inside a mount: {mounts}"
+    assert all(ro for _, _, ro in hit), f"the mount holding scripture.db must be read-only: {hit}"
 
 
-def test_core_and_content_db_mounted_read_only():
+def test_core_and_content_read_from_one_mounted_data_dir():
     _, svc = _compose()
+    env = _env(svc)
     mounts = _mounts(svc)
-    assert not any(tgt.rstrip("/") == APP_DB for _, tgt, _ in mounts), \
-        f"do not mount a directory over {APP_DB}: it hides the db package in the image: {mounts}"
-    version = str(_env(svc).get("SCI_DB_VERSION") or "").strip()
-    for kind in ("core", "content"):
-        # a literal release number, or compose interpolation of SCI_DB_VERSION (e.g. ${SCI_DB_VERSION:-55})
-        pat = re.compile(rf"^{APP_DB}/{kind}\.(\d+|\$\{{SCI_DB_VERSION[^}}]*\}})\.db$")
-        hit = [(src, tgt, ro) for src, tgt, ro in mounts if pat.match(tgt)]
-        assert hit, f"mcp-server needs {APP_DB}/{kind}.<N>.db mounted (read at runtime): {mounts}"
-        assert all(ro for _, _, ro in hit), f"the {kind} db mount must be read-only: {hit}"
-        if version.isdigit():
-            assert any(pat.match(tgt).group(1) in (version,) or pat.match(tgt).group(1).startswith("$")
-                       for _, tgt, _ in hit), \
-                f"SCI_DB_VERSION={version} but the {kind} mount is {hit}"
+    assert not any(tgt.rstrip("/") == APP_DB or tgt.startswith(APP_DB + "/") for _, tgt, _ in mounts), \
+        f"mount nothing at or under {APP_DB}: it holds the db package in the image: {mounts}"
+    data_dir = str(env.get("SCI_DB_DIR") or "").rstrip("/")
+    assert data_dir and data_dir != APP_DB, f"mcp-server must set SCI_DB_DIR (not {APP_DB}): {json.dumps(env)}"
+    hit = [m for m in mounts if m[1].rstrip("/") == data_dir]
+    assert len(hit) == 1 and hit[0][2], f"mount the data directory once, read-only, at SCI_DB_DIR={data_dir}: {mounts}"
+    assert env["SCRIPTURE_DB_PATH"].startswith(data_dir + "/"), \
+        f"scripture.db lives in the same data directory: SCRIPTURE_DB_PATH={env['SCRIPTURE_DB_PATH']}"
+    assert not any(tgt.startswith(data_dir + "/") for _, tgt, _ in mounts), \
+        f"one directory mount, not separate files under {data_dir}: {mounts}"
+
+
+def test_db_package_reads_sci_db_dir(tmp_path):
+    """db/__init__.py resolves core/content from SCI_DB_DIR; unset, it keeps its own folder."""
+    code = "import db; print(db.CORE_DB_PATH); print(db.CONTENT_DB_PATH)"
+    base = {k: v for k, v in os.environ.items() if k not in ("SCI_DB_DIR", "SCI_DB_VERSION")}
+
+    def run(env):
+        return subprocess.run([sys.executable, "-c", code], cwd=ROOT, env=env, capture_output=True,
+                              text=True, timeout=60)
+
+    r = run({**base, "SCI_DB_DIR": str(tmp_path), "SCI_DB_VERSION": "55"})
+    assert r.returncode == 0, r.stderr[-500:]
+    assert r.stdout.split() == [str(tmp_path / "core.55.db"), str(tmp_path / "content.55.db")], r.stdout
+    r = run({**base, "SCI_DB_VERSION": "55"})
+    assert r.returncode == 0, r.stderr[-500:]
+    assert r.stdout.split() == [str(ROOT / "db" / "core.55.db"), str(ROOT / "db" / "content.55.db")], r.stdout
+
+
+def test_weaviate_ports_set_for_the_container():
+    _, svc = _compose()
+    env = _env(svc)
+    for name in ("WEAVIATE_HOST", "WEAVIATE_PORT", "WEAVIATE_GRPC_PORT"):
+        assert env.get(name), f"compose must set {name} under environment: {json.dumps(env)}"
 
 
 def test_weaviate_service_reachable_from_mcp_server():

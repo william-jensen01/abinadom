@@ -129,7 +129,7 @@ The same rules as for talks apply: only the fetch touches the network, and `buil
 
 **The `build_id` ties the two stores together.** Search hits come from Weaviate, while footnotes, cross-references and JST text come from `scripture.db`, so both must be the same build. A complete load writes the file's `build_id` into `ScriptureMeta`. When that differs from the file's, the loader resets the three collections and reloads everything instead of resuming. The server compares the two once, at startup, and if they differ logs a warning and flags it in `/health`; it does not re-check while running. The fix is to run `run_scripture_pipeline.py` again and then recreate the server's container (`docker compose up -d --force-recreate mcp-server`), because the server compares them only at startup.
 
-**On a deployed server** `scripture.db` is mounted read-only, so an update means replacing the file and recreating the container (`docker compose up -d --force-recreate mcp-server`): the server opens the file and compares build ids only at startup, and a single-file mount keeps showing the file that was there when the container started. See [../DEPLOY.md](../DEPLOY.md).
+**On a deployed server** `scripture.db` is mounted read-only, so an update means replacing the file and recreating the container (`docker compose up -d --force-recreate mcp-server`): the server opens the file and compares build ids only at startup. See [../DEPLOY.md](../DEPLOY.md).
 
 ## Where things live
 
