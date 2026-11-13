@@ -498,7 +498,7 @@ async def search(
     scripture_key = collection.removeprefix("scripture_") if collection in ("scripture_verses", "scripture_chapters") else None
     col_name = WEAVIATE_SCRIPTURE_COLLECTION_NAMES[scripture_key] if scripture_key else WEAVIATE_COLLECTION_NAMES.get(collection)
     if col_name is None:
-        return f"Unknown collection '{collection}'. Valid: talks, paragraphs, citations, footnotes."
+        return f"Unknown collection '{collection}'. Valid: talks, paragraphs, citations, footnotes, scripture_verses, scripture_chapters."
     if scripture_key and not app.scripture_loaded:
         return SCRIPTURE_NOT_AVAILABLE
     if not scripture_key and any(x is not None for x in (book, volume, chapter, variant)):
@@ -910,9 +910,11 @@ async def corpus_stats(
 
     Args:
         collection: Collection to aggregate - "talks" (default), "paragraphs", "citations", "footnotes",
-            "scripture_verses" or "scripture_chapters".
+            "scripture_verses" or "scripture_chapters". scripture_verses counts 41,995 standard verses plus
+            1,359 JST verses printed in the Church edition (variant "jst", no has_jst); group_by="variant"
+            separates them.
         group_by: Optional property name to group by (e.g. "speaker_name", "conference_year", "conference_month";
-            for the scripture collections "volume" or "book", and "has_jst" on scripture_verses).
+            for the scripture collections "volume" or "book", and "variant" or "has_jst" on scripture_verses).
         limit: Maximum number of groups to return when group_by is set (default 20).
     """
     app: AppContext = ctx.lifespan_context["app"]
@@ -924,7 +926,7 @@ async def corpus_stats(
     elif collection in WEAVIATE_COLLECTION_NAMES:
         col_name = WEAVIATE_COLLECTION_NAMES[collection]
     else:
-        return f"Unknown collection '{collection}'. Valid: talks, paragraphs, citations, footnotes."
+        return f"Unknown collection '{collection}'. Valid: talks, paragraphs, citations, footnotes, scripture_verses, scripture_chapters."
 
     col = app.client.collections.use(col_name)
 

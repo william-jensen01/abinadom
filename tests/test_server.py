@@ -1589,6 +1589,17 @@ class TestFindByScripture:
 class TestCorpusStats:
     """Integration tests for the corpus_stats MCP tool."""
 
+    def test_unknown_collection_lists_all_six_and_description_explains_verse_count(self):
+        """The unknown-collection message names every collection; the description explains the verse count."""
+        from server import corpus_stats
+
+        ctx, _ = _make_mock_ctx()
+        result = asyncio.run(corpus_stats(collection="nope", ctx=ctx))
+        for name in ("talks", "paragraphs", "citations", "footnotes", "scripture_verses", "scripture_chapters"):
+            assert name in result
+        doc = corpus_stats.__doc__ or corpus_stats.fn.__doc__
+        assert "41,995" in doc and "1,359" in doc and 'variant' in doc
+
     def test_no_group_by_returns_total(self):
         """corpus_stats with no group_by returns JSON with collection and total count."""
         from server import corpus_stats
@@ -1673,7 +1684,7 @@ class TestCorpusStats:
 
         result = asyncio.run(corpus_stats(collection="nonexistent", ctx=ctx))
 
-        assert result == "Unknown collection 'nonexistent'. Valid: talks, paragraphs, citations, footnotes."
+        assert result == "Unknown collection 'nonexistent'. Valid: talks, paragraphs, citations, footnotes, scripture_verses, scripture_chapters."
         # Weaviate must not have been called
         mock_client.collections.use.assert_not_called()
 
