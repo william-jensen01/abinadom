@@ -43,10 +43,10 @@ nano .env
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `EMBEDDING_URL` | Base URL of the embedding server. The container (through `env_file`) and the host-side loading scripts both read this one value, so use an address both can reach, such as the machine's LAN IP | `http://192.168.1.20:8080` |
-| `WEAVIATE_HOST` | Weaviate hostname. The compose file sets it to the service name `weaviate`; set it in `.env` for scripts run on the host (e.g. `localhost`) | `localhost` |
-| `WEAVIATE_PORT` | Weaviate HTTP port. Compose pins it to `8080` for the container | `8080` |
-| `WEAVIATE_GRPC_PORT` | Weaviate gRPC port (default `50051`). Read by the server and the loading scripts; compose does not set it, so the container gets it from `.env` through `env_file` | `50051` |
+| `EMBEDDING_URL` | Base URL of the embedding server. The container (through `env_file`) and the host-side loading scripts both read this one value, so use a host and port both can reach | `http://<embedder-host>:<port>` |
+| `WEAVIATE_HOST` | Weaviate hostname. The compose file sets it to the service name `weaviate`; set it in `.env` to the host your Weaviate runs on for scripts run on the host | `<weaviate-host>` |
+| `WEAVIATE_PORT` | Weaviate HTTP port. Compose sets it for the container; set it in `.env` to the port your Weaviate listens on for scripts run on the host | `<weaviate-http-port>` |
+| `WEAVIATE_GRPC_PORT` | Weaviate gRPC port. Read by the server and the loading scripts; compose does not set it, so the container gets it from `.env` through `env_file` | `<weaviate-grpc-port>` |
 | `SCI_DB_VERSION` | The SCI release number: selects `db/core.<N>.db` and `db/content.<N>.db` (compose defaults to `55`) | `55` |
 | `SCRIPTURE_DB_PATH` | Where the server reads `scripture.db`. Compose sets it to the mount point `/data/scripture.db`; scripts default to `db/scripture.db` | `/data/scripture.db` |
 | `FASTMCP_HOST` | Bind address inside container | `0.0.0.0` |
@@ -55,9 +55,9 @@ nano .env
 | `SCALEKIT_RESOURCE_ID` | ScaleKit MCP resource ID | `rid_...` |
 | `MCP_BASE_URL` | Public URL of the MCP server | `https://mcp.yourdomain.com` |
 
-> **Weaviate:** The compose file sets `WEAVIATE_HOST: weaviate` and `WEAVIATE_PORT: "8080"` under `environment:`, and those win over `.env` inside the container. The loading scripts run on the host and read `.env`, so set `WEAVIATE_HOST=localhost`, `WEAVIATE_PORT=8080` and `WEAVIATE_GRPC_PORT=50051` there (compose publishes `8080` and `50051` on the host).
+> **Weaviate:** The compose file sets `WEAVIATE_HOST: weaviate` and `WEAVIATE_PORT: "8080"` under `environment:`, and those win over `.env` inside the container. The loading scripts run on the host and read `.env`, so set `WEAVIATE_HOST`, `WEAVIATE_PORT` and `WEAVIATE_GRPC_PORT` there to the host and ports your Weaviate is reachable on from the host (the example compose file publishes `8080` and `50051` on the host).
 
-> **Embedding server:** `pipenv run` loads `.env` and its values win over variables exported in your shell (`EMBEDDING_URL=... pipenv run python ...` still uses the `.env` value), so the loading scripts and the container share the `EMBEDDING_URL` in `.env`. Use the machine's LAN IP (or another name that resolves both on the host and inside the container). `localhost` does not work from the container, and `host.docker.internal` does not resolve on a Linux host or in the example compose file, which has no `extra_hosts`. The embedding server must listen on that address, not only on `127.0.0.1`.
+> **Embedding server:** `pipenv run` loads `.env` and its values win over variables exported in your shell (`EMBEDDING_URL=... pipenv run python ...` still uses the `.env` value), so the loading scripts and the container share the `EMBEDDING_URL` in `.env`. Use whatever host and port the embedding server actually runs on, as long as the name resolves both on the host and inside the container (`localhost` inside the container is the container itself). The embedding server must listen on an address the container can reach, not only on `127.0.0.1`.
 
 ---
 
@@ -104,7 +104,7 @@ Do this **before** starting the MCP stack: the infra stack creates the external 
 
 ## Step 5: Load Weaviate, Then Start the Server
 
-The server checks Weaviate when it starts: it exits if it cannot reach it, or if any of the four talk collections (`ConferenceTalks`, `ConferenceTalkParagraphs`, `ConferenceTalkCitations`, `ConferenceTalkFootnotes`) is missing or empty. So on a new install, start Weaviate alone, load it, and only then start `mcp-server`. The loading scripts run on the host and use the `.env` from Step 2 (`WEAVIATE_HOST=localhost`, and an `EMBEDDING_URL` both the host and the container can reach).
+The server checks Weaviate when it starts: it exits if it cannot reach it, or if any of the four talk collections (`ConferenceTalks`, `ConferenceTalkParagraphs`, `ConferenceTalkCitations`, `ConferenceTalkFootnotes`) is missing or empty. So on a new install, start Weaviate alone, load it, and only then start `mcp-server`. The loading scripts run on the host and use the `.env` from Step 2 (`WEAVIATE_HOST` and the ports for the host, and an `EMBEDDING_URL` both the host and the container can reach).
 
 ### Start Weaviate
 
@@ -260,7 +260,7 @@ A missing or mis-named `core.<N>.db`/`content.<N>.db` does not stop the containe
 **2. Health returns 503 / `"degraded"`**
 Two common causes:
 - The embedding server is down or `EMBEDDING_URL` is wrong. Check it from inside the container: `docker compose exec mcp-server sh -c 'curl -s "$EMBEDDING_URL/health"'`
-- Weaviate is not ready: `curl http://localhost:8080/v1/.well-known/ready`
+- Weaviate is not ready: `curl http://<weaviate-host>:<weaviate-http-port>/v1/.well-known/ready`
 
 **3. `network proxy declared as external, but could not be found`**
 The infra stack must be running before the MCP stack starts. Run:
@@ -273,7 +273,7 @@ Then retry starting the MCP stack.
 Either `scripture.db` is not mounted at `SCRIPTURE_DB_PATH` (check `docker compose exec mcp-server ls -l /data/`; a directory there means the host file did not exist when compose started, so build it and recreate the container), or the `Scripture*` collections were not loaded in Weaviate when the server started (run `run_scripture_pipeline.py`, then recreate the container: the check happens only at startup).
 
 **5. Cannot reach the embedding server from the container**
-Use the machine's LAN IP in `EMBEDDING_URL` (`localhost` is the container itself, and `host.docker.internal` does not resolve on Linux unless the service has an `extra_hosts: host-gateway` entry, which the example file lacks). Verify the server listens on that address, not just `127.0.0.1`.
+Set `EMBEDDING_URL` to the host and port the embedding server actually runs on, reachable from inside the container (`localhost` there is the container itself). Verify the server listens on that address, not just `127.0.0.1`.
 
 **6. OAuth / ScaleKit not working**
 Ensure all three ScaleKit variables are set (`SCALEKIT_ENVIRONMENT_URL`, `SCALEKIT_RESOURCE_ID`, `MCP_BASE_URL`) and the server was restarted after adding them. Check `docker compose logs mcp-server` for JWT validation errors.
