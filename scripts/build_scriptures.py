@@ -290,6 +290,8 @@ def build(db_path: str) -> int:
         return 1
     conn = sqlite3.connect(db_path, isolation_level=None)
     try:
+        if conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE name IN ('raw_page', 'raw_latest')").fetchone()[0] < 2:
+            raise BuildError(f"{db_path} has no raw layer; run scripts/fetch_scriptures.py first")
         raw = {u: (h, js) for u, h, js in conn.execute(
             "SELECT uri, content_hash, json FROM raw_latest WHERE lang = 'eng' AND status = 200")}
         tocs = {v: sp.toc_links(json.loads(raw[f"/scriptures/{v}"][1])) if f"/scriptures/{v}" in raw else None

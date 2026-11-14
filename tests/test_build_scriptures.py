@@ -202,6 +202,13 @@ def test_missing_core_db_is_a_prerequisite(tmp_path, monkeypatch, capsys):
     assert "PREREQUISITE" in capsys.readouterr().err
 
 
+def test_db_without_a_raw_layer_fails_cleanly(tmp_path, capsys):
+    db = tmp_path / "empty.db"
+    sqlite3.connect(db).close()
+    assert build_scriptures.build(str(db)) == 1
+    assert f"{db} has no raw layer; run scripts/fetch_scriptures.py first" in capsys.readouterr().err
+
+
 def test_report_counts_passages_with_no_compare_link_or_missing_heading_verses(tmp_path, monkeypatch, capsys):
     core = [r for r in CORE if (r["BookID"], r["Chapter"], r["Verse"]) != (GEN, 9, 5)]   # inside "Genesis 9:4–6"
     monkeypatch.setattr(scripture_jst, "read_core_jst", lambda: (core, len(core)))
