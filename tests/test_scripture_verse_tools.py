@@ -320,3 +320,13 @@ def test_jst_refs_without_jst_verse_row_on_real_store(real_store):
     rom = targets("Rom", 7, 5, "5a")
     assert {"JST Rom. 7:26", "JST Rom. 7:27"} <= set(rom)
     assert not any(t.startswith("/") for t in rom + gen)
+
+
+def test_whole_chapter_ref_is_incoming_for_every_verse(real_store):
+    """Ether 1:4 footnotes Genesis 1 as a whole chapter: it is incoming for each verse of it, marked as such."""
+    for verse in (1, 17, 31):
+        notes = [n for s in find_cross_references(real_store, "Gen", 1, verse)["incoming"]
+                 if s["reference"] == "Ether 1:4" for n in s["footnotes"]]
+        assert notes and all(n.get("whole_chapter") for n in notes), verse
+    verse_refs = [n for s in find_cross_references(real_store, "Ex", 4, 16)["incoming"] for n in s["footnotes"]]
+    assert verse_refs and not any(n.get("whole_chapter") for n in verse_refs)

@@ -487,16 +487,21 @@ def find_cross_references(store: ScriptureStore, book: str, chapter: int, verse:
 
     incoming: dict[int, dict] = {}
     for r in store.db.select(
-            "SELECT DISTINCT sv.verse_id, sv.chapter, sv.verse, sb.cite_abbr, sb.sort, f.footnote_id, f.marker, "
-            "f.context, f.text FROM footnote_ref r JOIN footnote f ON f.footnote_id = r.footnote_id "
+            "SELECT sv.verse_id, sv.chapter, sv.verse, sb.cite_abbr, f.footnote_id, f.marker, f.context, f.text, "
+            "MIN(r.target_verse_start IS NULL) AS whole_chapter "
+            "FROM footnote_ref r JOIN footnote f ON f.footnote_id = r.footnote_id "
             "JOIN verse sv ON sv.verse_id = f.verse_id JOIN book sb ON sb.book_id = sv.book_id "
             "WHERE r.target_book_id = ? AND r.target_chapter = ? AND r.target_help IS NULL "
-            "AND r.target_verse_start <= ? AND COALESCE(r.target_verse_end, r.target_verse_start) >= ? "
-            "AND sv.verse_id != ? ORDER BY sb.sort, sv.chapter, sv.verse, f.footnote_id",
+            "AND (r.target_verse_start IS NULL "
+            "OR (r.target_verse_start <= ? AND COALESCE(r.target_verse_end, r.target_verse_start) >= ?)) "
+            "AND sv.verse_id != ? GROUP BY f.footnote_id ORDER BY sb.sort, sv.chapter, sv.verse, f.footnote_id",
             (b["book_id"], chapter, verse, verse, verse_id)):
         source = incoming.setdefault(r["verse_id"], {
             "reference": format_reference(r["cite_abbr"], r["chapter"], r["verse"]), "footnotes": []})
-        source["footnotes"].append({"marker": r["marker"], "context": r["context"], "text": r["text"]})
+        note = {"marker": r["marker"], "context": r["context"], "text": r["text"]}
+        if r["whole_chapter"]:
+            note["whole_chapter"] = True        # the footnote names the chapter, not this verse
+        source["footnotes"].append(note)
 
     return {"reference": format_reference(b["cite_abbr"], chapter, verse),
             "outgoing": list(outgoing.values()), "incoming": list(incoming.values())}
