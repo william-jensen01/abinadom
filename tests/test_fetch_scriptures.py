@@ -91,6 +91,24 @@ def test_unchanged_refetch_writes_nothing_and_a_change_adds_a_row(tmp_path, monk
     assert "new" in latest[0][0]
 
 
+def test_a_page_that_reverts_to_earlier_content_is_latest_again(tmp_path, monkeypatch, capsys):
+    db, uri = tmp_path / "s.db", "/scriptures/nt/jude/1"
+    b = dict(WORLD, **{uri: {"uri": uri, "content": {"body": "<p>B</p>"}}})
+    latest = f"SELECT json FROM raw_latest WHERE uri = '{uri}'"
+    assert run(monkeypatch, db, FakeSession(WORLD)) == 0                  # A
+    assert run(monkeypatch, db, FakeSession(b)) == 0                      # B
+    assert "<p>B</p>" in raw(db, latest)[0][0]
+    capsys.readouterr()
+    assert run(monkeypatch, db, FakeSession(WORLD)) == 0                  # A again, within the same second
+    assert json.loads(raw(db, latest)[0][0]) == WORLD[uri]
+    assert len(raw(db)) == len(WORLD) + 1                                 # A's row reused, B kept
+    assert "'added': 0, 'reverted': 1," in capsys.readouterr().out
+    assert run(monkeypatch, db, FakeSession(WORLD)) == 0                  # A -> A: nothing written
+    assert len(raw(db)) == len(WORLD) + 1
+    assert json.loads(raw(db, latest)[0][0]) == WORLD[uri]
+    assert "'added': 0, 'reverted': 0," in capsys.readouterr().out
+
+
 def test_only_missing_requests_only_what_is_missing(tmp_path, monkeypatch):
     db = tmp_path / "s.db"
     assert run(monkeypatch, db, FakeSession(WORLD, fail={"/scriptures/bofm/enos/1"})) == 1
