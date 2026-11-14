@@ -4,6 +4,7 @@ The tool functions take a `ScriptureStore` and return a dict (the tool serialize
 caller: unknown book, no such chapter, ...). get_verse, get_chapter_overview and find_cross_references read only
 scripture.db; get_verse's citing talk counts and get_citing_talks also read core.db.
 """
+import re
 import sqlite3
 from dataclasses import dataclass
 from typing import Optional
@@ -52,12 +53,34 @@ def _jst_reference(row: dict) -> str:
     return f"JST {CORE_BOOKS.get(row['core_book_id'], (None, None, '?'))[2]} {row['chapter']}:{row['verse']}"
 
 
+_JST_CITES = {path: cite for (volume, path), (cite, _) in BOOK_CROSSWALK.items() if volume in ("ot", "nt")}
+_JST_TEXT_CITE = re.compile(r"JST\s+((?:\d\s+)?[A-Z][A-Za-z]*\.?)\s+\d")
+
+
+def _jst_link_target(r: dict) -> Optional[str]:
+    """"JST Ex. 33:20" for a ref into the JST appendix (`/scriptures/jst/jst-ex/33`, verses from the link) or a
+    JST verse named by a note's text, when it has no jst_verse row; else the label (it names the JST passage)."""
+    parts = (r.get("target_uri") or "").split("/")      # /scriptures/jst/jst-<book>/<chapter>
+    path = parts[3].removeprefix("jst-") if len(parts) == 5 else None
+    if path in _JST_CITES and parts[2] == "jst" and parts[4].isdigit():
+        return format_reference(f"JST {_JST_CITES[path]}", int(parts[4]), r.get("target_verse_start"),
+                                r.get("target_verse_end"))
+    m = _JST_TEXT_CITE.match(r.get("label") or "") if r.get("ref_type") == "jst-note" else None
+    if m and r.get("target_chapter") is not None:
+        return format_reference(f"JST {m.group(1)}", r["target_chapter"], r.get("target_verse_start"),
+                                r.get("target_verse_end"))
+    return r.get("label") or r.get("target_uri")
+
+
 def _ref_target(store: ScriptureStore, r: dict) -> Optional[str]:
-    """What a footnote ref points at: "John 20:29", "JST Gen. 8:13", "tg/hope", or the raw target URI."""
+    """What a footnote ref points at: "John 20:29", "JST Gen. 8:13", "tg/hope", or (a page that is not a chapter)
+    the raw target URI."""
     if r.get("target_help"):
         return r["target_help"]
     if r.get("jst_verse") is not None:
         return _jst_reference(dict(core_book_id=r["jst_core_book_id"], chapter=r["jst_chapter"], verse=r["jst_verse"]))
+    if r.get("category") == "jst" or (r.get("target_uri") or "").startswith("/scriptures/jst/"):
+        return _jst_link_target(r)
     if r.get("target_chapter") is not None:
         b = store.resolver.by_id.get(r.get("target_book_id"))
         parts = (r.get("target_uri") or "").split("/")      # /scriptures/<volume>/<book path>/<chapter>

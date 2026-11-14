@@ -6,7 +6,8 @@ import pytest
 
 from db.scripture import open_scripture_db
 from tests.scripture_world import FULL_DB, need_full_db
-from tools.scripture_tools import ScriptureStore, find_cross_references, get_chapter_overview, get_verse
+from tools.scripture_tools import (ScriptureStore, _ref_target, find_cross_references, get_chapter_overview,
+                                   get_verse)
 
 
 @pytest.fixture(scope="module")
@@ -290,3 +291,32 @@ def test_find_cross_references_messages(store):
     assert "No chapter 99" in find_cross_references(store, "Alma", 99, 1)
     assert find_cross_references(store, "Alma", 32, 500).startswith("No verse 500 in")
     assert "JST" in find_cross_references(store, "JST Genesis", 8, 13)
+
+
+def test_jst_ref_without_jst_verse_row_is_cited():
+    """A ref into the JST appendix with no jst_verse row is cited from its link (or text), never a raw URI."""
+    def target(**r):
+        return _ref_target(None, {"category": "cross-ref", "ref_type": "scripture-ref", **r})
+
+    assert target(target_uri="/scriptures/jst/jst-ex/33", target_chapter=33, target_verse_start=20,
+                  target_verse_end=20, label="JST Ex. 33:20, 23 (Appendix)") == "JST Ex. 33:20"
+    assert target(category="jst", target_uri="/scriptures/jst/jst-rom/7", target_chapter=7, target_verse_start=26,
+                  target_verse_end=26, label="JST Rom. 7:5–27 (Appendix)") == "JST Rom. 7:26"
+    assert target(target_uri="/scriptures/jst/jst-ex/33", target_chapter=33, target_verse_start=20,
+                  target_verse_end=23, label="x") == "JST Ex. 33:20–23"
+    assert target(category="jst", ref_type="jst-note", target_chapter=8, target_verse_start=24, target_verse_end=24,
+                  label="JST Gen. 8:23–24 … my covenant") == "JST Gen. 8:24"
+    assert target(target_uri="/scriptures/jst/jst-gen/1-8", label="JST Gen. 1–8 (Appendix)") == \
+        "JST Gen. 1–8 (Appendix)"
+
+
+def test_jst_refs_without_jst_verse_row_on_real_store(real_store):
+    def targets(book, chapter, verse, marker):
+        return [t["target"] for n in find_cross_references(real_store, book, chapter, verse)["outgoing"]
+                if n["marker"] == marker for t in n["targets"]]
+
+    gen = targets("Gen", 32, 30, "30b")
+    assert {"JST Ex. 33:20", "JST Ex. 33:23"} <= set(gen)
+    rom = targets("Rom", 7, 5, "5a")
+    assert {"JST Rom. 7:26", "JST Rom. 7:27"} <= set(rom)
+    assert not any(t.startswith("/") for t in rom + gen)
