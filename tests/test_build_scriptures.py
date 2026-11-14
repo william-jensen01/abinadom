@@ -200,3 +200,15 @@ def test_missing_core_db_is_a_prerequisite(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(scripture_jst, "read_core_jst", lambda: READ_CORE_JST(str(tmp_path / "core.db")))
     assert build_scriptures.build(str(make_raw_db(tmp_path / "nocore.db"))) == 1
     assert "PREREQUISITE" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("pgp", [
+    toc("Pearl of Great Price", group("Abraham", link("/scriptures/pgp/abr/_contents"), link("/scriptures/pgp/abr/1"),
+                                      link("/scriptures/pgp/abr/fac-1"))),
+    toc("Pearl of Great Price", group("Abraham", link("/scriptures/pgp/abr/_contents"), link("/scriptures/pgp/abr/1")),
+        link("/scriptures/pgp/abr/fac-1"))], ids=["inside-abraham", "ungrouped"])
+def test_facsimiles_without_their_own_toc_group_are_still_named(tmp_path, pgp):
+    db = make_raw_db(tmp_path / "nofacgroup.db", replace={"/scriptures/pgp": pgp})
+    assert build_scriptures.build(str(db)) == 0
+    assert rows(db, "SELECT uri, name, cite_abbr FROM book WHERE uri LIKE '/scriptures/pgp/%' ORDER BY sort") == [
+        ("/scriptures/pgp/abr", "Abraham", "Abr."), ("/scriptures/pgp/abr/fac", "Facsimiles", "Fac.")]
