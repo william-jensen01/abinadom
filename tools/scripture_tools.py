@@ -456,8 +456,11 @@ def find_cross_references(store: ScriptureStore, book: str, chapter: int, verse:
     """One hop of the verse graph, from scripture.db alone.
 
     `outgoing`: the verse's footnotes that point at scripture, each with its marker, context, text and the targets
-    it names (study-help links are left out). `incoming`: the other verses whose footnotes point at this verse
-    (a ref to a verse range covers every verse in it), one entry per source verse with the footnotes that do so.
+    it names (study-help links are left out). A JST range is listed one target per JST verse ("JST Rom. 7:5", ...);
+    a page that is not a chapter (a facsimile, a book's front matter) has its page URI as target. `incoming`: the
+    other verses whose footnotes point at this verse, one entry per source verse with the footnotes that do so. A
+    ref to a verse range covers every verse in it; a ref to a whole chapter covers every verse of the chapter, and
+    its footnote is marked `whole_chapter: true`.
     """
     found = store.resolver.resolve(book)
     if found is None:

@@ -1142,13 +1142,18 @@ async def find_cross_references(
     """One hop of the footnote graph around a verse: the scripture its footnotes point to (grouped by footnote)
     and the other verses whose footnotes point here. Reads scripture.db only; no embedding needed.
 
+    Outgoing: a JST range is listed one target per JST verse ("JST Rom. 7:5", "JST Rom. 7:6", ...); a target that
+    is not a chapter (a facsimile or a book's front matter) is given as its page URI, with the footnote's label.
+    Incoming: a footnote naming a verse range counts for every verse in it, and one naming a whole chapter counts
+    for every verse of that chapter, marked whole_chapter: true. Study-help links (Topical Guide, ...) are left out.
+
     Args:
         book: Book name or abbreviation ("Alma", "1 Ne.", "D&C").
         chapter: Chapter (or D&C section) number.
         verse: Verse number.
 
     Returns JSON {reference, outgoing: [{marker, context, text, targets: [{category, label, target}]}],
-    incoming: [{reference, footnotes: [{marker, context, text}]}]}.
+    incoming: [{reference, footnotes: [{marker, context, text, whole_chapter?}]}]}.
     """
     app: AppContext = ctx.lifespan_context["app"]
     if app.scripture is None:
