@@ -4,6 +4,7 @@
 .planning/
 __pycache__/
 */__pycache__/
+.pytest_cache/
 **/*.db
 **/*.db-shm
 **/*.db-wal
@@ -12,7 +13,8 @@ __pycache__/
 **/*.json
 **/*.txt
 !requirements.txt
-db/
+db/sci/
+db/one-off-migration/
 api/
 process_topic_talks/
 data/
@@ -21,5 +23,6 @@ tasks/
 docs/
 scripts/
 tests/
+benchmark/
 .env
 .env.example

@@ -4,7 +4,8 @@
 Walks the five volume tables of contents and the JST appendix TOC, and stores every page they link to
 (`_contents` pages included) from the `type/content` endpoint, sequentially through utils.church_api (throttle,
 User-Agent, uncached session). A row is added only when the page's sha256 changed, so pages fetched before an
-interruption are kept and a re-fetch that finds no change writes nothing.
+interruption are kept and a re-fetch that finds no change writes nothing. A page that reverts to content stored
+earlier has that row re-stamped so it is the latest again (counted as "reverted").
 
   --only-missing   skip pages that are already stored (walks the stored TOCs)
   --refresh        re-fetch every page, recording only changes (also what a run without a flag does)
@@ -45,16 +46,22 @@ def stored(conn, uri):
 
 
 def fetch(conn, session, uri) -> str:
-    """Fetch one page and store it if it changed. Returns 'added' or 'unchanged'; raises on failure."""
+    """Fetch one page and store it if it changed. Returns 'added', 'reverted' or 'unchanged'; raises on failure."""
     resp = church_api.get_content(session, uri)
     if resp.status_code != 200:
         raise RuntimeError(f"HTTP {resp.status_code}")
-    cur = conn.execute(
-        "INSERT OR IGNORE INTO raw_page (uri, lang, fetched_at, content_hash, status, json) VALUES (?,?,?,?,?,?)",
-        (uri, LANG, datetime.now(timezone.utc).isoformat(timespec="seconds"), content_hash(resp.json()),
-         resp.status_code, resp.text))
+    digest = content_hash(resp.json())
+    latest = conn.execute("SELECT content_hash FROM raw_latest WHERE uri = ? AND lang = ?", (uri, LANG)).fetchone()
+    if latest and latest[0] == digest:
+        return "unchanged"
+    known = conn.execute("SELECT 1 FROM raw_page WHERE uri = ? AND lang = ? AND content_hash = ?",
+                         (uri, LANG, digest)).fetchone()
+    # REPLACE re-inserts an earlier row with a new rowid and fetched_at, so it wins raw_latest even within a second
+    conn.execute(
+        "INSERT OR REPLACE INTO raw_page (uri, lang, fetched_at, content_hash, status, json) VALUES (?,?,?,?,?,?)",
+        (uri, LANG, datetime.now(timezone.utc).isoformat(timespec="seconds"), digest, resp.status_code, resp.text))
     conn.commit()
-    return "added" if cur.rowcount else "unchanged"
+    return "reverted" if known else "added"
 
 
 def main(argv=None) -> int:
@@ -72,7 +79,7 @@ def main(argv=None) -> int:
     session = church_api.fresh_session()
 
     queue = [f"/scriptures/{v}" for v in TOC_VOLUMES]   # TOCs first; the pages they link to are appended
-    tocs, done, failed, in_a_row = set(queue), {"added": 0, "unchanged": 0, "skipped": 0}, {}, 0
+    tocs, done, failed, in_a_row = set(queue), {"added": 0, "reverted": 0, "unchanged": 0, "skipped": 0}, {}, 0
     i = 0
     while i < len(queue) and in_a_row < MAX_FAILURES_IN_A_ROW:
         uri = queue[i]

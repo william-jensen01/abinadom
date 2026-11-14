@@ -100,6 +100,37 @@ A run for one conference takes a few minutes, mostly for re-reading the ~335 top
 - **The "values" topic** is listed by the Church but its page currently returns an error. `fetch` keeps its old entries and notes it in the summary.
 - **Weaviate needs a reload after a build.** A plain `run_pipeline.py` only adds talks it hasn't seen. Use `--force` to refresh everything after a new build.
 
+## Scriptures
+
+The scriptures are a separate store, `db/scripture.db` (never committed). It is built from the Church's content API in two steps, then loaded into Weaviate:
+
+| Command | What it does | Talks to the internet? |
+|---|---|---|
+| **`fetch_scriptures.py`** | Walks the tables of contents of the five standard works and the Joseph Smith Translation appendix, and stores every page's raw API response in `scripture.db`. A page is added only when its content changed, so a re-run that finds nothing new writes nothing. | Yes |
+| **`build_scriptures.py`** | Parses the stored pages into chapters, verses, footnotes and cross-references, imports the JST rows from `core.N.db`, links them, and runs its checks in one transaction. Writes `build_meta.build_id`, a hash of the parsed content, which includes the JST rows imported from `core.N.db`. | No |
+| **`run_scripture_pipeline.py`** | Loads `scripture.db` into the `ScriptureVerses`, `ScriptureChapters` and `ScriptureMeta` collections in Weaviate. | No (needs Weaviate and the embedder) |
+
+```
+ Church API ──fetch_scriptures──▶ scripture.db (raw pages)
+                                      │   + db/core.N.db (JST rows)
+                                build_scriptures
+                                      ▼
+                                scripture.db (parsed) ──run_scripture_pipeline──▶ Weaviate
+```
+
+| Situation | Run |
+|---|---|
+| **Starting from nothing** | `build` for `core.N.db` first, then `fetch_scriptures.py`, `build_scriptures.py`, `run_scripture_pipeline.py` |
+| **The Church corrected scripture text or footnotes** | `fetch_scriptures.py`, `build_scriptures.py`, `run_scripture_pipeline.py` |
+| **A new SCI release changed the JST rows** | `build_scriptures.py` again, then `run_scripture_pipeline.py` |
+| **A fetch stopped partway** | `fetch_scriptures.py --only-missing` |
+
+The same rules as for talks apply: only the fetch touches the network, and `build_scriptures.py` can be repeated at will, because the same raw pages and the same `core.N.db` (the JST rows come from it) always give the same `build_id`.
+
+**The `build_id` ties the two stores together.** Search hits come from Weaviate, while footnotes, cross-references and JST text come from `scripture.db`, so both must be the same build. A complete load writes the file's `build_id` into `ScriptureMeta`. When that differs from the file's, the loader resets the three collections and reloads everything instead of resuming. The server compares the two once, at startup, and if they differ logs a warning and flags it in `/health`; it does not re-check while running. The fix is to run `run_scripture_pipeline.py` again and then recreate the server's container (`docker compose up -d --force-recreate mcp-server`), because the server compares them only at startup.
+
+**On a deployed server** `scripture.db` is mounted read-only, so an update means replacing the file and recreating the container (`docker compose up -d --force-recreate mcp-server`): the server opens the file and compares build ids only at startup. See [../DEPLOY.md](../DEPLOY.md).
+
 ## Where things live
 
 | What | Where |
@@ -111,3 +142,5 @@ A run for one conference takes a few minutes, mostly for re-reading the ~335 top
 | Hand corrections | `db/one-off-migration/talk_corrections.json` |
 | Which version the app uses | `SCI_DB_VERSION` in `.env` (default in `db/__init__.py`) |
 | The commands | `scripts/fetch.py`, `scripts/build.py` |
+| Scripture store | `db/scripture.db` (raw pages and parsed tables) |
+| The scripture commands | `scripts/fetch_scriptures.py`, `scripts/build_scriptures.py`, `scripts/run_scripture_pipeline.py` |

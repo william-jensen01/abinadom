@@ -6,7 +6,8 @@ import pytest
 
 from db.scripture import open_scripture_db
 from tests.scripture_world import FULL_DB, need_full_db
-from tools.scripture_tools import ScriptureStore, get_chapter_overview, get_verse
+from tools.scripture_tools import (ScriptureStore, _ref_target, find_cross_references, get_chapter_overview,
+                                   get_verse)
 
 
 @pytest.fixture(scope="module")
@@ -256,3 +257,83 @@ def test_include_jst_passage_with_several_compare_refs(real_store):
         assert "JST 1 Cor. 7:1–2, 5, 26, 29–33, 38" not in cor.get(v, []), v
     matt = get_verse(real_store, "Matt", 4, 1, include_jst=True)["verses"][0]["jst"]
     assert "JST Matt. 4:1, 5–6, 8–9" in [j["reference"] for j in matt]    # a gapped passage is cited as printed
+
+
+def test_find_cross_references_both_directions(store):
+    r = find_cross_references(store, "Alma", 32, 21)
+    assert r["reference"] == "Alma 32:21"
+    by_marker = {n["marker"]: [t["target"] for t in n["targets"]] for n in r["outgoing"]}
+    assert by_marker["21a"] == ["John 20:29", "Heb. 11:1–40"]
+    assert not any(t.startswith("tg/") for ts in by_marker.values() for t in ts)   # study helps are not scripture
+    assert "Ether 12:6" in [t for ts in by_marker.values() for t in ts]
+    assert "Ex. 7:1" in [t["target"] for n in find_cross_references(store, "Exodus", 4, 16)["outgoing"]
+                         for t in n["targets"]]
+    json.dumps(r)
+
+    # a ref to a range counts as incoming for every verse in it: Ex 4:16 is pointed at by Ex 7:1 and Moses 1:25
+    incoming = find_cross_references(store, "Exodus", 4, 16)["incoming"]
+    refs = [s["reference"] for s in incoming]
+    assert {"Ex. 7:1", "Moses 1:25"} <= set(refs)
+    assert "Ex. 4:16" not in refs                       # a verse is never its own source
+    assert len(refs) == len(set(refs))                  # one entry per source verse
+    assert all(s["footnotes"] and {"marker", "context", "text"} <= set(s["footnotes"][0]) for s in incoming)
+
+
+def test_find_cross_references_outgoing_keeps_refs_to_pages_that_are_not_chapters(store):
+    """Gen 1:6a also points at Facsimile 2 (no chapter): it is listed with its label and page URI."""
+    (note,) = [n for n in find_cross_references(store, "Gen", 1, 6)["outgoing"] if n["marker"] == "6a"]
+    assert {"label": "fac. 2, fig. 4", "target": "/scriptures/pgp/abr/fac-2"}.items() <= note["targets"][-1].items()
+    assert [t["target"] for t in note["targets"][:2]] == ["Moses 2:6–8", "Abr. 4:6–8"]
+
+
+def test_find_cross_references_incoming_from_other_volumes_and_chapters(store):
+    john = [s["reference"] for s in find_cross_references(store, "John", 3, 16)["incoming"]]
+    assert "D&C 45:5" in john
+    gen = [s["reference"] for s in find_cross_references(store, "Genesis", 6, 18)["incoming"]]
+    assert "Gen. 9:9" in gen
+
+
+def test_find_cross_references_messages(store):
+    assert "Unknown book" in find_cross_references(store, "Hezekiah", 1, 1)
+    assert "No chapter 99" in find_cross_references(store, "Alma", 99, 1)
+    assert find_cross_references(store, "Alma", 32, 500).startswith("No verse 500 in")
+    assert "JST" in find_cross_references(store, "JST Genesis", 8, 13)
+
+
+def test_jst_ref_without_jst_verse_row_is_cited():
+    """A ref into the JST appendix with no jst_verse row is cited from its link (or text), never a raw URI."""
+    def target(**r):
+        return _ref_target(None, {"category": "cross-ref", "ref_type": "scripture-ref", **r})
+
+    assert target(target_uri="/scriptures/jst/jst-ex/33", target_chapter=33, target_verse_start=20,
+                  target_verse_end=20, label="JST Ex. 33:20, 23 (Appendix)") == "JST Ex. 33:20"
+    assert target(category="jst", target_uri="/scriptures/jst/jst-rom/7", target_chapter=7, target_verse_start=26,
+                  target_verse_end=26, label="JST Rom. 7:5–27 (Appendix)") == "JST Rom. 7:26"
+    assert target(target_uri="/scriptures/jst/jst-ex/33", target_chapter=33, target_verse_start=20,
+                  target_verse_end=23, label="x") == "JST Ex. 33:20–23"
+    assert target(category="jst", ref_type="jst-note", target_chapter=8, target_verse_start=24, target_verse_end=24,
+                  label="JST Gen. 8:23–24 … my covenant") == "JST Gen. 8:24"
+    assert target(target_uri="/scriptures/jst/jst-gen/1-8", label="JST Gen. 1–8 (Appendix)") == \
+        "JST Gen. 1–8 (Appendix)"
+
+
+def test_jst_refs_without_jst_verse_row_on_real_store(real_store):
+    def targets(book, chapter, verse, marker):
+        return [t["target"] for n in find_cross_references(real_store, book, chapter, verse)["outgoing"]
+                if n["marker"] == marker for t in n["targets"]]
+
+    gen = targets("Gen", 32, 30, "30b")
+    assert {"JST Ex. 33:20", "JST Ex. 33:23"} <= set(gen)
+    rom = targets("Rom", 7, 5, "5a")
+    assert {"JST Rom. 7:26", "JST Rom. 7:27"} <= set(rom)
+    assert not any(t.startswith("/") for t in rom + gen)
+
+
+def test_whole_chapter_ref_is_incoming_for_every_verse(real_store):
+    """Ether 1:4 footnotes Genesis 1 as a whole chapter: it is incoming for each verse of it, marked as such."""
+    for verse in (1, 17, 31):
+        notes = [n for s in find_cross_references(real_store, "Gen", 1, verse)["incoming"]
+                 if s["reference"] == "Ether 1:4" for n in s["footnotes"]]
+        assert notes and all(n.get("whole_chapter") for n in notes), verse
+    verse_refs = [n for s in find_cross_references(real_store, "Ex", 4, 16)["incoming"] for n in s["footnotes"]]
+    assert verse_refs and not any(n.get("whole_chapter") for n in verse_refs)

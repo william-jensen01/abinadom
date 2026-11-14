@@ -1,4 +1,5 @@
--- scripture.db raw layer. Written only by scripts/fetch_scriptures.py, append-only.
+-- scripture.db raw layer. Written only by scripts/fetch_scriptures.py: one row per distinct content of a page;
+-- a page that reverts to earlier content has that row re-inserted with a new fetched_at and rowid.
 CREATE TABLE IF NOT EXISTS raw_page (
   uri           TEXT NOT NULL,        -- "/scriptures/bofm/alma/32"
   lang          TEXT NOT NULL,        -- "eng"

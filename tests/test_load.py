@@ -27,6 +27,7 @@ from models.validation_report import ValidationReport
 from loaders.shared_transforms import load_talk_bundles, TalkBundle
 from loaders.weaviate_loader import WeaviateLoader
 from config.pipeline_config import WEAVIATE_COLLECTION_NAMES
+from tests.scripture_world import free_port
 
 # Embedded Weaviate is only supported on Linux/macOS (not Windows).
 # See: https://github.com/weaviate/weaviate/issues/3315
@@ -243,14 +244,18 @@ def _mock_embed_fn(texts: list[str]) -> list[list[float]]:
 
 
 @pytest.fixture(scope="session")
-def weaviate_client():
+def weaviate_client(tmp_path_factory):
     """Session-scoped embedded Weaviate client.
 
-    Uses weaviate.connect_to_embedded() on Linux/macOS (CI).
+    Uses weaviate.connect_to_embedded() on Linux/macOS (CI), on free ports and a
+    temporary data directory so concurrent test runs do not collide.
     On Windows, returns None — callers must skip or mock as appropriate.
     """
     if EMBEDDED_AVAILABLE:
-        with weaviate.connect_to_embedded() as client:
+        with weaviate.connect_to_embedded(
+            port=free_port(), grpc_port=free_port(),
+            persistence_data_path=str(tmp_path_factory.mktemp("weaviate")),
+        ) as client:
             yield client
     else:
         yield None
@@ -260,7 +265,7 @@ def weaviate_client():
 def weaviate_loader(weaviate_client):
     """Session-scoped WeaviateLoader.
 
-    On Linux/macOS: connects to embedded Weaviate (ports 8079 HTTP, 50050 gRPC).
+    On Linux/macOS: connects to the embedded Weaviate from weaviate_client.
     On Windows: returns a MagicMock loader that exercises load_talk_bundles logic
     without requiring a real Weaviate instance.
     """

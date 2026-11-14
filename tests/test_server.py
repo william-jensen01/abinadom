@@ -1272,7 +1272,8 @@ def test_tools_list_local_mode_no_auth_required(mcp_headers):
             init_resp = client.post("/mcp", json={
                 "jsonrpc": "2.0", "id": 1, "method": "initialize",
                 "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "0"}},
-            })
+            }, headers=mcp_headers)
+            assert init_resp.status_code == 200
             session_id = init_resp.headers["MCP-Session-Id"]
             resp = client.post("/mcp", json={
                 "jsonrpc": "2.0", "id": 2, "method": "tools/list",
@@ -1589,6 +1590,17 @@ class TestFindByScripture:
 class TestCorpusStats:
     """Integration tests for the corpus_stats MCP tool."""
 
+    def test_unknown_collection_lists_all_six_and_description_explains_verse_count(self):
+        """The unknown-collection message names every collection; the description explains the verse count."""
+        from server import corpus_stats
+
+        ctx, _ = _make_mock_ctx()
+        result = asyncio.run(corpus_stats(collection="nope", ctx=ctx))
+        for name in ("talks", "paragraphs", "citations", "footnotes", "scripture_verses", "scripture_chapters"):
+            assert name in result
+        doc = corpus_stats.__doc__ or corpus_stats.fn.__doc__
+        assert "41,995" in doc and "1,359" in doc and 'variant' in doc
+
     def test_no_group_by_returns_total(self):
         """corpus_stats with no group_by returns JSON with collection and total count."""
         from server import corpus_stats
@@ -1673,7 +1685,7 @@ class TestCorpusStats:
 
         result = asyncio.run(corpus_stats(collection="nonexistent", ctx=ctx))
 
-        assert result == "Unknown collection 'nonexistent'. Valid: talks, paragraphs, citations, footnotes."
+        assert result == "Unknown collection 'nonexistent'. Valid: talks, paragraphs, citations, footnotes, scripture_verses, scripture_chapters."
         # Weaviate must not have been called
         mock_client.collections.use.assert_not_called()
 
@@ -1689,6 +1701,31 @@ class TestCorpusStats:
         with patch("server.get_embedding_function") as mock_gef:
             asyncio.run(corpus_stats(collection="paragraphs", ctx=ctx))
             mock_gef.assert_not_called()
+
+    def test_scripture_collections(self):
+        """The scripture collections aggregate their own Weaviate collections."""
+        from server import corpus_stats
+
+        ctx, mock_client = _make_mock_ctx()
+        mock_client.collections.use.return_value.aggregate.over_all.return_value.total_count = 43354
+
+        for collection, weaviate_name in (("scripture_verses", "ScriptureVerses"),
+                                          ("scripture_chapters", "ScriptureChapters")):
+            parsed = json.loads(asyncio.run(corpus_stats(collection=collection, ctx=ctx)))
+            assert parsed == {"collection": collection, "total": 43354}
+            mock_client.collections.use.assert_called_with(weaviate_name)
+
+    def test_scripture_not_loaded(self):
+        """Without the scripture collections, corpus_stats says so and does not query Weaviate."""
+        from server import corpus_stats
+
+        ctx, mock_client = _make_mock_ctx()
+        ctx.lifespan_context["app"].scripture_loaded = False
+
+        result = asyncio.run(corpus_stats(collection="scripture_verses", group_by="volume", ctx=ctx))
+
+        assert "scripture corpus not available" in result
+        mock_client.collections.use.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

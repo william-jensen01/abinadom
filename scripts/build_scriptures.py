@@ -23,7 +23,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from config.scripture_books import BOOK_CROSSWALK, VOLUME_ABBR, book_abbr  # noqa: E402
+from config.scripture_books import BOOK_CROSSWALK, SUB_BOOK_NAMES, VOLUME_ABBR, book_abbr  # noqa: E402
 from db import SCI_DB_VERSION  # noqa: E402
 from extractors import scripture_jst as jst  # noqa: E402
 from extractors import scripture_page as sp  # noqa: E402
@@ -90,10 +90,11 @@ class Builder:
                 groups = sp.toc_groups(self.data(vuri))
                 for uri in links:
                     if b := sp.book_uri(uri):
-                        names = groups.get(uri) or [None]
-                        # a sub-book's parent first (abr for abr/fac), named by the outermost group
-                        self.add_book(vol, volume_id, "/".join(b.split("/")[:4]), names[-1])
-                        self.add_book(vol, volume_id, b, names[0])
+                        names, parent = groups.get(uri) or [None], "/".join(b.split("/")[:4])
+                        # a sub-book's parent first (abr for abr/fac), named by the outermost group; the sub-book
+                        # by its own group nested in the parent's, or else by SUB_BOOK_NAMES
+                        self.add_book(vol, volume_id, parent, names[-1])
+                        self.add_book(vol, volume_id, b, names[0] if b == parent or len(names) > 1 else None)
         for sort, (uri, page) in enumerate(self.pages.items()):
             self.page_ids[uri] = insert(self.conn, "page", uri=uri, book_id=self.book_ids.get(sp.book_uri(uri)),
                                         kind=page.kind, title=page.title, sort=sort)
@@ -102,6 +103,7 @@ class Builder:
     def add_book(self, vol, volume_id, uri, name) -> None:
         if uri not in self.book_ids:
             path = uri.split("/", 3)[3]
+            name = name or SUB_BOOK_NAMES.get((vol, path))
             cite, core_id = BOOK_CROSSWALK.get((vol, path), (name or path, None))
             self.book_ids[uri] = insert(self.conn, "book", volume_id=volume_id, uri=uri, name=name or path,
                                         abbr=book_abbr(path), cite_abbr=cite, sort=len(self.book_ids),
@@ -187,7 +189,7 @@ class Builder:
     def passages(self) -> None:
         books = {core: bid for core, bid in self.conn.execute(
             "SELECT core_book_id, book_id FROM book WHERE core_book_id IS NOT NULL")}
-        unparsed, mismatched, rels, named = [], [], Counter(), 0
+        unparsed, mismatched, no_compare, unnamed, rels, named = [], [], [], [], Counter(), 0
         for uri, page in self.pages.items():
             if page.kind != "jst_appendix":
                 continue
@@ -206,9 +208,14 @@ class Builder:
                 self.conn.executemany("INSERT INTO jst_passage_verse (passage_id, jst_verse_id) VALUES (?,?)",
                                       [(passage_id, i) for i in dict.fromkeys(ids)])
                 named += len(set(ids))
-                heading = sorted({v for c1, v1, c2, v2 in p.ranges or [] if c1 == c2 for v in range(v1, v2 + 1)})
+                wanted = [(c1, v) for c1, v1, c2, v2 in p.ranges or [] if c1 == c2 for v in range(v1, v2 + 1)]
+                heading = sorted({v for _, v in wanted})
                 if p.paragraphs and heading != sorted(p.paragraphs):
                     mismatched.append(p.title)
+                if any((core_book, c, v) not in self.jst_ids for c, v in wanted):
+                    unnamed.append(p.title)
+                if not any(rel == "compare" for rel, _, _ in p.refs):
+                    no_compare.append(p.title)
                 for ref_seq, (rel, r, chapter_end) in enumerate(p.refs):
                     rels[rel] += 1
                     insert(self.conn, "jst_passage_ref", passage_id=passage_id, seq=ref_seq, rel=rel, href=r.href,
@@ -218,7 +225,9 @@ class Builder:
         self.fail("appendix passages whose heading does not parse to a JST verse range", unparsed)
         n = self.conn.execute("SELECT COUNT(*) FROM jst_passage").fetchone()[0]
         self.report.append(f"jst appendix passages: {n}, heading links: {dict(rels)}, jst_verse rows named: "
-                           f"{named}; headings whose verses differ from the printed paragraphs: {mismatched[:SAMPLE]}")
+                           f"{named}; no Compare link: {len(no_compare)}; heading verses not in jst_verse: "
+                           f"{len(unnamed)}" + (f" ({'; '.join(unnamed[:SAMPLE])})" if unnamed else "")
+                           + f"; headings whose verses differ from the printed paragraphs: {mismatched[:SAMPLE]}")
 
     # -- the remaining build checks ----------------------------------------------
     def validate(self, core_count: int) -> None:
@@ -281,6 +290,8 @@ def build(db_path: str) -> int:
         return 1
     conn = sqlite3.connect(db_path, isolation_level=None)
     try:
+        if conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE name IN ('raw_page', 'raw_latest')").fetchone()[0] < 2:
+            raise BuildError(f"{db_path} has no raw layer; run scripts/fetch_scriptures.py first")
         raw = {u: (h, js) for u, h, js in conn.execute(
             "SELECT uri, content_hash, json FROM raw_latest WHERE lang = 'eng' AND status = 200")}
         tocs = {v: sp.toc_links(json.loads(raw[f"/scriptures/{v}"][1])) if f"/scriptures/{v}" in raw else None

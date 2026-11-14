@@ -171,12 +171,15 @@ class TestCanonicalQueries:
             assert q["k"] == 10, f"Expected k=10, got k={q['k']} in {q}"
 
     def test_has_john_filter(self):
-        """At least one entry must have filter == {'book_name': 'John'} (CONTEXT D-10)."""
+        """At least one entry must have filter == {'book': 'John'} (CONTEXT D-10).
+
+        The citations collection schema property is "book" (loaders/weaviate_loader.py).
+        """
         has_john = any(
-            (q.get("filter") or {}).get("book_name") == "John"
+            (q.get("filter") or {}).get("book") == "John"
             for q in CANONICAL_QUERIES
         )
-        assert has_john, "No CANONICAL_QUERIES entry with filter={'book_name': 'John'}"
+        assert has_john, "No CANONICAL_QUERIES entry with filter={'book': 'John'}"
 
     def test_all_collections_are_strings(self):
         """The collection field must be a non-empty string in every entry."""

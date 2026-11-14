@@ -42,6 +42,9 @@ BOOK_CROSSWALK = {
     ("pgp", "js-m"): ("JS—M", 404), ("pgp", "js-h"): ("JS—H", 405), ("pgp", "a-of-f"): ("A of F", 406),
 }
 
+# a sub-book's name when the volume TOC gives it no group of its own (its parent's group would misname it)
+SUB_BOOK_NAMES = {("pgp", "abr/fac"): "Facsimiles"}
+
 
 def book_abbr(book_path: str) -> str:
     """"1-ne" -> "1 ne", "abr/fac" -> "fac"."""
