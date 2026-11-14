@@ -279,6 +279,13 @@ def test_find_cross_references_both_directions(store):
     assert all(s["footnotes"] and {"marker", "context", "text"} <= set(s["footnotes"][0]) for s in incoming)
 
 
+def test_find_cross_references_outgoing_keeps_refs_to_pages_that_are_not_chapters(store):
+    """Gen 1:6a also points at Facsimile 2 (no chapter): it is listed with its label and page URI."""
+    (note,) = [n for n in find_cross_references(store, "Gen", 1, 6)["outgoing"] if n["marker"] == "6a"]
+    assert {"label": "fac. 2, fig. 4", "target": "/scriptures/pgp/abr/fac-2"}.items() <= note["targets"][-1].items()
+    assert [t["target"] for t in note["targets"][:2]] == ["Moses 2:6–8", "Abr. 4:6–8"]
+
+
 def test_find_cross_references_incoming_from_other_volumes_and_chapters(store):
     john = [s["reference"] for s in find_cross_references(store, "John", 3, 16)["incoming"]]
     assert "D&C 45:5" in john

@@ -479,7 +479,7 @@ def find_cross_references(store: ScriptureStore, book: str, chapter: int, verse:
             "jv.core_book_id AS jst_core_book_id FROM footnote f JOIN footnote_ref r ON r.footnote_id = f.footnote_id "
             "LEFT JOIN jst_verse jv ON jv.jst_verse_id = r.target_jst_verse_id "
             "WHERE f.verse_id = ? AND r.target_help IS NULL "
-            "AND (r.target_chapter IS NOT NULL OR r.target_jst_verse_id IS NOT NULL) "
+            "AND (r.target_uri IS NOT NULL OR r.target_chapter IS NOT NULL OR r.target_jst_verse_id IS NOT NULL) "
             "ORDER BY f.footnote_id, r.seq", (verse_id,)):
         note = outgoing.setdefault(r["footnote_id"], {"marker": r["marker"], "context": r["context"],
                                                       "text": r["text"], "targets": []})
