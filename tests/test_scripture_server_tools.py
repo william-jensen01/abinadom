@@ -74,6 +74,31 @@ def test_corpus_stats_covers_both_scripture_collections(loaded):
     assert "total" in blob(talks)
 
 
+def test_corpus_stats_grouped_scripture_reports_total_and_ungrouped(loaded):
+    _, client, env = loaded
+    from config.pipeline_config import WEAVIATE_SCRIPTURE_COLLECTION_NAMES
+    chapters = client.collections.use(WEAVIATE_SCRIPTURE_COLLECTION_NAMES["chapters"])
+    books = [o.properties.get("book") for o in chapters.iterator(return_properties=["book"])]
+    no_book = sum(b is None for b in books)
+    assert no_book > 0, "the fixture needs front-matter chapters (book None) for this test"
+
+    ch, top, refs, bad, talks_bad = call_tools(env, [
+        ("corpus_stats", {"collection": "scripture_chapters", "group_by": "book", "limit": 1000}),
+        ("corpus_stats", {"collection": "scripture_chapters", "group_by": "book", "limit": 1}),
+        ("corpus_stats", {"collection": "scripture_verses", "group_by": "reference", "limit": 5}),
+        ("corpus_stats", {"collection": "scripture_chapters", "group_by": "nope"}),
+        ("corpus_stats", {"collection": "talks", "group_by": "nope"}),
+    ])
+    assert ch["total"] == len(books) and ch["ungrouped"] == no_book, blob(ch)[:300]
+    assert sum(g["count"] for g in ch["groups"]) + ch["ungrouped"] == ch["total"]
+    # ungrouped is counted over every group, not just the ones returned
+    assert top["total"] == len(books) and top["ungrouped"] == no_book and len(top["groups"]) == 1, blob(top)
+    # more than Weaviate's default 100 groups: all are counted, so nothing is wrongly reported as ungrouped
+    assert refs["total"] > 100 and "ungrouped" not in refs and len(refs["groups"]) == 5, blob(refs)[:300]
+    assert isinstance(bad, str) and "nope" in bad and "book" in bad and "volume" in bad, bad
+    assert talks_bad == {"collection": "talks", "group_by": "nope", "groups": []}, blob(talks_bad)
+
+
 def test_get_citing_talks_tool_pages_and_get_verse_counts(loaded):
     _, _, env = loaded
     page, verse, bad = call_tools(env, [

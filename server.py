@@ -916,10 +916,14 @@ async def corpus_stats(
         group_by: Optional property name to group by (e.g. "speaker_name", "conference_year", "conference_month";
             for the scripture collections "volume" or "book", and "variant" or "has_jst" on scripture_verses).
         limit: Maximum number of groups to return when group_by is set (default 20).
+
+    For the scripture collections a grouped result also carries "total" (all objects) and, when some objects
+    have no value for group_by (e.g. front-matter pages in scripture_chapters have no book), "ungrouped".
     """
     app: AppContext = ctx.lifespan_context["app"]
 
-    if collection in ("scripture_verses", "scripture_chapters"):
+    scripture = collection in ("scripture_verses", "scripture_chapters")
+    if scripture:
         if not app.scripture_loaded:
             return SCRIPTURE_NOT_AVAILABLE
         col_name = WEAVIATE_SCRIPTURE_COLLECTION_NAMES[collection.removeprefix("scripture_")]
@@ -934,14 +938,35 @@ async def corpus_stats(
         res = col.aggregate.over_all(total_count=True)
         return json.dumps({"collection": collection, "total": res.total_count})
 
-    res = col.aggregate.over_all(group_by=GroupByAggregate(prop=group_by), total_count=True)
+    if not scripture:
+        res = col.aggregate.over_all(group_by=GroupByAggregate(prop=group_by), total_count=True)
+        groups = [
+            {"value": group.grouped_by.value, "count": group.total_count}
+            for group in res.groups
+        ]
+        groups.sort(key=lambda g: g["count"], reverse=True)
+        groups = groups[:limit]
+        return json.dumps({"collection": collection, "group_by": group_by, "groups": groups}, ensure_ascii=False)
+
+    # Weaviate returns no groups (not an error) for a property the collection lacks, so check it here.
+    props = [p.name for p in col.config.get().properties]
+    if group_by not in props:
+        return f"Unknown group_by property '{group_by}' for {collection}. Valid: {', '.join(props)}."
+
+    total = col.aggregate.over_all(total_count=True).total_count
+    # Group-by caps the number of groups (100 by default); ask for all of them so the ungrouped count is exact.
+    res = col.aggregate.over_all(group_by=GroupByAggregate(prop=group_by, limit=max(total, 1)), total_count=True)
     groups = [
         {"value": group.grouped_by.value, "count": group.total_count}
         for group in res.groups
     ]
+    # Objects with no value for group_by (null) fall in no group.
+    ungrouped = total - sum(g["count"] for g in groups)
     groups.sort(key=lambda g: g["count"], reverse=True)
-    groups = groups[:limit]
-    return json.dumps({"collection": collection, "group_by": group_by, "groups": groups}, ensure_ascii=False)
+    out = {"collection": collection, "group_by": group_by, "total": total, "groups": groups[:limit]}
+    if ungrouped > 0:
+        out["ungrouped"] = ungrouped
+    return json.dumps(out, ensure_ascii=False)
 
 
 @mcp.tool()
