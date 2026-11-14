@@ -202,6 +202,17 @@ def test_missing_core_db_is_a_prerequisite(tmp_path, monkeypatch, capsys):
     assert "PREREQUISITE" in capsys.readouterr().err
 
 
+def test_report_counts_passages_with_no_compare_link_or_missing_heading_verses(tmp_path, monkeypatch, capsys):
+    core = [r for r in CORE if (r["BookID"], r["Chapter"], r["Verse"]) != (GEN, 9, 5)]   # inside "Genesis 9:4–6"
+    monkeypatch.setattr(scripture_jst, "read_core_jst", lambda: (core, len(core)))
+    gen9 = json.loads(json.dumps(PAGES["/scriptures/jst/jst-gen/9"]).replace("Compare", "See also", 1))
+    db = make_raw_db(tmp_path / "report.db", replace={"/scriptures/jst/jst-gen/9": gen9})
+    assert build_scriptures.build(str(db)) == 0
+    out = capsys.readouterr().out
+    assert "no Compare link: 1;" in out
+    assert "heading verses not in jst_verse: 1 (JST, Genesis 9:4–6.);" in out
+
+
 @pytest.mark.parametrize("pgp", [
     toc("Pearl of Great Price", group("Abraham", link("/scriptures/pgp/abr/_contents"), link("/scriptures/pgp/abr/1"),
                                       link("/scriptures/pgp/abr/fac-1"))),

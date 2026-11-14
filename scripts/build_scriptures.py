@@ -189,7 +189,7 @@ class Builder:
     def passages(self) -> None:
         books = {core: bid for core, bid in self.conn.execute(
             "SELECT core_book_id, book_id FROM book WHERE core_book_id IS NOT NULL")}
-        unparsed, mismatched, rels, named = [], [], Counter(), 0
+        unparsed, mismatched, no_compare, unnamed, rels, named = [], [], [], [], Counter(), 0
         for uri, page in self.pages.items():
             if page.kind != "jst_appendix":
                 continue
@@ -208,9 +208,14 @@ class Builder:
                 self.conn.executemany("INSERT INTO jst_passage_verse (passage_id, jst_verse_id) VALUES (?,?)",
                                       [(passage_id, i) for i in dict.fromkeys(ids)])
                 named += len(set(ids))
-                heading = sorted({v for c1, v1, c2, v2 in p.ranges or [] if c1 == c2 for v in range(v1, v2 + 1)})
+                wanted = [(c1, v) for c1, v1, c2, v2 in p.ranges or [] if c1 == c2 for v in range(v1, v2 + 1)]
+                heading = sorted({v for _, v in wanted})
                 if p.paragraphs and heading != sorted(p.paragraphs):
                     mismatched.append(p.title)
+                if any((core_book, c, v) not in self.jst_ids for c, v in wanted):
+                    unnamed.append(p.title)
+                if not any(rel == "compare" for rel, _, _ in p.refs):
+                    no_compare.append(p.title)
                 for ref_seq, (rel, r, chapter_end) in enumerate(p.refs):
                     rels[rel] += 1
                     insert(self.conn, "jst_passage_ref", passage_id=passage_id, seq=ref_seq, rel=rel, href=r.href,
@@ -220,7 +225,9 @@ class Builder:
         self.fail("appendix passages whose heading does not parse to a JST verse range", unparsed)
         n = self.conn.execute("SELECT COUNT(*) FROM jst_passage").fetchone()[0]
         self.report.append(f"jst appendix passages: {n}, heading links: {dict(rels)}, jst_verse rows named: "
-                           f"{named}; headings whose verses differ from the printed paragraphs: {mismatched[:SAMPLE]}")
+                           f"{named}; no Compare link: {len(no_compare)}; heading verses not in jst_verse: "
+                           f"{len(unnamed)}" + (f" ({'; '.join(unnamed[:SAMPLE])})" if unnamed else "")
+                           + f"; headings whose verses differ from the printed paragraphs: {mismatched[:SAMPLE]}")
 
     # -- the remaining build checks ----------------------------------------------
     def validate(self, core_count: int) -> None:
