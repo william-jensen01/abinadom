@@ -4,6 +4,7 @@
 .planning/
 __pycache__/
 */__pycache__/
+.pytest_cache/
 **/*.db
 **/*.db-shm
 **/*.db-wal
@@ -22,5 +23,6 @@ tasks/
 docs/
 scripts/
 tests/
+benchmark/
 .env
 .env.example

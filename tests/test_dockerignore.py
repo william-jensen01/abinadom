@@ -58,3 +58,11 @@ def test_no_sqlite_file_is_in_the_image():
             if re.search(r"\.(db|db-shm|db-wal|sqlite)$", f) and not _excluded(rel, rules):
                 leaked.append(rel)
     assert not leaked, f"database files would be baked into the image: {leaked[:10]}"
+
+
+def test_test_and_benchmark_artifacts_are_excluded():
+    """Neither is imported by the server; .pytest_cache and benchmark results only bloat the build context."""
+    rules = _rules()
+    for path in (".pytest_cache/v/cache/nodeids", "benchmark/runner.py", "benchmark/results/run.json"):
+        assert _excluded(path, rules), f"{path} would be sent in the build context"
+    assert not _excluded("server.py", rules)
