@@ -66,3 +66,24 @@ def test_test_and_benchmark_artifacts_are_excluded():
     for path in (".pytest_cache/v/cache/nodeids", "benchmark/runner.py", "benchmark/results/run.json"):
         assert _excluded(path, rules), f"{path} would be sent in the build context"
     assert not _excluded("server.py", rules)
+
+
+def test_tool_code_and_church_json_are_in_the_context():
+    """The tools image copies the scripts, what they import, the migration modules and the four Church JSON files."""
+    rules = _rules()
+    for needed in ("scripts/build.py", "scripts/fetch.py", "api/fetch_talk_previews.py",
+                   "process_topic_talks/extract_talk_metadata.py", "db/one-off-migration/backfill_topics.py",
+                   "db/scripture_schema.sql",
+                   "db/one-off-migration/talk_metadata.json", "db/one-off-migration/talk_previews.json",
+                   "db/one-off-migration/conference_topics.json", "db/one-off-migration/talk_corrections.json"):
+        assert (ROOT / needed).exists(), needed
+        assert not _excluded(needed, rules), f"{needed} must be in the build context"
+
+
+def test_secrets_data_and_planning_are_excluded_at_any_depth():
+    rules = _rules()
+    for path in (".env", "infra/.env", "a/b/.env", ".env.example", "data/failed_talks.json", "data/reports/x.json",
+                 "db/sci/core.55.db", "db/sci/notes.json", ".goal/GOAL.md", "db/build_report.55.json",
+                 "db/reports/failed_talks.json", "db/one-off-migration/other.json",
+                 "scripts/__pycache__/build.cpython-312.pyc", "db/one-off-migration/__pycache__/x.pyc"):
+        assert _excluded(path, rules), f"{path} would be sent in the build context"
