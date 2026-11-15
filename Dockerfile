@@ -30,6 +30,12 @@ COPY loaders/ ./loaders/
 COPY models/ ./models/
 COPY utils/ ./utils/
 COPY db/scripture_schema.sql ./db/
-COPY db/one-off-migration/ ./db/one-off-migration/
+COPY db/one-off-migration/*.py db/one-off-migration/*.sql db/one-off-migration/talk_corrections.json ./db/one-off-migration/
+
+# scripts/fetch.py rewrites these in place and runs as whatever uid compose passes, so they are writable by any uid.
+# It also keeps its HTTP cache (http_cache.sqlite and its journal) in /app, which needs room to create them.
+COPY --chmod=0666 topics.json ./
+COPY --chmod=0666 db/one-off-migration/talk_metadata.json db/one-off-migration/talk_previews.json db/one-off-migration/conference_topics.json ./db/one-off-migration/
+RUN chmod 1777 /app
 
 CMD ["python", "scripts/build.py", "--help"]

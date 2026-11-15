@@ -16,7 +16,8 @@ __pycache__/
 **/*.json
 **/*.txt
 !requirements.txt
-# The Church data files build.py reads are versioned in git and baked into the tools image
+# The Church data files build.py and fetch.py read are versioned in git and baked into the tools image
+!topics.json
 !db/one-off-migration/talk_metadata.json
 !db/one-off-migration/talk_previews.json
 !db/one-off-migration/conference_topics.json
