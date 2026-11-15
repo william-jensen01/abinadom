@@ -11,7 +11,7 @@ Expected numbers are computed from the built scripture.db, never hard-coded:
                  chapter search 'plan of salvation' -> a plausible plan-of-salvation chapter
   meta build_id: ScriptureMeta holds one object whose build_id equals the db's
 
-  --db PATH   the built scripture.db (default db/scripture.db)
+  --db PATH   the built scripture.db (default $SCRIPTURE_DB_PATH, else db/scripture.db)
 Exit 0 = every check passed. Needs Weaviate and the embedder (EMBEDDING_URL) from the environment or .env.
 """
 import argparse
@@ -61,7 +61,8 @@ def expected(db_path: str) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--db", default=os.path.join(ROOT, "db", "scripture.db"))
+    ap.add_argument("--db", default=os.environ.get("SCRIPTURE_DB_PATH") or os.path.join(ROOT, "db", "scripture.db"),
+                    help="the built scripture.db (default $SCRIPTURE_DB_PATH, else db/scripture.db)")
     args = ap.parse_args()
     _load_env()
     from weaviate.classes.aggregate import GroupByAggregate

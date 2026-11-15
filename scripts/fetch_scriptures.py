@@ -7,6 +7,7 @@ User-Agent, uncached session). A row is added only when the page's sha256 change
 interruption are kept and a re-fetch that finds no change writes nothing. A page that reverts to content stored
 earlier has that row re-stamped so it is the latest again (counted as "reverted").
 
+  --db PATH        the scripture.db to fetch into (default $SCRIPTURE_DB_PATH, else db/scripture.db)
   --only-missing   skip pages that are already stored (walks the stored TOCs)
   --refresh        re-fetch every page, recording only changes (also what a run without a flag does)
 
@@ -27,7 +28,8 @@ if ROOT not in sys.path:
 from extractors.scripture_page import TOC_VOLUMES, toc_links  # noqa: E402
 from utils import church_api  # noqa: E402
 
-DEFAULT_DB = os.path.join(ROOT, "db", "scripture.db")
+# Set SCRIPTURE_DB_PATH to keep scripture.db elsewhere (a mounted data directory); unset or empty, it is db/scripture.db.
+DEFAULT_DB = os.environ.get("SCRIPTURE_DB_PATH") or os.path.join(ROOT, "db", "scripture.db")
 SCHEMA = os.path.join(ROOT, "db", "scripture_schema.sql")
 LANG = "eng"
 MAX_FAILURES_IN_A_ROW = 10
@@ -66,7 +68,7 @@ def fetch(conn, session, uri) -> str:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--db", default=DEFAULT_DB)
+    ap.add_argument("--db", default=DEFAULT_DB, help="scripture.db to fetch into (default $SCRIPTURE_DB_PATH, else db/scripture.db)")
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--only-missing", action="store_true", help="skip pages already stored")
     mode.add_argument("--refresh", action="store_true", help="re-fetch every page, record only changes")

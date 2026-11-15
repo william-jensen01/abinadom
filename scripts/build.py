@@ -2,9 +2,9 @@
 """
 build: raw SCI release + committed JSON → finished database.
 
-Runs offline. Copies db/sci/core.N.db and db/sci/content.N.db, enriches the
+Runs offline. Copies sci/core.N.db and sci/content.N.db (under $SCI_DB_DIR, default db/), enriches the
 copy by calling the backfill scripts' run() functions in order, and only then
-moves it to db/core.N.db and db/content.N.db. The raw release is never
+moves it to core.N.db and content.N.db beside sci/, with build_report.N.json. The raw release is never
 modified, and a failed build leaves no output. Overview:
 docs/update/HOW_UPDATES_WORK.md.
 
@@ -39,7 +39,9 @@ import backfill_topics
 import create_talk_metadata_table
 from create_talk_metadata_table import duplicate_uris, load_talk_uri_index
 
-DB_DIR = os.path.join(ROOT_DIR, "db")
+# Finished dbs and the build report go to SCI_DB_DIR (a mounted data directory); unset or empty, db/.
+# The raw SCI release is read from its sci/ folder.
+DB_DIR = os.environ.get("SCI_DB_DIR") or os.path.join(ROOT_DIR, "db")
 RAW_DIR = os.path.join(DB_DIR, "sci")
 METADATA_PATH = os.path.join(MIGRATION_DIR, "talk_metadata.json")
 PREVIEWS_PATH = os.path.join(MIGRATION_DIR, "talk_previews.json")

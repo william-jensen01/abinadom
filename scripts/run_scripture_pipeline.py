@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Load a built scripture.db into Weaviate (ScriptureVerses, ScriptureChapters, ScriptureMeta).
 
-  --db PATH     the built scripture.db (default db/scripture.db)
+  --db PATH     the built scripture.db (default $SCRIPTURE_DB_PATH, else db/scripture.db)
   --book NAME   load one book only (name, cite abbreviation, or URI segment: "Enos", "1 Ne.", "dc"); a slice
                 never writes ScriptureMeta's build_id
   --force       reload instead of resuming (with --book: only that book's objects)
@@ -115,7 +115,8 @@ def _add(index: dict, key, value: str) -> None:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--db", default=os.path.join(ROOT, "db", "scripture.db"), help="the built scripture.db")
+    ap.add_argument("--db", default=os.environ.get("SCRIPTURE_DB_PATH") or os.path.join(ROOT, "db", "scripture.db"),
+                    help="the built scripture.db (default $SCRIPTURE_DB_PATH, else db/scripture.db)")
     ap.add_argument("--book", help="load one book only (e.g. Enos)")
     ap.add_argument("--force", action="store_true", help="reload instead of resuming")
     args = ap.parse_args(argv)
