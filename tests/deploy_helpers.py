@@ -17,6 +17,7 @@ from pathlib import Path
 
 CODE_DIR = Path(__file__).resolve().parent.parent
 PY = sys.executable
+# SCRIPTURE_DB_PATH is no longer read (scripture.db is $SCI_DB_DIR/scripture.db); dropping it keeps a stale value out.
 PATH_VARS = ("SCI_DB_DIR", "SCRIPTURE_DB_PATH", "SCI_REPORT_DIR")
 PROBE = Path(__file__).resolve().parent / "script_arg_probe.py"
 
@@ -87,7 +88,7 @@ def render(proj: Path, files=None, profile="*", extra_env=None, fmt_json=True, s
 
 # Values a developer .env might hold; none may reach a container's path or Weaviate settings.
 LEAK_ENV = {
-    "SCI_DB_DIR": "/leak/db", "SCRIPTURE_DB_PATH": "/leak/scripture.db", "SCI_REPORT_DIR": "/leak/reports",
+    "SCI_DB_DIR": "/leak/db", "SCI_REPORT_DIR": "/leak/reports",
     "WEAVIATE_HOST": "leak-weaviate-host", "WEAVIATE_PORT": "18080", "WEAVIATE_GRPC_PORT": "15051",
 }
 EMBED_CANARY = "http://embed-canary.invalid:9999"

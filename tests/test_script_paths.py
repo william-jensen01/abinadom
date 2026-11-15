@@ -1,4 +1,4 @@
-"""Scripts take their default paths from SCI_DB_DIR, SCRIPTURE_DB_PATH and SCI_REPORT_DIR.
+"""Scripts (and, for scripture.db, the server) take their default paths from SCI_DB_DIR and SCI_REPORT_DIR.
 
 Unset (or empty) -> the paths under the script's own checkout, whatever the cwd. Set -> under the variable.
 An explicit flag beats both. 'Unset' cases run in a copy of the code tree so nothing real (data/failed_talks.json,
@@ -40,31 +40,57 @@ def cwd(tmp_path):
 
 
 # ----------------------------------------------------------------------------- scripture.db (--db)
+# scripture.db sits beside the talk dbs: $SCI_DB_DIR/scripture.db, else db/scripture.db. A stale SCRIPTURE_DB_PATH
+# (the variable this replaced) changes nothing.
 @pytest.mark.parametrize("script", SCRIPTURE_SCRIPTS)
-def test_scripture_db_default_unset(script, tree, cwd):
-    got = probe_args(tree, script, env=clean_env(), cwd=cwd)["db"]
-    assert same_path(got, tree / "db" / "scripture.db"), f"{script}: unset default --db is {got}"
-
-
-@pytest.mark.parametrize("script", SCRIPTURE_SCRIPTS)
-def test_scripture_db_default_empty_is_unset(script, tree, cwd):
-    got = probe_args(tree, script, env=clean_env(SCRIPTURE_DB_PATH=""), cwd=cwd)["db"]
-    assert same_path(got, tree / "db" / "scripture.db"), f"{script}: SCRIPTURE_DB_PATH='' gives --db {got}"
+def test_scripture_db_default_unset(script, tree, cwd, tmp_path):
+    for env in (clean_env(), clean_env(SCI_DB_DIR=""), clean_env(SCRIPTURE_DB_PATH=tmp_path / "stale.db")):
+        got = probe_args(tree, script, env=env, cwd=cwd)["db"]
+        assert same_path(got, tree / "db" / "scripture.db"), f"{script}: unset/empty SCI_DB_DIR gives --db {got}"
 
 
 @pytest.mark.parametrize("script", SCRIPTURE_SCRIPTS)
-def test_scripture_db_from_env(script, tree, cwd, tmp_path):
-    want = tmp_path / "vol" / "scripture.db"
-    got = probe_args(tree, script, env=clean_env(SCRIPTURE_DB_PATH=want), cwd=cwd)["db"]
-    assert same_path(got, want), f"{script}: SCRIPTURE_DB_PATH={want} gives --db {got}"
+def test_scripture_db_from_sci_db_dir(script, tree, cwd, tmp_path):
+    vol = tmp_path / "vol"
+    for env in (clean_env(SCI_DB_DIR=vol), clean_env(SCI_DB_DIR=vol, SCRIPTURE_DB_PATH=tmp_path / "stale.db")):
+        got = probe_args(tree, script, env=env, cwd=cwd)["db"]
+        assert same_path(got, vol / "scripture.db"), f"{script}: SCI_DB_DIR={vol} gives --db {got}"
 
 
 @pytest.mark.parametrize("script", SCRIPTURE_SCRIPTS)
 def test_scripture_db_flag_wins(script, tree, cwd, tmp_path):
     flag = tmp_path / "flag" / "x.db"
-    got = probe_args(tree, script, ["--db", str(flag)], env=clean_env(SCRIPTURE_DB_PATH=tmp_path / "env.db"),
-                     cwd=cwd)["db"]
-    assert same_path(got, flag), f"{script}: --db {flag} with SCRIPTURE_DB_PATH set gives {got}"
+    got = probe_args(tree, script, ["--db", str(flag)], env=clean_env(SCI_DB_DIR=tmp_path / "vol"), cwd=cwd)["db"]
+    assert same_path(got, flag), f"{script}: --db {flag} with SCI_DB_DIR set gives {got}"
+
+
+# The server opens the same file. With no scripture.db there it logs the path it tried and returns None.
+_OPEN_SCRIPTURE = r"""
+import logging, sys
+logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+sys.path.insert(0, sys.argv[1])
+from db.scripture import open_scripture_db
+print("OPENED", open_scripture_db() is not None)
+"""
+
+
+def _server_scripture_path_tried(root, env, cwd, expect):
+    r = run([PY, "-c", _OPEN_SCRIPTURE, str(root)], cwd=cwd, env=env)
+    out = r.stdout + r.stderr
+    assert r.returncode == 0 and "OPENED False" in out, f"open_scripture_db() (exit {r.returncode}):\n{out[-1200:]}"
+    assert str(expect) in out, f"server must look for scripture.db at {expect}:\n{out[-1200:]}"
+
+
+def test_server_scripture_db_unset(tree, cwd, tmp_path):
+    for env in (clean_env(), clean_env(SCI_DB_DIR=""), clean_env(SCRIPTURE_DB_PATH=tmp_path / "stale.db")):
+        _server_scripture_path_tried(tree, env, cwd, tree / "db" / "scripture.db")
+
+
+def test_server_scripture_db_from_sci_db_dir(tree, cwd, tmp_path):
+    vol = tmp_path / "vol"
+    vol.mkdir()
+    _server_scripture_path_tried(tree, clean_env(SCI_DB_DIR=vol, SCRIPTURE_DB_PATH=tmp_path / "stale.db"), cwd,
+                                 vol / "scripture.db")
 
 
 # ----------------------------------------------------------------------------- reports (--output)

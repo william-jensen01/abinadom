@@ -1,12 +1,14 @@
 """Read-only access to scripture.db for the MCP server.
 
 The same `db.Database` as core.db: a read-only connection, the 5s query timeout, and a slow query returns `[]`.
-The path comes from `SCRIPTURE_DB_PATH`, read when `open_scripture_db` is called (server startup), never at import.
+The file is `db.SCRIPTURE_DB_PATH` (scripture.db beside the talk dbs, in `SCI_DB_DIR`), looked up when
+`open_scripture_db` is called (server startup).
 """
 import logging
 import os
 from typing import Optional
 
+import db
 from db import DEFAULT_TIMEOUT, Database
 
 log = logging.getLogger("sci-db")
@@ -26,11 +28,9 @@ EXPECTED_SCRIPTURE_TABLES = {
 
 
 def open_scripture_db(path: Optional[str] = None, timeout: int = DEFAULT_TIMEOUT) -> Optional[Database]:
-    """A read-only Database on scripture.db (default: `SCRIPTURE_DB_PATH`), or None when it is unset, missing,
-    empty, or not a built store. Never raises: scripture is optional and the talk tools must not depend on it."""
-    path = path or os.environ.get("SCRIPTURE_DB_PATH")
-    if not path:
-        return None
+    """A read-only Database on scripture.db (default: `db.SCRIPTURE_DB_PATH`), or None when it is missing, empty,
+    or not a built store. Never raises: scripture is optional and the talk tools must not depend on it."""
+    path = path or db.SCRIPTURE_DB_PATH
     if not os.path.isfile(path) or os.path.getsize(path) == 0:
         log.warning("scripture.db not found or empty at %s", path)
         return None

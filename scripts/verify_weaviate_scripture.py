@@ -11,7 +11,7 @@ Expected numbers are computed from the built scripture.db, never hard-coded:
                  chapter search 'plan of salvation' -> a plausible plan-of-salvation chapter
   meta build_id: ScriptureMeta holds one object whose build_id equals the db's
 
-  --db PATH   the built scripture.db (default $SCRIPTURE_DB_PATH, else db/scripture.db)
+  --db PATH   the built scripture.db (default $SCI_DB_DIR/scripture.db, else db/scripture.db)
 Exit 0 = every check passed. Needs Weaviate and the embedder (EMBEDDING_URL) from the environment or .env.
 """
 import argparse
@@ -22,6 +22,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
+
+from db import SCRIPTURE_DB_PATH  # noqa: E402
 
 PLAN = {"Alma 12", "Alma 22", "Alma 34", "Alma 40", "Alma 41", "Alma 42", "2 Ne. 2", "2 Ne. 9", "2 Ne. 31",
         "Moses 1", "Moses 5", "Moses 6", "Abr. 3", "D&C 76", "D&C 88", "D&C 93", "D&C 131", "D&C 137",
@@ -61,8 +63,8 @@ def expected(db_path: str) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--db", default=os.environ.get("SCRIPTURE_DB_PATH") or os.path.join(ROOT, "db", "scripture.db"),
-                    help="the built scripture.db (default $SCRIPTURE_DB_PATH, else db/scripture.db)")
+    ap.add_argument("--db", default=SCRIPTURE_DB_PATH,
+                    help="the built scripture.db (default $SCI_DB_DIR/scripture.db, else db/scripture.db)")
     args = ap.parse_args()
     _load_env()
     from weaviate.classes.aggregate import GroupByAggregate

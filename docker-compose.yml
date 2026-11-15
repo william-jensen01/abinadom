@@ -16,9 +16,8 @@ services:
       - .env
     environment:
       # The image holds code only. Every SQLite file the server reads (core.<N>.db,
-      # content.<N>.db, scripture.db) sits in one host directory, mounted read-only at /data.
+      # content.<N>.db, scripture.db) sits in SCI_DB_DIR, one host directory mounted read-only at /data.
       SCI_DB_DIR: /data
-      SCRIPTURE_DB_PATH: /data/scripture.db
       # The server writes no reports; set so a value in .env cannot point somewhere else.
       SCI_REPORT_DIR: /data/reports
       SCI_DB_VERSION: ${SCI_DB_VERSION:-55}
@@ -51,7 +50,6 @@ services:
       - .env
     environment:
       SCI_DB_DIR: /data
-      SCRIPTURE_DB_PATH: /data/scripture.db
       SCI_REPORT_DIR: /data/reports
       <<: *weaviate-env
     volumes:

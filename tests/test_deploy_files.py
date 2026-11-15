@@ -1,8 +1,8 @@
 """docker-compose.yml mounts one read-only data directory (the image is code only) and reaches Weaviate; the
 deploy and update guides describe the current stack.
 
-The image holds code only (.dockerignore excludes *.db). core.<N>.db and content.<N>.db are read from SCI_DB_DIR and
-scripture.db from SCRIPTURE_DB_PATH; compose points both into one directory mounted once, read-only. Nothing may be
+The image holds code only (.dockerignore excludes *.db). core.<N>.db, content.<N>.db and scripture.db are all read
+from SCI_DB_DIR; compose points it at one directory mounted once, read-only. Nothing may be
 mounted at or under /app/db: it holds the `db` Python package baked into the image.
 """
 import json
@@ -55,10 +55,11 @@ def _covering(mounts, path):
 def test_scripture_db_mounted_read_only_at_its_path():
     _, svc = _compose()
     env = _env(svc)
-    assert env.get("SCRIPTURE_DB_PATH"), f"mcp-server must set SCRIPTURE_DB_PATH under environment: {json.dumps(env)}"
+    assert "SCRIPTURE_DB_PATH" not in env, f"scripture.db is $SCI_DB_DIR/scripture.db, set no SCRIPTURE_DB_PATH: {json.dumps(env)}"
+    path = str(env.get("SCI_DB_DIR") or "").rstrip("/") + "/scripture.db"
     mounts = _mounts(svc)
-    hit = _covering(mounts, env["SCRIPTURE_DB_PATH"])
-    assert hit, f"SCRIPTURE_DB_PATH={env['SCRIPTURE_DB_PATH']} must be inside a mount: {mounts}"
+    hit = _covering(mounts, path)
+    assert hit, f"{path} must be inside a mount: {mounts}"
     assert all(ro for _, _, ro in hit), f"the mount holding scripture.db must be read-only: {hit}"
 
 
@@ -72,8 +73,6 @@ def test_core_and_content_read_from_one_mounted_data_dir():
     assert data_dir and data_dir != APP_DB, f"mcp-server must set SCI_DB_DIR (not {APP_DB}): {json.dumps(env)}"
     hit = [m for m in mounts if m[1].rstrip("/") == data_dir]
     assert len(hit) == 1 and hit[0][2], f"mount the data directory once, read-only, at SCI_DB_DIR={data_dir}: {mounts}"
-    assert env["SCRIPTURE_DB_PATH"].startswith(data_dir + "/"), \
-        f"scripture.db lives in the same data directory: SCRIPTURE_DB_PATH={env['SCRIPTURE_DB_PATH']}"
     assert not any(tgt.startswith(data_dir + "/") for _, tgt, _ in mounts), \
         f"one directory mount, not separate files under {data_dir}: {mounts}"
 
@@ -115,12 +114,12 @@ def test_weaviate_service_reachable_from_mcp_server():
 
 
 def test_deploy_guide_describes_the_current_stack():
-    # CHROMADB_HOST and OLLAMA_URL are env vars the server no longer reads: a guide that names them is stale.
+    # CHROMADB_HOST, OLLAMA_URL and SCRIPTURE_DB_PATH are env vars the server no longer reads: a guide that names them is stale.
     deploy = (ROOT / "docs" / "DEPLOY.md").read_text()
-    for s in ("WEAVIATE_HOST", "EMBEDDING_URL", "SCRIPTURE_DB_PATH", "SCI_DB_VERSION", "build_id",
+    for s in ("WEAVIATE_HOST", "EMBEDDING_URL", "SCI_DB_DIR", "SCI_DB_VERSION", "build_id",
               "run_scripture_pipeline", "fetch_scriptures", "build_scriptures"):
         assert s in deploy, f"docs/DEPLOY.md must cover {s}"
-    for stale in ("CHROMADB_HOST", "OLLAMA_URL"):
+    for stale in ("CHROMADB_HOST", "OLLAMA_URL", "SCRIPTURE_DB_PATH"):
         assert stale not in deploy, f"docs/DEPLOY.md still documents {stale}, which the server no longer reads"
 
 

@@ -17,6 +17,8 @@ DB_DIR = os.environ.get("SCI_DB_DIR") or CURRENT_DIR
 SCI_DB_VERSION = os.environ.get("SCI_DB_VERSION", "55")
 CORE_DB_PATH = os.path.join(DB_DIR, f"core.{SCI_DB_VERSION}.db")
 CONTENT_DB_PATH = os.path.join(DB_DIR, f"content.{SCI_DB_VERSION}.db")
+# scripture.db, built by scripts/fetch_scriptures.py and scripts/build_scriptures.py, sits beside them.
+SCRIPTURE_DB_PATH = os.path.join(DB_DIR, "scripture.db")
 
 DEFAULT_TIMEOUT = 5  # seconds
 

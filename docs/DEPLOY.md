@@ -56,7 +56,7 @@ Both `mcp-server` and `tools` read `.env` (`env_file`).
 | `COMPOSE_FILE` | Which compose files `docker compose` uses; see "Compose files" below | `docker-compose.yml:docker-compose.proxy.yml` |
 | `HOST_UID`, `HOST_GID` | Owner of the files `tools` writes into `db/` (default `1000:1000`) | output of `id -u` and `id -g` |
 
-> **Set by compose, not by `.env`.** `docker-compose.yml` sets the data paths (`SCI_DB_DIR=/data`, `SCRIPTURE_DB_PATH=/data/scripture.db`, `SCI_REPORT_DIR=/data/reports`) and the Weaviate address (`WEAVIATE_HOST=weaviate`, `WEAVIATE_PORT=8080`, `WEAVIATE_GRPC_PORT=50051`) for both containers under `environment:`. Those win over `.env`, so a stale value there cannot reach a container. The `WEAVIATE_*` lines in `.env.example` are only for developers running scripts directly on a host.
+> **Set by compose, not by `.env`.** `docker-compose.yml` sets the data paths (`SCI_DB_DIR=/data`, `SCI_REPORT_DIR=/data/reports`) and the Weaviate address (`WEAVIATE_HOST=weaviate`, `WEAVIATE_PORT=8080`, `WEAVIATE_GRPC_PORT=50051`) for both containers under `environment:`. Those win over `.env`, so a stale value there cannot reach a container. The `WEAVIATE_*` lines in `.env.example` are only for developers running scripts directly on a host.
 
 ### File ownership: `HOST_UID` and `HOST_GID`
 
@@ -177,7 +177,6 @@ The images hold code only. Both services mount the same host directory:
 # mcp-server: reads only
 environment:
   SCI_DB_DIR: /data
-  SCRIPTURE_DB_PATH: /data/scripture.db
 volumes:
   - ./db:/data:ro
 
@@ -186,7 +185,7 @@ volumes:
   - ./db:/data
 ```
 
-`core.<N>.db` and `content.<N>.db` are resolved inside `SCI_DB_DIR` from `SCI_DB_VERSION`, the raw release is read from `/data/sci`, and `scripture.db` is read from `SCRIPTURE_DB_PATH`, which points into the same directory. Mount nothing at or under `/app/db`: it holds the `db` Python package that is baked into the images. Inside `tools`, name your own files by their `/data/...` path (for example `--db /data/scripture.new.db`), never `db/...`, which would be the package directory.
+`core.<N>.db` and `content.<N>.db` are resolved inside `SCI_DB_DIR` from `SCI_DB_VERSION`, the raw release is read from `/data/sci`, and `scripture.db` sits in the same directory (`/data/scripture.db`). Mount nothing at or under `/app/db`: it holds the `db` Python package that is baked into the images. Inside `tools`, name your own files by their `/data/...` path (for example `--db /data/scripture.new.db`), never `db/...`, which would be the package directory.
 
 ### Start the server
 
@@ -314,7 +313,7 @@ cd ~/infra && docker compose up -d
 Then retry starting the MCP stack. Without a reverse proxy, remove the override from `COMPOSE_FILE`.
 
 **4. Scripture tools say "scripture corpus not available"**
-Either `scripture.db` is not mounted at `SCRIPTURE_DB_PATH` (check `docker compose exec mcp-server ls -l /data/`; if the file is missing there, build it in `db/`, then recreate the container), or the `Scripture*` collections were not loaded in Weaviate when the server started (run `run_scripture_pipeline.py` in `tools`, then recreate the container: the check happens only at startup).
+Either `scripture.db` is not in the data directory (check `docker compose exec mcp-server ls -l /data/`; if the file is missing there, build it in `db/`, then recreate the container), or the `Scripture*` collections were not loaded in Weaviate when the server started (run `run_scripture_pipeline.py` in `tools`, then recreate the container: the check happens only at startup).
 
 **5. Cannot reach the embedding server from a container**
 Set `EMBEDDING_URL` to the host and port the embedding server actually runs on, reachable from inside the container (`localhost` there is the container itself). Verify the server listens on that address, not just `127.0.0.1`. The load scripts fail the same way when they cannot reach it.

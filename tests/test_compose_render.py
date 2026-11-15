@@ -73,13 +73,14 @@ def test_mounts(combo, proj, configs):
 @pytest.mark.parametrize("combo", COMBOS)
 def test_environment(combo, configs):
     cfg = configs[combo]
-    want = {"SCI_DB_DIR": "/data", "SCRIPTURE_DB_PATH": "/data/scripture.db",
+    want = {"SCI_DB_DIR": "/data",
             "WEAVIATE_HOST": "weaviate", "WEAVIATE_PORT": "8080", "WEAVIATE_GRPC_PORT": "50051"}
     envs = {n: {k: str(v) for k, v in (_svc(cfg, n).get("environment") or {}).items()} for n in ("mcp-server", "tools")}
     for name, env in envs.items():
         for k, v in want.items():
             assert env.get(k) == v, f"{name}: {k}={env.get(k)!r}, want {v!r}"
         assert env.get("EMBEDDING_URL") == EMBED_CANARY, f"{name} must get EMBEDDING_URL from .env: {env.get('EMBEDDING_URL')!r}"
+        assert "SCRIPTURE_DB_PATH" not in env, f"{name}: scripture.db is $SCI_DB_DIR/scripture.db, no variable: {env}"
         leaked = {k: v for k, v in env.items() if v in LEAK_ENV.values()}
         assert not leaked, f"{name}: .env values reached the container: {leaked}"
     assert envs["tools"].get("SCI_REPORT_DIR") == "/data/reports", f"tools SCI_REPORT_DIR={envs['tools'].get('SCI_REPORT_DIR')!r}"

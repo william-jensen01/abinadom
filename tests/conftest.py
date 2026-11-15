@@ -12,7 +12,7 @@ import sys
 # at real data, which would make tests read it, skip, or write into it. Drop them before anything
 # imports `db` or a script, so every test starts from the repo-relative defaults; a test that wants
 # a value sets it itself (monkeypatch).
-for _var in ("SCI_DB_DIR", "SCRIPTURE_DB_PATH", "SCI_REPORT_DIR"):
+for _var in ("SCI_DB_DIR", "SCI_REPORT_DIR"):
     os.environ.pop(_var, None)
 from pathlib import Path
 from urllib.parse import urlparse

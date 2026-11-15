@@ -1,5 +1,5 @@
-"""The repo's tests give the same result whether or not SCI_DB_DIR, SCRIPTURE_DB_PATH and
-SCI_REPORT_DIR are set in the caller's shell, and they write nothing to where those point.
+"""The repo's tests give the same result whether or not SCI_DB_DIR and SCI_REPORT_DIR (and a stale
+SCRIPTURE_DB_PATH) are set in the caller's shell, and they write nothing to where those point.
 
 Runs the repo suite twice (vars unset; vars pointing at an empty temp dir) and compares every test's outcome.
 Slow (two full suite runs), so it is opt-in:

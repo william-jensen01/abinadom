@@ -365,20 +365,32 @@ def weaviate_env(tmp_path_factory):
     srv.shutdown()
 
 
+@contextlib.contextmanager
+def scripture_db_at(path):
+    """Point the in-process server at `path` as its scripture.db (db.SCRIPTURE_DB_PATH) until the block exits."""
+    import db as dbpkg
+    old = dbpkg.SCRIPTURE_DB_PATH
+    dbpkg.SCRIPTURE_DB_PATH = str(path)
+    try:
+        yield
+    finally:
+        dbpkg.SCRIPTURE_DB_PATH = old
+
+
 @pytest.fixture(scope="module")
 def loaded(tmp_path_factory, built_db, weaviate_env):
-    """built_db loaded into the embedded Weaviate by run_scripture_pipeline.py. Returns (db, client, env), where
-    env also points the server at the db copy (SCRIPTURE_DB_PATH)."""
+    """built_db loaded into the embedded Weaviate by run_scripture_pipeline.py. Returns (db, client, env). For the
+    rest of the module the in-process server reads this db copy as its scripture.db."""
     client, env = weaviate_env
     for n in ("ScriptureVerses", "ScriptureChapters", "ScriptureMeta"):
         if client.collections.exists(n):
             client.collections.delete(n)
     db = tmp_path_factory.mktemp("loaded") / "scripture.db"
     shutil.copy(built_db, db)
-    e = dict(env, SCRIPTURE_DB_PATH=str(db))
-    code, out = run_script("run_scripture_pipeline.py", "--db", db, env=e)
+    code, out = run_script("run_scripture_pipeline.py", "--db", db, env=env)
     assert code == 0, f"run_scripture_pipeline.py failed ({code}):\n{out[-2000:]}"
-    return db, client, e
+    with scripture_db_at(db):
+        yield db, client, env
 
 
 # ---------------------------------------------------------------------------
