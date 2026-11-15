@@ -128,3 +128,49 @@ def test_updates_guide_has_a_scripture_section():
     upd = (ROOT / "docs" / "update" / "HOW_UPDATES_WORK.md").read_text()
     for s in ("fetch_scriptures", "build_scriptures", "run_scripture_pipeline"):
         assert s in upd, f"docs/update/HOW_UPDATES_WORK.md needs a scripture section naming {s}"
+
+
+def _file(name):
+    return yaml.safe_load((ROOT / name).read_text())
+
+
+def test_tools_service_runs_scripts_with_a_writable_data_mount():
+    comp, _ = _compose()
+    tools = (comp.get("services") or {}).get("tools")
+    assert tools, "docker-compose.yml needs a tools service for the build and load scripts"
+    assert tools.get("profiles"), "tools must sit under a profile so `up` does not start it"
+    assert tools.get("entrypoint") == ["python"]
+    assert "HOST_UID" in str(tools.get("user")) and "HOST_GID" in str(tools.get("user"))
+    mounts = _mounts(tools)
+    assert [m for m in mounts if m[1] == "/data" and not m[2]], f"tools mounts ./db read-write at /data: {mounts}"
+    env = _env(tools)
+    assert env.get("SCI_REPORT_DIR") == "/data/reports"
+    assert env.get("SCI_DB_DIR") == "/data"
+
+
+def test_weaviate_address_is_shared_between_services():
+    comp, svc = _compose()
+    tools = comp["services"]["tools"]
+    for name in ("WEAVIATE_HOST", "WEAVIATE_PORT", "WEAVIATE_GRPC_PORT"):
+        assert _env(svc)[name] == _env(tools)[name]
+
+
+def test_base_file_publishes_no_weaviate_ports_and_no_external_network():
+    comp, svc = _compose()
+    assert not comp["services"]["weaviate"].get("ports"), "weaviate is published only by the ports override"
+    assert not any((v or {}).get("external") for v in (comp.get("networks") or {}).values())
+    assert svc.get("ports") == ["127.0.0.1:7363:7363"]
+
+
+def test_override_files():
+    proxy = _file("docker-compose.proxy.yml")
+    assert "proxy" in proxy["networks"] and proxy["networks"]["proxy"]["external"] is True
+    assert "default" in proxy["services"]["mcp-server"]["networks"], "mcp-server must stay on Weaviate's network"
+    ports = _file("docker-compose.weaviate-ports.yml")["services"]["weaviate"]["ports"]
+    assert sorted(ports) == ["127.0.0.1:50051:50051", "127.0.0.1:8080:8080"]
+
+
+def test_env_example_documents_proxy_override_and_host_script_settings():
+    ex = (ROOT / ".env.example").read_text()
+    assert "COMPOSE_FILE=docker-compose.yml:docker-compose.proxy.yml" in ex
+    assert "WEAVIATE_HOST=" in ex and "not in Docker" in ex

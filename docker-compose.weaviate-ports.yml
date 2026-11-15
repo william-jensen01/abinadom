@@ -1,0 +1,7 @@
+# Publishes Weaviate on this machine's loopback only, for running the load scripts from the host:
+#   docker compose -f docker-compose.yml -f docker-compose.weaviate-ports.yml up -d weaviate
+services:
+  weaviate:
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:50051:50051"

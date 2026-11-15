@@ -1,0 +1,13 @@
+# Joins mcp-server to the external `proxy` network (create it first: docker network create proxy), for a reverse
+# proxy or tunnel that reaches the server by service name. It stays on the default network too, where Weaviate is.
+# Enable with COMPOSE_FILE=docker-compose.yml:docker-compose.proxy.yml in .env.
+services:
+  mcp-server:
+    networks:
+      - default
+      - proxy
+
+networks:
+  proxy:
+    external: true
+    name: proxy
