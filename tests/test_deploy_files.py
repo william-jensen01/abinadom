@@ -174,3 +174,50 @@ def test_env_example_documents_proxy_override_and_host_script_settings():
     ex = (ROOT / ".env.example").read_text()
     assert "COMPOSE_FILE=docker-compose.yml:docker-compose.proxy.yml" in ex
     assert "WEAVIATE_HOST=" in ex and "not in Docker" in ex
+
+
+# --- deploy guide: Docker-only path, in start order ---
+
+TOOLS_RUN = "docker compose run --rm tools scripts/"
+LOAD_SCRIPTS = ["build.py", "fetch_scriptures.py", "build_scriptures.py", "run_pipeline.py",
+                "verify_weaviate_pipeline.py", "run_scripture_pipeline.py", "verify_weaviate_scripture.py"]
+
+
+def _deploy_text():
+    return (ROOT / "docs" / "DEPLOY.md").read_text()
+
+
+def test_deploy_guide_documents_only_the_docker_path():
+    d = _deploy_text()
+    assert "pipenv" not in d.lower(), "docs/DEPLOY.md still documents pipenv"
+    assert "one address" not in d.lower(), "docs/DEPLOY.md keeps the 'one address from host and container' EMBEDDING_URL rule"
+    m = re.search(r"^## Prerequisites\n(.*?)(?=^## )", d, re.M | re.S)
+    assert m, "docs/DEPLOY.md needs a '## Prerequisites' section"
+    assert "python" not in m.group(1).lower(), f"Prerequisites still list Python:\n{m.group(1)[:400]}"
+
+
+def test_deploy_guide_runs_scripts_in_the_tools_container():
+    d = _deploy_text()
+    missing = [s for s in LOAD_SCRIPTS if TOOLS_RUN + s not in d]
+    assert not missing, f"docs/DEPLOY.md must run these as `{TOOLS_RUN}<script>`: {missing}"
+
+
+def test_deploy_guide_start_order():
+    d = _deploy_text()
+    w = d.find("docker compose up -d weaviate")
+    t = d.find(TOOLS_RUN + "run_pipeline.py")
+    up = re.search(r"^docker compose up -d[ \t]*$", d[t:] if t >= 0 else "", re.M)
+    assert 0 <= w < t and up, "docs/DEPLOY.md order must be: `docker compose up -d weaviate`, then the tools loads, then `docker compose up -d`"
+
+
+def test_deploy_guide_covers_overrides_and_build():
+    d = _deploy_text()
+    for s in ("docker-compose.proxy.yml", "COMPOSE_FILE", "docker-compose.weaviate-ports.yml", "HOST_UID",
+              "docker compose build", "scripts/fetch.py", "/data/reports"):
+        assert s in d, f"docs/DEPLOY.md must cover {s}"
+
+
+def test_claude_md_keeps_pipenv_commands():
+    c = (ROOT / "CLAUDE.md").read_text()
+    assert "pipenv run python -m pytest" in c and "pipenv requirements > requirements.txt" in c, \
+        "CLAUDE.md must keep the pipenv developer commands"
