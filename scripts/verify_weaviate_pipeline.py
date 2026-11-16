@@ -496,7 +496,10 @@ def check_topics_metadata(client: weaviate.WeaviateClient) -> Dict[str, Any]:
         props = obj.properties
         title = props.get("title") or ""
         speaker_name = props.get("speaker_name") or ""
+        # Weaviate returns an empty text[] as null, so a talk without topics comes back as None.
         topics = props.get("topics")
+        if topics is None:
+            topics = []
 
         title_ok = bool(title.strip())
         speaker_ok = bool(speaker_name.strip())
