@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the normalized layer of scripture.db from its raw layer and core.db's JST.
 
-  --db PATH   the scripture.db to build in place (default db/scripture.db)
+  --db PATH   the scripture.db to build in place (default $SCI_DB_DIR/scripture.db, else db/scripture.db)
 
 Fails, naming them, when a TOC page or a page a TOC links to has no stored response. Otherwise drops and
 recreates every normalized table in ONE transaction, parses every page, imports core.db's J/F rows, links the
@@ -24,11 +24,11 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from config.scripture_books import BOOK_CROSSWALK, SUB_BOOK_NAMES, VOLUME_ABBR, book_abbr  # noqa: E402
-from db import SCI_DB_VERSION  # noqa: E402
+from db import SCI_DB_VERSION, SCRIPTURE_DB_PATH  # noqa: E402
 from extractors import scripture_jst as jst  # noqa: E402
 from extractors import scripture_page as sp  # noqa: E402
 
-DEFAULT_DB = os.path.join(ROOT, "db", "scripture.db")
+DEFAULT_DB = SCRIPTURE_DB_PATH  # beside the talk dbs: $SCI_DB_DIR/scripture.db, else db/scripture.db
 SCHEMA = os.path.join(ROOT, "db", "scripture_schema.sql")
 MARKER = "-- ==== normalized layer ===="
 TABLES = ["volume", "book", "page", "chapter", "verse", "jst_verse", "footnote", "footnote_ref",
@@ -345,7 +345,7 @@ def build(db_path: str) -> int:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--db", default=DEFAULT_DB, help="scripture.db to build in place (default db/scripture.db)")
+    ap.add_argument("--db", default=DEFAULT_DB, help="scripture.db to build in place (default $SCI_DB_DIR/scripture.db, else db/scripture.db)")
     return build(ap.parse_args(argv).db)
 
 

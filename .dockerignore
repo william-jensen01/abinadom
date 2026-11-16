@@ -2,8 +2,11 @@
 .gitignore
 .claude/
 .planning/
+.goal/
+.vscode/
 __pycache__/
-*/__pycache__/
+**/__pycache__/
+**/*.pyc
 .pytest_cache/
 **/*.db
 **/*.db-shm
@@ -13,16 +16,18 @@ __pycache__/
 **/*.json
 **/*.txt
 !requirements.txt
+# The Church data files build.py and fetch.py read are versioned in git and baked into the tools image
+!topics.json
+!db/one-off-migration/talk_metadata.json
+!db/one-off-migration/talk_previews.json
+!db/one-off-migration/conference_topics.json
+!db/one-off-migration/talk_corrections.json
 db/sci/
-db/one-off-migration/
-api/
-process_topic_talks/
 data/
 output/
 tasks/
 docs/
-scripts/
 tests/
 benchmark/
-.env
-.env.example
+**/.env
+**/.env.*

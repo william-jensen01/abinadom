@@ -7,6 +7,13 @@ TalkBundle fixture (D-09): deterministic minimal bundle (talk_id=9999) shared by
 import os
 import socket
 import sys
+
+# The path variables the server and scripts read at import time. A developer's shell may point them
+# at real data, which would make tests read it, skip, or write into it. Drop them before anything
+# imports `db` or a script, so every test starts from the repo-relative defaults; a test that wants
+# a value sets it itself (monkeypatch).
+for _var in ("SCI_DB_DIR", "SCI_REPORT_DIR"):
+    os.environ.pop(_var, None)
 from pathlib import Path
 from urllib.parse import urlparse
 

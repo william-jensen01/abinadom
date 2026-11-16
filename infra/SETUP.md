@@ -128,9 +128,9 @@ cd /path/to/mcp-project
 docker compose up -d
 ```
 
-The MCP stack's `docker-compose.yml` joins the `proxy` external network (configured in Phase 15/16). When this command runs, `mcp-server` attaches to the `proxy` network, and Caddy can reach it by container name.
+The MCP stack joins the `proxy` external network only when `docker-compose.proxy.yml` is enabled: set `COMPOSE_FILE=docker-compose.yml:docker-compose.proxy.yml` in the MCP project's `.env`. With that override, `mcp-server` attaches to the `proxy` network (and stays on its own default network, where Weaviate is), and Caddy can reach it by container name. Without it, `mcp-server` is published on `127.0.0.1:7363` only and is not reachable through Caddy.
 
-> **Important: Start order matters.** The infra stack (Step 6) must be running before you start the MCP stack. If the `proxy` network does not exist yet, this step will fail with:
+> **Important: Start order matters.** The infra stack (Step 6) must be running before you start the MCP stack. If the `proxy` network does not exist yet and the proxy override is enabled, this step will fail with:
 > ```
 > network proxy declared as external, but could not be found
 > ```
@@ -227,7 +227,7 @@ After a manual server reboot or stack restart:
 # Start infra stack first (creates the proxy network)
 cd ~/infra && docker compose up -d
 
-# Then start the MCP stack (joins the proxy network)
+# Then start the MCP stack (joins the proxy network via docker-compose.proxy.yml in COMPOSE_FILE)
 cd /path/to/mcp-project && docker compose up -d
 ```
 

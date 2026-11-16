@@ -23,7 +23,7 @@ Verdict per field (heuristic on populated %):
 
 Usage:
     pipenv run py scripts/field_coverage.py
-    pipenv run py scripts/field_coverage.py --output data/field_coverage_report.json
+    pipenv run py scripts/field_coverage.py --output field_coverage_report.json
     pipenv run py scripts/field_coverage.py --page-size 1000 --samples 5
 """
 
@@ -49,7 +49,9 @@ from config.pipeline_config import WEAVIATE_COLLECTION_NAMES
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_REPORT_PATH = Path(__file__).parent.parent / "data" / "field_coverage_report.json"
+# Reports go to SCI_REPORT_DIR; unset or empty, data/.
+REPORT_DIR = Path(os.environ.get("SCI_REPORT_DIR") or Path(__file__).parent.parent / "data")
+DEFAULT_REPORT_PATH = REPORT_DIR / "field_coverage_report.json"
 
 ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")
 
@@ -305,7 +307,7 @@ def main() -> None:
     parser.add_argument(
         "--output",
         default=str(DEFAULT_REPORT_PATH),
-        help="Path for the JSON report (default: data/field_coverage_report.json)",
+        help="Path for the JSON report (default: $SCI_REPORT_DIR/field_coverage_report.json, else data/field_coverage_report.json)",
     )
     parser.add_argument("--page-size", type=int, default=1000, help="Talks scan page size (default 1000)")
     parser.add_argument("--samples", type=int, default=5, help="Sample values to collect per field (default 5)")

@@ -14,7 +14,7 @@ Checks:
 
 Usage:
     pipenv run py scripts/verify_weaviate_pipeline.py
-    pipenv run py scripts/verify_weaviate_pipeline.py --output data/my_report.json
+    pipenv run py scripts/verify_weaviate_pipeline.py --output my_report.json
     pipenv run py scripts/verify_weaviate_pipeline.py --embedding
 """
 
@@ -40,8 +40,10 @@ from config.embedding import get_embedding_function
 
 logger = logging.getLogger(__name__)
 
-FAILED_TALKS_PATH = Path(__file__).parent.parent / "data" / "failed_talks.json"
-DEFAULT_REPORT_PATH = Path(__file__).parent.parent / "data" / "weaviate_verification_report.json"
+# Reports and failed_talks.json go to SCI_REPORT_DIR; unset or empty, data/.
+REPORT_DIR = Path(os.environ.get("SCI_REPORT_DIR") or Path(__file__).parent.parent / "data")
+FAILED_TALKS_PATH = REPORT_DIR / "failed_talks.json"
+DEFAULT_REPORT_PATH = REPORT_DIR / "weaviate_verification_report.json"
 
 
 # =============================================================================
@@ -494,7 +496,10 @@ def check_topics_metadata(client: weaviate.WeaviateClient) -> Dict[str, Any]:
         props = obj.properties
         title = props.get("title") or ""
         speaker_name = props.get("speaker_name") or ""
+        # Weaviate returns an empty text[] as null, so a talk without topics comes back as None.
         topics = props.get("topics")
+        if topics is None:
+            topics = []
 
         title_ok = bool(title.strip())
         speaker_ok = bool(speaker_name.strip())
@@ -540,7 +545,7 @@ def main() -> None:
     parser.add_argument(
         "--output",
         default=str(DEFAULT_REPORT_PATH),
-        help="Path for the verification report JSON (default: data/weaviate_verification_report.json)",
+        help="Path for the verification report JSON (default: $SCI_REPORT_DIR/weaviate_verification_report.json, else data/weaviate_verification_report.json)",
     )
     parser.add_argument(
         "--embedding",

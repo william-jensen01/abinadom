@@ -54,7 +54,9 @@ from loaders.weaviate_loader import WeaviateLoader
 
 logger = logging.getLogger(__name__)
 
-FAILED_TALKS_PATH = Path(__file__).parent.parent / "data" / "failed_talks.json"
+# Reports and failed_talks.json go to SCI_REPORT_DIR; unset or empty, data/.
+REPORT_DIR = Path(os.environ.get("SCI_REPORT_DIR") or Path(__file__).parent.parent / "data")
+FAILED_TALKS_PATH = REPORT_DIR / "failed_talks.json"
 
 LOG_FORMAT = "%(asctime)s %(levelname)-8s %(name)s: %(message)s"
 

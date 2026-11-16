@@ -179,7 +179,7 @@ def _startup() -> AppContext:
     _check_embedding()
     _validate_collections(client)
     try:
-        database = open_scripture_db()      # SCRIPTURE_DB_PATH, read now
+        database = open_scripture_db()      # scripture.db in SCI_DB_DIR, if it is there
         scripture = ScriptureStore.open(database) if database is not None else None
     except Exception as exc:  # noqa: BLE001 — scripture is optional; never block the talk tools
         logger.warning("scripture.db unavailable: %s", exc)

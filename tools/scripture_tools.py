@@ -16,7 +16,7 @@ from db import Database
 
 NOT_AVAILABLE = (
     "Error: scripture corpus not available on this server (scripture.db is missing or unusable; "
-    "set SCRIPTURE_DB_PATH to a built scripture.db). The talk tools are unaffected."
+    "build scripture.db into the directory SCI_DB_DIR names). The talk tools are unaffected."
 )
 
 TOP_CROSS_REFERENCES = 10

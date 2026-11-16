@@ -49,7 +49,7 @@ def test_missing_collections_and_db():
 
 import shutil  # noqa: E402
 
-from tests.scripture_world import FakeAPI, blob, build_world, call_tools, health, q1, run_script  # noqa: E402
+from tests.scripture_world import FakeAPI, blob, build_world, call_tools, health, q1, run_script, scripture_db_at  # noqa: E402
 
 
 def _unavailable(r):
@@ -58,18 +58,18 @@ def _unavailable(r):
 
 def test_no_scripture_db_keeps_talk_tools(loaded, tmp_path):
     _, _, env = loaded
-    e = dict(env, SCRIPTURE_DB_PATH=str(tmp_path / "nope.db"))
-    stats, verse, srch = call_tools(e, [
-        ("corpus_stats", {"collection": "talks"}),
-        ("get_verse", {"book": "John", "chapter": 3, "verse_start": 16}),
-        ("search", {"query": "faith", "collection": "scripture_verses", "alpha": 0.0}),
-    ], unset=("SCRIPTURE_DB_URL",))
+    with scripture_db_at(tmp_path / "nope.db"):
+        stats, verse, srch = call_tools(env, [
+            ("corpus_stats", {"collection": "talks"}),
+            ("get_verse", {"book": "John", "chapter": 3, "verse_start": 16}),
+            ("search", {"query": "faith", "collection": "scripture_verses", "alpha": 0.0}),
+        ], unset=("SCRIPTURE_DB_URL",))
     assert isinstance(stats, list) or "total" in blob(stats), f"talk tools must still work: {blob(stats)[:200]}"
     assert _unavailable(verse), f"get_verse without scripture.db must say 'scripture corpus not available': {blob(verse)[:200]}"
     assert "scripture corpus not available" in blob(verse), f"exact, case-sensitive phrase: {blob(verse)[:200]}"
-    (unset_only,) = call_tools({k: v for k, v in env.items() if k != "SCRIPTURE_DB_PATH"},
-                               [("corpus_stats", {"collection": "talks"})], unset=("SCRIPTURE_DB_PATH", "SCRIPTURE_DB_URL"))
-    assert "total" in blob(unset_only), "server must start with no scripture settings at all"
+    with scripture_db_at(tmp_path / "absent" / "scripture.db"):
+        (unset_only,) = call_tools(env, [("corpus_stats", {"collection": "talks"})], unset=("SCRIPTURE_DB_URL",))
+    assert "total" in blob(unset_only), "server must start with no scripture.db in its data directory"
 
 
 def test_unloaded_collections_keep_talk_tools(loaded):
@@ -105,8 +105,8 @@ def test_build_id_mismatch_is_reported(loaded, tmp_path):
     assert code == 0, out[-1500:]
     file_id = q1(db2, "SELECT value FROM build_meta WHERE key='build_id'")
     assert file_id != loaded_id
-    e = dict(env, SCRIPTURE_DB_PATH=str(db2))
-    status, body = health(e, unset=("SCRIPTURE_DB_URL",))
-    assert file_id in body and loaded_id in body, f"/health must report the mismatch naming both build IDs: {body[:300]}"
-    (stats,) = call_tools(e, [("corpus_stats", {"collection": "talks"})], unset=("SCRIPTURE_DB_URL",))
+    with scripture_db_at(db2):
+        status, body = health(env, unset=("SCRIPTURE_DB_URL",))
+        assert file_id in body and loaded_id in body, f"/health must report the mismatch naming both build IDs: {body[:300]}"
+        (stats,) = call_tools(env, [("corpus_stats", {"collection": "talks"})], unset=("SCRIPTURE_DB_URL",))
     assert "total" in blob(stats), "the server still starts on a mismatch"

@@ -1,18 +1,27 @@
+# Weaviate address as seen from inside the compose network: written once, used by every service that talks to it.
+x-weaviate-env: &weaviate-env
+  WEAVIATE_HOST: weaviate
+  WEAVIATE_PORT: "8080"
+  WEAVIATE_GRPC_PORT: "50051"
+
 services:
   mcp-server:
     image: h5wyxaa9vrvo/lds-mcp:latest
+    build:
+      context: .
+      target: server
+    ports:
+      - "127.0.0.1:7363:7363"
     env_file:
       - .env
     environment:
       # The image holds code only. Every SQLite file the server reads (core.<N>.db,
-      # content.<N>.db, scripture.db) sits in one host directory, mounted read-only at /data.
+      # content.<N>.db, scripture.db) sits in SCI_DB_DIR, one host directory mounted read-only at /data.
       SCI_DB_DIR: /data
-      SCRIPTURE_DB_PATH: /data/scripture.db
+      # The server writes no reports; set so a value in .env cannot point somewhere else.
+      SCI_REPORT_DIR: /data/reports
       SCI_DB_VERSION: ${SCI_DB_VERSION:-55}
-      # Weaviate is reached by its compose service name, on its in-network port.
-      WEAVIATE_HOST: weaviate
-      WEAVIATE_PORT: "8080"
-      WEAVIATE_GRPC_PORT: "50051"
+      <<: *weaviate-env
     volumes:
       # Never mount anything at or under /app/db: it holds the db package baked into the image.
       - ./db:/data:ro
@@ -23,8 +32,29 @@ services:
       retries: 3
       start_period: 60s
     restart: unless-stopped
-    networks:
-      - proxy
+    depends_on:
+      weaviate:
+        condition: service_healthy
+
+  # Data build and load scripts. Not started by `up`; run with
+  #   docker compose run --rm tools scripts/<script>.py ...
+  tools:
+    profiles: ["tools"]
+    image: h5wyxaa9vrvo/lds-mcp-tools:latest
+    build:
+      context: .
+      target: tools
+    entrypoint: ["python"]
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    env_file:
+      - .env
+    environment:
+      SCI_DB_DIR: /data
+      SCI_REPORT_DIR: /data/reports
+      <<: *weaviate-env
+    volumes:
+      # Everything the scripts build or download lands here, on the host. Never mount at or under /app/db.
+      - ./db:/data
     depends_on:
       weaviate:
         condition: service_healthy
@@ -32,9 +62,6 @@ services:
   weaviate:
     image: cr.weaviate.io/semitechnologies/weaviate:1.37.1
     restart: unless-stopped
-    ports:
-      - "8080:8080"
-      - "50051:50051"
     environment:
       AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
       PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
@@ -42,8 +69,6 @@ services:
       CLUSTER_HOSTNAME: "weaviate-node"
     volumes:
       - weaviate_data:/var/lib/weaviate
-    networks:
-      - proxy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider",
              "http://localhost:8080/v1/.well-known/ready"]
@@ -51,11 +76,6 @@ services:
       timeout: 30s
       retries: 5
       start_period: 30s
-
-networks:
-  proxy:
-    external: true
-    name: proxy
 
 volumes:
   weaviate_data:
