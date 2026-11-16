@@ -19,7 +19,6 @@ The data lives in SQLite files that the tools build into the host's `db/` direct
 - Docker Engine and Docker Compose v2 (`docker compose version` prints v2.x+)
 - Git
 - An embedding server serving `nomic-embed-text`, reachable from inside the containers (see Step 2)
-- The raw BYU Scripture Citation Index (SCI) release files `core.<N>.db` and `content.<N>.db`, for the talk build (Step 3)
 
 ---
 
@@ -102,17 +101,44 @@ docker compose ps        # weaviate should show "Up" / "healthy"
 
 ### Talks: `core.<N>.db` and `content.<N>.db`
 
-Built offline from the SCI release plus the Church data committed in the repository and baked into the `tools` image. Put the raw release files in `db/sci/` (`core.<N>.db`, `content.<N>.db`), then:
+Built from the BYU Scripture Citation Index (SCI) release plus the Church data committed in the repository and baked into the `tools` image. One command downloads the release and builds from it:
 
 ```bash
-docker compose run --rm tools scripts/build.py --version 55
+docker compose run --rm tools scripts/setup_data.py talks --version 55
+docker compose run --rm tools scripts/setup_data.py talks --version latest   # or: the newest release on the site
 ```
 
-and set `SCI_DB_VERSION=55` in `.env`. The finished files appear as `db/core.55.db` and `db/content.55.db`, with `db/build_report.55.json` beside them (rebuilding overwrites it). The raw release in `db/sci/` is never modified. See [update/HOW_UPDATES_WORK.md](update/HOW_UPDATES_WORK.md) for what `build` does.
+It runs `fetch_sci.py` to download the release, then `build.py` for that release, and ends by printing the line for `.env`, for example `SCI_DB_VERSION=55`: set `SCI_DB_VERSION` in `.env` to what it prints. Without `--version` it uses `SCI_DB_VERSION` (default `55`). Add `--force` to overwrite an existing build (it does not download the release again). It never touches Weaviate; loading is Step 5.
+
+The finished files appear as `db/core.<N>.db` and `db/content.<N>.db`, with `db/build_report.<N>.json` beside them (rebuilding overwrites it). See [update/HOW_UPDATES_WORK.md](update/HOW_UPDATES_WORK.md) for what `build` does.
+
+**Before building a newer release**, run `git pull` and `docker compose build tools`. The Church JSON that `build.py` reads is baked into the `tools` image, and a new SCI release can contain talks an older image's JSON does not know about. If setup warns that SCI talks are missing Church data, do exactly that, then run the same setup command again with `--force`.
+
+About the release download:
+
+- Releases come from `https://scriptures.byu.edu/sci.<N>.zip`; the site has no index. `latest` starts at the higher of `SCI_DB_VERSION` (default `55`) and the newest release already in `db/sci/`, tries the next three numbers past the newest one found, and stops after three misses in a row. There was never a release 54.
+- The release is installed in `db/sci/` as `core.<N>.db`, `content.<N>.db`, `lucene.<N>/` (the release's search index: kept, but nothing uses it) and `sci.<N>.json` (a download record). Other releases there are left alone, and the build never modifies any of it.
+- Re-running downloads nothing unless the release changed on the site (it compares the ETag in `sci.<N>.json`). A release you put in `db/sci/` by hand, without a record, is kept as it is. `fetch_sci.py --force` downloads it again.
+- A failed or cut-off download, or a zip that does not look right, leaves `db/sci/` as it was.
+
+The same work as separate steps:
+
+```bash
+docker compose run --rm tools scripts/fetch_sci.py --version 55     # or --version latest; installs the release in db/sci/
+docker compose run --rm tools scripts/build.py --version 55         # add --force to overwrite an existing build
+```
+
+then set `SCI_DB_VERSION=55` in `.env` yourself.
 
 ### Scriptures: `scripture.db`
 
-Built in two steps. The first is the only one that uses the network:
+One command runs both steps:
+
+```bash
+docker compose run --rm tools scripts/setup_data.py scriptures
+```
+
+Or run them separately. The first is the only one that uses the network:
 
 ```bash
 docker compose run --rm tools scripts/fetch_scriptures.py     # Church API -> raw layer of db/scripture.db
@@ -260,11 +286,11 @@ docker compose up -d --force-recreate mcp-server
 
 A different `build_id` makes `run_scripture_pipeline.py` reset the three scripture collections and reload them in full. Until the `mv`, scripture search can return the new build's objects (incomplete while the reload runs) while footnotes, cross-references and JST text still come from the old file, with no warning. Recreating the container afterwards re-runs the startup checks against the new build.
 
-New talk release (a new SCI version `<N>`): put the raw files in `db/sci/`, then
+New talk release (a new SCI version `<N>`): run `git pull` and `docker compose build tools` first (see Step 3), then
 
 ```bash
-docker compose run --rm tools scripts/build.py --version <N>     # writes db/core.<N>.db and db/content.<N>.db
-# set SCI_DB_VERSION=<N> in .env
+docker compose run --rm tools scripts/setup_data.py talks --version <N>   # or latest; writes db/core.<N>.db and db/content.<N>.db
+# set SCI_DB_VERSION=<N> in .env, as setup prints
 docker compose run --rm tools scripts/run_pipeline.py --force    # reload the talk collections
 cp db/scripture.db db/scripture.new.db                           # the scripture JST rows come from core.<N>.db, so rebuild it too
 docker compose run --rm tools scripts/build_scriptures.py --db /data/scripture.new.db
