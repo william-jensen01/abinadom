@@ -19,6 +19,9 @@ infra/.env
 # Local agent notes
 tasks/lessons.md
 db/build_report.*.json
+# Downloaded SCI releases and the tools container's reports
+db/sci/
+db/reports/
 *.building
 
 # Unused 165 MB debug dump (purged from history; over GitHub limit)
