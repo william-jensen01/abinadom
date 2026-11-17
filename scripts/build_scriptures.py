@@ -270,7 +270,7 @@ class Builder:
             "ORDER BY j.jst_verse_id").fetchall()
         self.report.append(f"jst_verse F rows no jst footnote or appendix passage names: {len(rows)}"
                            + (f" (e.g. {', '.join(r for r, in rows[:SAMPLE])})" if rows else ""))
-        # spec section 10: KJV Ex 7:3 links to JST Ex 7:3
+        # KJV Ex 7:3 must have a jst footnote_ref to JST Ex 7:3
         if not c.execute("SELECT 1 FROM page WHERE uri = '/scriptures/ot/ex/7'").fetchone():
             self.report.append("KJV Ex 7:3 -> JST Ex 7:3: not checked, /scriptures/ot/ex/7 is not in the store")
         elif c.execute(

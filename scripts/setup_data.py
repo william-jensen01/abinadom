@@ -46,7 +46,7 @@ def stale_church_hint(n: int):
           "(the Church JSON is older than this release). To fix it, refresh the Church JSON:")
     print("  in Docker:        git pull, then docker compose build tools")
     print("  on a dev machine: scripts/fetch.py --conference YYYY-MM, then commit the JSON")
-    print(f"then rebuild: setup_data.py talks --version {n} --force")
+    print(f"then run the same setup_data.py talks --version {n} command again, with --force")
 
 
 def talks(args) -> int:
