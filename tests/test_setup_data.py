@@ -168,7 +168,7 @@ def test_hint_when_sci_talks_lack_church_data(tree, ctx):
         f"7 unexpected SCI talks without Church data: one line must give the count and say Church data is missing:\n{out[-1200:]}"
     assert all(m in out for m in HINT_MARKERS), f"the hint must name the fix ({HINT_MARKERS}):\n{out[-1200:]}"
     assert any("setup_data.py talks" in l and re.search(r"\b55\b", l) and "--force" in l and "same" in l
-               for l in out.splitlines()), f"the last line must say to run the same talks --version 55 command again, with --force:\n{out[-1200:]}"
+               for l in out.splitlines()), f"a line must say to run the same talks --version 55 command again, with --force:\n{out[-1200:]}"
     assert "setup_data.py talks --version 55 --force" not in out, f"the hint must not print the bare command (in Docker it needs the docker compose run prefix):\n{out[-1200:]}"
 
 
