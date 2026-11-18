@@ -334,3 +334,154 @@ def test_no_via_through_a_jst_footnote_or_for_jst_input(store, compare_core):
     assert "JST Gen. 9:12" in [j["reference"] for j in jst]               # Gen. 9:4's footnotes name the passage
     assert all("via" not in t for t in get_citing_talks(store, "Genesis", 9, 4)["citing_talks"])
     assert all("via" not in t for t in get_citing_talks(store, "JST Genesis", 9, 12)["citing_talks"])
+
+
+# ---------------------------------------------------------------------------
+# Passages over the limit: their verses follow the Book of Moses refs in their footnotes
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def moses_store(tmp_path, built_db, monkeypatch):
+    """A copy of the fixture store with footnote refs into Moses on Gen. 9:5, 9:6 and 9:10, and the size limit set so
+    that JST Gen. 9:10–15 (Compare Gen. 9:4–9, six verses) is a passage too large to follow. Gen. 9:5 links "Moses
+    6:21 (21–68)"; Gen. 9:6 links Moses 3:17 and 3:7, and "Moses 5:2 (2–3), 16–17" as two refs; Gen. 9:10 is outside
+    the passage's Compare range and links Moses 7:43."""
+    import tools.scripture_tools as st
+    monkeypatch.setattr(st, "MAX_COMPARE_VERSES", 5)
+    path = tmp_path / "scripture.db"
+    shutil.copy(built_db, path)
+    c = sqlite3.connect(path)
+    moses = c.execute("SELECT book_id FROM book WHERE name = 'Moses'").fetchone()[0]
+    verse_id = {v: i for v, i in c.execute("SELECT verse, verse_id FROM verse WHERE book_id = 1 AND chapter = 9")}
+    page = c.execute("SELECT page_id FROM chapter WHERE book_id = 1 AND number = 9").fetchone()[0]
+    notes = {5: [(6, 21, "Moses 6:21 (21–68)", "p21-p68#p21")],
+             6: [(3, 17, "Moses 3:17", "p17#p17"), (3, 7, "Moses 3:7", "p7#p7"), (5, 2, "Moses 5:2 (2–3)", "p2-p3#p2"),
+                 (5, 16, "Moses 5:16–17", "p16-p17#p16")],
+             10: [(7, 43, "Moses 7:43", "p43#p43")]}
+    for n, (verse, refs) in enumerate(notes.items(), start=9000):
+        c.execute("INSERT INTO footnote (footnote_id, page_id, verse_id, note_key, marker) VALUES (?,?,?,?,?)",
+                  (n, page, verse_id[verse], f"note{n}", "a"))
+        for seq, (ch, v, label, anchor) in enumerate(refs):
+            c.execute("INSERT INTO footnote_ref (footnote_id, seq, category, ref_type, href, label, target_book_id, "
+                      "target_chapter, target_verse_start, target_verse_end) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                      (n, seq, "cross-ref", "scripture-ref", f"/study/scriptures/pgp/moses/{ch}?lang=eng&id={anchor}",
+                       label, moses, ch, v, v))
+    c.commit()
+    c.close()
+    return ScriptureStore.open(open_scripture_db(str(path)))
+
+
+@pytest.fixture()
+def moses_core(tmp_path, store, monkeypatch):
+    """A core.db with titled talks citing Moses verses (and JST Gen. 9:12, of the too-large passage):
+    1 Moses 6:21 and JST Gen. 9:12; 2 Moses 3:7 and 3:17; 3 Moses 5:3 (inside the bracket of Moses 5:2, not linked);
+    4 Moses 5:16 and 5:17; 5 Gen. 9:6 and Moses 3:7; 6 Moses 7:43; 7 Moses 6:22 (inside the bracket of 6:21);
+    8 JST Moses 6:21 (Flag='J', not a standard citation); 9 Moses 5:2; 10 Moses 1:10 and 6:21."""
+    gen = store.resolver.resolve("Genesis")[0]["core_book_id"]
+    moses = store.resolver.resolve("Moses")[0]["core_book_id"]
+    path = tmp_path / "core.db"
+    c = sqlite3.connect(path)
+    c.executescript("""
+        CREATE TABLE talk (ID INTEGER PRIMARY KEY, Corpus TEXT, Title TEXT, Date TEXT);
+        CREATE TABLE citation (ID INTEGER PRIMARY KEY, TalkID INT, BookID INT, Chapter INT, Flag TEXT);
+        CREATE TABLE citation_verse (CitationID INT, Verse INT);
+        CREATE TABLE conference_talk (TalkID INT, SessionID INT, Sequence INT);
+    """)
+    c.executemany("INSERT INTO talk VALUES (?,?,?,?)", [(i, "G", f"Talk {i}", f"20{i:02d}-04-01") for i in range(1, 11)])
+    rows = [(1, moses, 6, "", 21), (1, gen, 9, "J", 12), (2, moses, 3, "", 7), (2, moses, 3, "", 17),
+            (3, moses, 5, "", 3), (4, moses, 5, "", 16), (4, moses, 5, "", 17), (5, gen, 9, "", 6),
+            (5, moses, 3, "", 7), (6, moses, 7, "", 43), (7, moses, 6, "", 22), (8, moses, 6, "J", 21),
+            (9, moses, 5, "", 2), (10, moses, 1, "", 10), (10, moses, 6, "", 21)]
+    for n, (talk, book, ch, flag, verse) in enumerate(rows, start=1):
+        c.execute("INSERT INTO citation VALUES (?,?,?,?,?)", (n, talk, book, ch, flag))
+        c.execute("INSERT INTO citation_verse VALUES (?,?)", (n, verse))
+    c.commit()
+    c.close()
+    monkeypatch.setattr(db_pkg, "core_db", Database(str(path)))
+    return path
+
+
+def _by_id(page):
+    return {t["talk_id"]: t for t in page["citing_talks"]}
+
+
+def test_moses_ref_on_a_verse_of_a_too_large_passage_finds_the_talks_citing_the_linked_verse(moses_store, moses_core):
+    r = get_citing_talks(moses_store, "Genesis", 9, 5)
+    assert _ids(r) == ["talk_10", "talk_1"]         # Moses 6:21 only: not 6:22 (talk 7), not Flag='J' (talk 8)
+    t = r["citing_talks"][1]
+    assert t["cites"] == ["Moses 6:21"]             # JST Gen. 9:12 is not followed: the passage is too large
+    assert t["via"] == ["Moses 6:21"]
+    assert get_verse(moses_store, "Genesis", 9, 5, include_citing_talks=True)["citing_talks_count"] == 2
+
+
+def test_only_the_main_verse_before_a_bracket_is_followed(moses_store, moses_core):
+    r = _by_id(get_citing_talks(moses_store, "Genesis", 9, 6))
+    assert "talk_3" not in r and "talk_9" in r      # "Moses 5:2 (2–3)" is Moses 5:2, not 5:3
+    assert r["talk_4"]["cites"] == ["Moses 5:16"]   # "Moses 5:16–17" is Moses 5:16, not 5:17
+    assert r["talk_9"]["via"] == ["Moses 5:2"]
+
+
+def test_via_lists_moses_verses_in_canonical_order_not_text_order(moses_store, moses_core):
+    r = _by_id(get_citing_talks(moses_store, "Genesis", 9, 6))
+    assert r["talk_2"]["via"] == ["Moses 3:7", "Moses 3:17"]    # as text "Moses 3:17" sorts first
+    assert r["talk_2"]["cites"] == ["Moses 3:7", "Moses 3:17"]
+    assert "via" not in r["talk_5"]                             # it cites Gen. 9:6 itself; listed once
+    assert r["talk_5"]["cites"] == ["Gen. 9:6", "Moses 3:7"]
+
+
+def test_moses_refs_are_followed_only_while_the_passage_is_too_large(moses_store, moses_core, monkeypatch):
+    import tools.scripture_tools as st
+    assert _by_id(get_citing_talks(moses_store, "Genesis", 9, 5))["talk_1"]["via"] == ["Moses 6:21"]
+    monkeypatch.setattr(st, "MAX_COMPARE_VERSES", 6)            # JST Gen. 9:10–15 is followed instead
+    r = _by_id(get_citing_talks(moses_store, "Genesis", 9, 5))
+    assert r["talk_1"]["via"] == ["JST Gen. 9:10–15"] and "talk_10" not in r
+
+
+def test_moses_refs_on_other_verses_are_not_followed(moses_store, moses_core):
+    assert _ids(get_citing_talks(moses_store, "Genesis", 9, 10)) == []       # Moses 7:43 on Gen. 9:10, outside 9:4–9
+    assert _ids(get_citing_talks(moses_store, "Genesis", 9, 3)) == []
+
+
+def test_moses_route_counts_each_genesis_verse_and_lists_a_talk_once(moses_store, moses_core):
+    r = get_verse(moses_store, "Genesis", 9, 4, 10, include_citing_talks=True)
+    assert {v["reference"]: v["count"] for v in r["citing_talks_by_verse"]} == {
+        "Gen. 9:4": 1, "Gen. 9:5": 2, "Gen. 9:6": 4, "Gen. 9:7": 0, "Gen. 9:8": 0, "Gen. 9:9": 0, "Gen. 9:10": 0}
+    assert r["citing_talks_count"] == 6             # talk 1 is on 9:4 (its JST footnote) and 9:5 (Moses 6:21): once
+    page = get_citing_talks(moses_store, "Genesis", 9, 4, 10)
+    assert page["total"] == 6 and len(set(_ids(page))) == 6
+
+
+def test_moses_input_is_unchanged(moses_store, moses_core):
+    r = get_citing_talks(moses_store, "Moses", 1, 10)
+    assert [(t["talk_id"], t["cites"]) for t in r["citing_talks"]] == [("talk_10", ["Moses 1:10"])]
+    assert all("via" not in t for t in r["citing_talks"])
+
+
+def test_via_orders_passages_of_one_book_by_chapter_not_as_text(tmp_path, store, compare_core):
+    """A second passage, JST Gen. 14:25–40, also compares Gen. 9:5; a talk citing it and JST Gen. 9:12 lists both,
+    chapter 9 first (as text "JST Gen. 14:..." would sort before "JST Gen. 9:...")."""
+    gen = store.resolver.resolve("Genesis")[0]["core_book_id"]
+    path = tmp_path / "scripture.db"
+    shutil.copy(store.db.path, path)
+    c = sqlite3.connect(path)
+    book, page = c.execute("SELECT book_id, page_id FROM jst_passage WHERE verse_spec = '9:10–15'").fetchone()
+    c.execute("INSERT INTO jst_verse (jst_verse_id, book_id, core_book_id, chapter, verse, text) "
+              "VALUES (99000, ?, ?, 14, 30, 'JST text')", (book, gen))
+    c.execute("INSERT INTO jst_passage (passage_id, page_id, seq, verse_spec, book_id, core_book_id, chapter_start, "
+              "verse_start, chapter_end, verse_end) VALUES (99000, ?, 99, '14:25–40', ?, ?, 14, 25, 14, 40)",
+              (page, book, gen))
+    c.execute("INSERT INTO jst_passage_verse VALUES (99000, 99000)")
+    c.execute("INSERT INTO jst_passage_ref (passage_id, seq, rel, target_book_id, target_chapter, "
+              "target_verse_start, target_verse_end) VALUES (99000, 0, 'compare', ?, 9, 5, 5)", (book,))
+    c.commit()
+    c.close()
+    both = ScriptureStore.open(open_scripture_db(str(path)))
+    core = sqlite3.connect(db_pkg.core_db.path)
+    core.execute("INSERT INTO citation VALUES (20, 3, ?, 14, 'J')", (gen,))
+    core.execute("INSERT INTO citation_verse VALUES (20, 30)")
+    core.execute("INSERT INTO citation VALUES (21, 3, ?, 9, 'J')", (gen,))
+    core.execute("INSERT INTO citation_verse VALUES (21, 12)")
+    core.commit()
+    core.close()
+    talk = _by_id(get_citing_talks(both, "Genesis", 9, 5))["talk_3"]
+    assert talk["via"] == ["JST Gen. 9:10–15", "JST Gen. 14:25–40"]

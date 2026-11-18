@@ -10,12 +10,18 @@ independent of tools/scripture_tools.py. A KJV verse's citing talks are the titl
       covers the verse (only 'compare'; 'similar' and 'see-also' are not followed), unless the passage's Compare
       links cover more than MAX_COMPARE_VERSES KJV verses in all (today only JST Gen. 1:1-8:18, Compare Gen. 1:1-6:13).
 
-A talk found only through route (3) carries "via": the references of those passages, printed as
-get_verse(include_jst) prints them ("JST Gen. 14:25-40"). Other talks have no "via" key.
+  (4) for a verse that a passage over the limit covers (Gen. 1:1-6:13), a non-JST citation of the Book of Moses verse
+      that each footnote ref on the verse links to (the `#pN` anchor of the ref's href: the main verse before any
+      bracket, so "Moses 6:21 (21-68)" is Moses 6:21 only). Moses refs on other verses are not followed.
+
+A talk found only through routes (3) and (4) carries "via": the references of those passages, printed as
+get_verse(include_jst) prints them ("JST Gen. 14:25-40"), and the Moses verses ("Moses 6:59"), in canonical order
+(book, chapter, first verse). Other talks have no "via" key.
 
 Run: pipenv run python -m pytest tests/test_scripture_citing_talks_full.py   (needs db/scripture.db and db/core.<version>.db)
 """
 import json
+import re
 import time
 from collections import defaultdict
 from functools import lru_cache
@@ -149,7 +155,34 @@ def passage_reference(pid):
     return f"JST {r['cite_abbr']} {r['verse_spec'].strip()}"
 
 
-def oracle(book_id, ch, v, passages=True):
+@lru_cache(maxsize=None)
+def _moses_book():
+    return next(b for b in _books().values() if b["name"] == "Moses")
+
+
+@lru_cache(maxsize=None)
+def _moses():
+    """{(book_id, ch, v): {(Moses ch, Moses v)}}: the verse each footnote ref into Moses links to, on the verses a
+    passage over the limit covers."""
+    covered = {k for k, ps in _reach_all("compare")[0].items() if ps & big_passages()}
+    out = defaultdict(set)
+    for r in S().select("SELECT v.book_id, v.chapter, v.verse, r.href, r.target_chapter FROM footnote_ref r "
+                        "JOIN footnote f ON f.footnote_id = r.footnote_id JOIN verse v ON v.verse_id = f.verse_id "
+                        "WHERE r.target_book_id = ?", (_moses_book()["book_id"],)):
+        if (r["book_id"], r["chapter"], r["verse"]) in covered:
+            verse = int(re.search(r"#p(\d+)$", r["href"]).group(1))
+            out[(r["book_id"], r["chapter"], r["verse"])].add((r["target_chapter"], verse))
+    return out
+
+
+def ref_order(ref):
+    """Canonical order of a via reference: the book's place in the scriptures, then chapter, then verse."""
+    m = re.fullmatch(r"(?:JST )?(.+?) (\d+):(\d+).*", ref)
+    sort = S().select("SELECT sort FROM book WHERE cite_abbr = ?", (m.group(1),))[0]["sort"]
+    return sort, int(m.group(2)), int(m.group(3))
+
+
+def oracle(book_id, ch, v, passages=True, moses=True):
     titled, _, j, plain = _core()
     core_book = _books()[book_id]["core_book_id"]
     talks = set(plain.get((core_book, ch, v), ())) if core_book is not None else set()
@@ -159,18 +192,25 @@ def oracle(book_id, ch, v, passages=True):
         for pid in _reach().get((book_id, ch, v), ()):
             for key in _passage_jst()[pid]:
                 talks |= j.get(key, set())
+    if moses:
+        for mc, mv in _moses().get((book_id, ch, v), ()):
+            talks |= plain.get((_moses_book()["core_book_id"], mc, mv), set())
     return talks & titled
 
 
 def passage_only(book_id, ch, v):
-    return oracle(book_id, ch, v) - oracle(book_id, ch, v, passages=False)
+    return oracle(book_id, ch, v, moses=False) - oracle(book_id, ch, v, passages=False, moses=False)
+
+
+def moses_only(book_id, ch, v):
+    return oracle(book_id, ch, v, passages=False) - oracle(book_id, ch, v, passages=False, moses=False)
 
 
 def oracle_via(book_id, verses_by_chapter):
-    """{talk: [passage references]} for a request over these (chapter, verse)s: the talks found only through route
-    (3) for every verse they were found for, with the passages that found them (sorted)."""
-    titled, _, j, _ = _core()
-    plain_found = set().union(*(oracle(book_id, c, v, passages=False) for c, v in verses_by_chapter))
+    """{talk: [references]} for a request over these (chapter, verse)s: the talks found only through routes (3) and
+    (4) for every verse they were found for, with the passages and Moses verses that found them (canonical order)."""
+    titled, _, j, plain = _core()
+    plain_found = set().union(*(oracle(book_id, c, v, passages=False, moses=False) for c, v in verses_by_chapter))
     via = defaultdict(set)
     for c, v in verses_by_chapter:
         for pid in _reach().get((book_id, c, v), ()):
@@ -178,7 +218,11 @@ def oracle_via(book_id, verses_by_chapter):
                 for t in j.get(key, set()) & titled:
                     if t not in plain_found:
                         via[t].add(passage_reference(pid))
-    return {t: sorted(refs) for t, refs in via.items()}
+        for mc, mv in _moses().get((book_id, c, v), ()):
+            for t in plain.get((_moses_book()["core_book_id"], mc, mv), set()) & titled:
+                if t not in plain_found:
+                    via[t].add(f"Moses {mc}:{mv}")
+    return {t: sorted(refs, key=ref_order) for t, refs in via.items()}
 
 
 # ---------------------------------------------------------------------------
@@ -195,6 +239,12 @@ def all_talks(store, *args, **kw):
         offset = page["next_offset"]
     assert len(talks) == total == len({t["talk_id"] for t in talks}), "total matches the talks listed, none twice"
     return {int(t["talk_id"][5:]): t for t in talks}
+
+
+def _reached_by_moses(ch, talk):
+    mb = _moses_book()["core_book_id"]
+    return any(talk in _core()[3].get((mb, mc, mv), ())
+               for v in _chapter_verses()[(GEN, ch)] for mc, mv in _moses().get((GEN, ch, v), ()))
 
 
 def name(book_id):
@@ -313,14 +363,46 @@ class TestBounded:
         assert {passage_reference(p) for p in big_passages()} == {"JST Gen. 1:1–8:18"}
 
     @pytest.mark.parametrize("ch", [1, 3, 6])
-    def test_gen_1_to_6_unchanged(self, store, ch):
-        """Gen. 1:1–6:13 is reached only by the 329-verse passage: its talks are what the verse and footnotes find."""
+    def test_gen_1_to_6_follow_moses_not_the_big_passage(self, store, ch):
+        """Gen. 1:1-6:13 is reached by the 329-verse passage, which is not followed: its talks are what the verse, its
+        footnotes and the Moses verses its footnotes link to find, and none of them is found by the passage."""
         counts = get_verse(store, "Genesis", ch, include_citing_talks=True)
         for x in counts["citing_talks_by_verse"]:
             v = int(x["reference"].split(":")[1])
-            assert x["count"] == len(oracle(GEN, ch, v, passages=False)), x
-        page = get_citing_talks(store, "Genesis", ch, limit=100)
-        assert all("via" not in t for t in page["citing_talks"])
+            assert x["count"] == len(oracle(GEN, ch, v)), x
+        big_only = set().union(*(set(_core()[2].get(key, ())) for key in _passage_jst()[next(iter(big_passages()))]))
+        listed = all_talks(store, "Genesis", ch)
+        direct = set().union(*(oracle(GEN, ch, v, passages=False, moses=False) for v in _chapter_verses()[(GEN, ch)]))
+        assert not {t for t in big_only & listed.keys() if t not in direct and not _reached_by_moses(ch, t)}
+
+    def test_moses_footnotes_add_talks_and_only_on_the_skipped_verses(self, store):
+        """Gen. 5:22's "Moses 6:21 (21-68)" is Moses 6:21 only; Gen. 9:1 (Moses 5:2) and Gen. 6:14 (Moses 7:43) are
+        outside the skipped passage's verses and follow nothing; asking for Moses itself is unchanged."""
+        titled, _, _, plain = _core()
+        mb = _moses_book()["core_book_id"]
+        bracket = set().union(*(plain.get((mb, 6, v), set()) for v in range(22, 69))) & titled
+        assert not (bracket - oracle(GEN, 5, 22)) & set(all_talks(store, "Genesis", 5, 22))
+        assert len([k for k in _moses() if moses_only(*k)]) >= 50
+        for c, v, (mc, mv) in [(9, 1, (5, 2)), (6, 14, (7, 43))]:
+            got = set(all_talks(store, "Genesis", c, v))
+            assert got == oracle(GEN, c, v) == oracle(GEN, c, v, moses=False)
+            assert plain.get((mb, mc, mv), set()) & titled - got
+        for c, v in [(2, 26), (6, 59)]:
+            got = all_talks(store, "Moses", c, v)
+            assert set(got) == plain.get((mb, c, v), set()) & titled
+            assert all("via" not in x for x in got.values())
+
+    @pytest.mark.parametrize("ch", [1, 2, 3, 4, 5, 6])
+    def test_gen_1_to_6_whole_chapters_match_with_via_in_canonical_order(self, store, ch):
+        vs = _chapter_verses()[(GEN, ch)]
+        got = all_talks(store, "Genesis", ch)
+        assert set(got) == set().union(*(oracle(GEN, ch, v) for v in vs))
+        assert {t: x["via"] for t, x in got.items() if "via" in x} == oracle_via(GEN, [(ch, v) for v in vs])
+
+    def test_via_canonical_order_differs_from_text_order_somewhere(self):
+        """Guards the oracle: some via list is in another order as plain text (Moses 3:17 sorts before Moses 3:7)."""
+        assert any(refs != sorted(refs) for ch in range(1, 7)
+                   for refs in oracle_via(GEN, [(ch, v) for v in _chapter_verses()[(GEN, ch)]]).values())
 
     @pytest.mark.parametrize("book,ch", [("John", 1), ("Romans", 7), ("Genesis", 1), ("Genesis", 6)])
     def test_whole_chapter_bounded(self, store, book, ch):
@@ -335,7 +417,7 @@ class TestBounded:
         assert page["total"] == counts["citing_talks_count"] == len(union)
         for t_ in page["citing_talks"]:
             assert len(t_["cites"]) <= 40, (t_["talk_id"], t_["cites"])   # cites are merged runs, not one per verse
-            assert len(t_.get("via", ())) <= 5, (t_["talk_id"], t_["via"])  # a chapter touches few passages
+            assert len(t_.get("via", ())) <= (25 if book == "Genesis" else 5), (t_["talk_id"], t_["via"])
 
     def test_john_1_largest_followed_range(self, store):
         """John 1:1–34 (34 verses) is under the limit, so it is followed, edges included."""
@@ -389,4 +471,5 @@ class TestVia:
         assert compared >= 300, compared         # floor; 337 passage/verse pairs compared on scripture.db today
 
 
-_CACHED = [_core, _books, _chapter_verses, _footnote_jst, _passage_jst, _reach_all, _reach, passage_reference]
+_CACHED = [_core, _books, _chapter_verses, _footnote_jst, _passage_jst, _reach_all, _reach, passage_reference,
+           _moses_book, _moses]

@@ -1056,7 +1056,10 @@ async def get_verse(
         include_citing_talks: Add citing_talks_count (distinct titled talks in core.db that cite these verses,
             conference or not; a verse's JST citations count through the JST verses its footnotes name and through
             the JST appendix passages whose Compare range covers it, except passages comparing more than 40 KJV
-            verses in all, such as JST Gen. 1:1–8:18; get_citing_talks lists the same talks), for more
+            verses in all, such as JST Gen. 1:1–8:18. Separately, for Gen. 1:1–6:13 only, a non-JST citation of a
+            Book of Moses verse that one of the verse's footnotes links to also counts, the main verse before any
+            bracket ("Moses 6:21 (21–68)" is Moses 6:21); Moses refs on other verses are not followed.
+            get_citing_talks lists the same talks), for more
             than one verse citing_talks_by_verse [{reference, count}], and untitled_talks_omitted when untitled
             citing talks were left out. No list of talks: page through them with get_citing_talks.
 
@@ -1090,9 +1093,14 @@ async def get_citing_talks(
     JST citations of the JST verses its footnotes name and of every JST verse of a JST appendix passage whose
     "Compare" range covers the verse (JST Gen. 14:25–40 compares Gen. 14:18–20, so talks citing it are listed for
     Gen. 14:18). A passage whose Compare links cover more than 40 KJV verses in all is not followed (such as
-    JST Gen. 1:1–8:18, which compares Gen. 1:1–6:13). A talk found only through appendix passages (none of its
-    matched citations is of a verse asked for or of a footnote's JST verse) has "via": the sorted references of
-    those passages, written as get_verse(include_jst) prints them ("JST Gen. 14:25–40"); other talks have no "via".
+    JST Gen. 1:1–8:18, which compares Gen. 1:1–6:13). For those skipped verses (Gen. 1:1–6:13 only) each footnote
+    ref into the Book of Moses is followed instead, to the verse the ref links to ("Moses 6:21 (21–68)" is Moses
+    6:21 only): a non-JST citation of that Moses verse counts for the Genesis verse and shows in the talk's cites
+    ("Moses 6:59"). Moses refs on other verses (Gen. 9:1 → Moses 5:2) are not followed; input "Moses" itself is
+    unchanged. A talk found only through appendix passages or Moses verses (none of its matched citations is of a
+    verse asked for or of a footnote's JST verse) has "via": those passages, written as get_verse(include_jst)
+    prints them ("JST Gen. 14:25–40"), and Moses verses ("Moses 6:59", one entry per verse), in canonical order
+    (book, chapter, first verse: "Moses 3:7" before "Moses 3:17"); other talks have no "via".
     Every titled talk is listed, conference or not; untitled talks are left out and counted in
     untitled_talks_omitted when there are any. get_talk fetches only the entries with get_talk_available=true.
     A talk's cites merge consecutive verses of one book and chapter into a range ("John 3:14–17", "JST Gen.
