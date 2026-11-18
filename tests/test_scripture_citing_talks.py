@@ -1,4 +1,5 @@
 """get_verse(include_citing_talks=True) counts and get_citing_talks on the fixture scripture store and a small synthetic core.db."""
+import shutil
 import sqlite3
 
 import pytest
@@ -194,3 +195,325 @@ def test_merged_cites_examples_and_standard_never_merged_with_jst():
     assert _merged_cites(set(mixed), mixed) == ["Gen. 14:17–18", "JST Gen. 14:17–40"]
     other_chapter = {("", 9, 3, 17): "John 3:17", ("", 9, 4, 18): "John 4:18"}
     assert _merged_cites(set(other_chapter), other_chapter) == ["John 3:17", "John 4:18"]
+
+
+# ---------------------------------------------------------------------------
+# JST appendix passages reached through their "Compare" range
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def compare_core(tmp_path, store, monkeypatch):
+    """A core.db whose talks cite JST verses (Flag='J') of appendix passages in the fixture store: JST Gen. 9:10–15
+    (Compare Gen. 9:4–9), JST Gen. 9:21–25 (Compare Gen. 9:16–17) and JST Ex. 4:21 (Compare Ex. 4:21, 7:3, 7:13,
+    ..., one link per verse)."""
+    gen = store.resolver.resolve("Genesis")[0]["core_book_id"]
+    ex = store.resolver.resolve("Exodus")[0]["core_book_id"]
+    path = tmp_path / "core.db"
+    c = sqlite3.connect(path)
+    c.executescript("""
+        CREATE TABLE talk (ID INTEGER PRIMARY KEY, Corpus TEXT, Title TEXT, Date TEXT);
+        CREATE TABLE citation (ID INTEGER PRIMARY KEY, TalkID INT, BookID INT, Chapter INT, Flag TEXT);
+        CREATE TABLE citation_verse (CitationID INT, Verse INT);
+        CREATE TABLE conference_talk (TalkID INT, SessionID INT, Sequence INT);
+        INSERT INTO talk VALUES (1,'G','Two JST verses','2001-04-01'), (2,'G','KJV and JST','2002-04-01'),
+                                (3,'G','Other passage','2003-04-01'), (4,'G','Exodus passage','2004-04-01'),
+                                (5,'G',NULL,NULL), (6,'G','JST verse in no passage','2006-04-01');
+    """)
+    c.executemany("INSERT INTO citation VALUES (?,?,?,?,?)",
+                  [(1, 1, gen, 9, "J"), (2, 1, gen, 9, "J"), (3, 2, gen, 9, ""), (4, 2, gen, 9, "J"),
+                   (5, 3, gen, 9, "J"), (6, 4, ex, 4, "J"), (7, 5, gen, 9, "J"), (8, 6, gen, 9, "J")])
+    c.executemany("INSERT INTO citation_verse VALUES (?,?)",
+                  [(1, 12), (2, 14), (3, 5), (4, 11), (5, 22), (6, 21), (7, 13), (8, 20)])
+    c.commit()
+    c.close()
+    monkeypatch.setattr(db_pkg, "core_db", Database(str(path)))
+    return path
+
+
+@pytest.fixture()
+def linked_store(tmp_path, built_db):
+    """A copy of the fixture store with extra heading links for JST Gen. 9:21–25: a Compare link that crosses
+    chapters (Gen. 6:22–9:1; the fixture has no Gen. 7–8), and a similar and a see-also link to Gen. 9:18–19."""
+    path = tmp_path / "scripture.db"
+    shutil.copy(built_db, path)
+    c = sqlite3.connect(path)
+    pid, gen = c.execute("SELECT passage_id, book_id FROM jst_passage WHERE verse_spec = '9:21–25'").fetchone()
+    c.executemany("INSERT INTO jst_passage_ref (passage_id, seq, rel, target_book_id, target_chapter, "
+                  "target_chapter_end, target_verse_start, target_verse_end) VALUES (?,?,?,?,?,?,?,?)",
+                  [(pid, 10, "compare", gen, 6, 9, 22, 1), (pid, 11, "similar", gen, 9, None, 18, 19),
+                   (pid, 12, "see-also", gen, 9, None, 18, 19)])
+    c.commit()
+    c.close()
+    return ScriptureStore.open(open_scripture_db(str(path)))
+
+
+def _ids(page):
+    return [t["talk_id"] for t in page["citing_talks"]]
+
+
+def test_jst_citation_of_a_compare_passage_reaches_the_covered_kjv_verse(store, compare_core):
+    r = get_citing_talks(store, "Genesis", 9, 5, order="oldest")
+    assert [(t["talk_id"], t["cites"]) for t in r["citing_talks"]] == [
+        ("talk_1", ["JST Gen. 9:12", "JST Gen. 9:14"]),      # cites two JST verses of the passage: listed once
+        ("talk_2", ["Gen. 9:5", "JST Gen. 9:11"])]
+    assert r["total"] == 2 and r["untitled_talks_omitted"] == 1       # talk 5 cites JST Gen. 9:13 untitled
+    assert get_verse(store, "Genesis", 9, 5, include_citing_talks=True)["citing_talks_count"] == 2
+
+
+def test_compare_route_covers_every_verse_of_the_range_and_counts_each(store, compare_core):
+    r = get_verse(store, "Genesis", 9, 3, 10, include_citing_talks=True)
+    assert {v["reference"]: v["count"] for v in r["citing_talks_by_verse"]} == {
+        "Gen. 9:3": 0, "Gen. 9:4": 2, "Gen. 9:5": 2, "Gen. 9:6": 2, "Gen. 9:7": 2, "Gen. 9:8": 2, "Gen. 9:9": 2,
+        "Gen. 9:10": 0}
+    assert r["citing_talks_count"] == 2                                # distinct talks, not the per-verse sum
+    assert get_citing_talks(store, "Genesis", 9, 3, 10)["total"] == 2
+
+
+def test_compare_route_stays_within_the_passages_own_links(store, compare_core):
+    assert _ids(get_citing_talks(store, "Genesis", 9, 16)) == ["talk_3"]      # JST Gen. 9:21–25, Compare 9:16–17
+    assert _ids(get_citing_talks(store, "Genesis", 9, 18)) == []              # past its link
+    assert _ids(get_citing_talks(store, "Genesis", 9, 10)) == []              # JST 9:10–15's link ends at KJV 9:9
+    assert _ids(get_citing_talks(store, "Genesis", 9, 12)) == []              # JST verse numbers are not KJV ones
+    assert _ids(get_citing_talks(store, "Genesis", 9, 20)) == []              # talk 6's JST 9:20 is in no passage
+
+
+def test_passage_with_several_compare_links_reaches_only_the_linked_verses(store, compare_core):
+    # JST Ex. 4:21 compares Ex. 4:21, 7:3 and 7:13, not the verses between them
+    assert _ids(get_citing_talks(store, "Exodus", 4, 21)) == ["talk_4"]
+    assert _ids(get_citing_talks(store, "Exodus", 7, 3)) == ["talk_4"]
+    assert _ids(get_citing_talks(store, "Exodus", 7, 4)) == []
+    r = get_verse(store, "Exodus", 7, 3, 4, include_citing_talks=True)
+    assert [v["count"] for v in r["citing_talks_by_verse"]] == [1, 0]
+
+
+def test_jst_numbering_input_does_not_follow_passages(store, compare_core):
+    r = get_citing_talks(store, "JST Genesis", 9, 12)
+    assert [(t["talk_id"], t["cites"]) for t in r["citing_talks"]] == [("talk_1", ["JST Gen. 9:12"])]
+    assert _ids(get_citing_talks(store, "JST Genesis", 9, 10)) == []
+
+
+def test_compare_link_across_chapters_and_no_similar_or_see_also(linked_store, compare_core):
+    assert _ids(get_citing_talks(linked_store, "Genesis", 6, 21)) == []
+    assert _ids(get_citing_talks(linked_store, "Genesis", 6, 22)) == ["talk_3"]
+    assert _ids(get_citing_talks(linked_store, "Genesis", 9, 1)) == ["talk_3"]
+    assert _ids(get_citing_talks(linked_store, "Genesis", 9, 2)) == []
+    r = get_verse(linked_store, "Genesis", 9, 17, 19, include_citing_talks=True)
+    assert [v["count"] for v in r["citing_talks_by_verse"]] == [1, 0, 0]   # 9:18–19 only similar / see-also
+
+
+def test_passage_comparing_many_verses_is_followed(tmp_path, built_db, compare_core):
+    """JST Gen. 9:10–15 gets a second Compare link over Gen. 1:1–9:9 (every Genesis verse the fixture has before
+    it): it is still followed, on every verse the links cover, however many that is."""
+    path = tmp_path / "scripture.db"
+    shutil.copy(built_db, path)
+    c = sqlite3.connect(path)
+    pid, gen = c.execute("SELECT passage_id, book_id FROM jst_passage WHERE verse_spec = '9:10–15'").fetchone()
+    c.execute("INSERT INTO jst_passage_ref (passage_id, seq, rel, target_book_id, target_chapter, "
+              "target_chapter_end, target_verse_start, target_verse_end) VALUES (?, 10, 'compare', ?, 1, 9, 1, 9)",
+              (pid, gen))
+    c.commit()
+    covered = c.execute("SELECT COUNT(*) FROM verse WHERE book_id = ? AND (chapter, verse) <= (9, 9)",
+                        (gen,)).fetchone()[0]
+    c.close()
+    wide = ScriptureStore.open(open_scripture_db(str(path)))
+    assert covered > 40                       # more verses than any size limit the code once had
+    first = wide.db.select("SELECT chapter, verse FROM verse WHERE book_id = ? ORDER BY chapter, verse LIMIT 1",
+                           (gen,))[0]
+    assert (first["chapter"], first["verse"]) < (9, 4)
+    talks = get_citing_talks(wide, "Genesis", first["chapter"], first["verse"], order="oldest")
+    assert [(t["talk_id"], t["via"]) for t in talks["citing_talks"]] == [
+        ("talk_1", ["JST Gen. 9:10–15"]), ("talk_2", ["JST Gen. 9:10–15"])]    # talks 1 and 2 cite its JST verses
+    r = get_verse(wide, "Genesis", first["chapter"], first["verse"], include_citing_talks=True)
+    assert r["citing_talks_count"] == 2
+
+
+def test_talk_found_only_through_a_passage_names_it_in_via(store, compare_core):
+    t1, t2 = get_citing_talks(store, "Genesis", 9, 5, order="oldest")["citing_talks"]
+    assert t1["via"] == ["JST Gen. 9:10–15"] and "via" not in t2          # talk 2 cites Gen. 9:5 itself
+    jst = get_verse(store, "Genesis", 9, 5, include_jst=True)["verses"][0]["jst"]
+    assert t1["via"][0] in [j["reference"] for j in jst]                  # printed as get_verse prints the passage
+    assert get_citing_talks(store, "Genesis", 9, 17)["citing_talks"][0]["via"] == ["JST Gen. 9:21–25"]
+
+
+def test_via_looks_at_every_verse_asked_for(store, compare_core):
+    talks = {t["talk_id"]: t for t in get_citing_talks(store, "Genesis", 9, 5, 6)["citing_talks"]}
+    assert talks["talk_1"]["via"] == ["JST Gen. 9:10–15"] and "via" not in talks["talk_2"]
+    talks = {t["talk_id"]: t for t in get_citing_talks(store, "Genesis", 9, 6, 7)["citing_talks"]}
+    assert talks["talk_2"]["via"] == ["JST Gen. 9:10–15"]                 # its Gen. 9:5 citation is not asked for
+
+
+def test_no_via_through_a_jst_footnote_or_for_jst_input(store, compare_core):
+    jst = get_verse(store, "Genesis", 9, 4, include_jst=True)["verses"][0]["jst"]
+    assert "JST Gen. 9:12" in [j["reference"] for j in jst]               # Gen. 9:4's footnotes name the passage
+    assert all("via" not in t for t in get_citing_talks(store, "Genesis", 9, 4)["citing_talks"])
+    assert all("via" not in t for t in get_citing_talks(store, "JST Genesis", 9, 12)["citing_talks"])
+
+
+# ---------------------------------------------------------------------------
+# The passage published as the Book of Moses: its verses follow the Moses refs in their footnotes
+# ---------------------------------------------------------------------------
+
+@pytest.fixture()
+def moses_store(tmp_path, built_db):
+    """A copy of the fixture store with footnote refs into Moses on Gen. 9:5, 9:6 and 9:10, and JST Gen. 9:10–15
+    (Compare Gen. 9:4–9) given the JST range Genesis 1:1–8:18, so it is the passage published as the Book of Moses.
+    Gen. 9:5 links "Moses 6:21 (21–68)"; Gen. 9:6 links Moses 3:17 and 3:7, and "Moses 5:2 (2–3), 16–17" as two
+    refs; Gen. 9:10 is outside the passage's Compare range and links Moses 7:43."""
+    return ScriptureStore.open(open_scripture_db(str(_moses_copy_path(tmp_path, built_db, (1, 1, 8, 18)))))
+
+
+def _moses_copy_path(tmp_path, built_db, jst_range):
+    """A copy of the fixture store's file with the Moses footnote refs, and the passage JST Gen. 9:10–15 carrying
+    this (first chapter, first verse, last chapter, last verse) JST range."""
+    path = tmp_path / f"scripture_{'_'.join(map(str, jst_range))}.db"
+    shutil.copy(built_db, path)
+    c = sqlite3.connect(path)
+    c.execute("UPDATE jst_passage SET chapter_start = ?, verse_start = ?, chapter_end = ?, verse_end = ? "
+              "WHERE verse_spec = '9:10–15'", jst_range)
+    moses = c.execute("SELECT book_id FROM book WHERE name = 'Moses'").fetchone()[0]
+    verse_id = {v: i for v, i in c.execute("SELECT verse, verse_id FROM verse WHERE book_id = 1 AND chapter = 9")}
+    page = c.execute("SELECT page_id FROM chapter WHERE book_id = 1 AND number = 9").fetchone()[0]
+    notes = {5: [(6, 21, "Moses 6:21 (21–68)", "p21-p68#p21")],
+             6: [(3, 17, "Moses 3:17", "p17#p17"), (3, 7, "Moses 3:7", "p7#p7"), (5, 2, "Moses 5:2 (2–3)", "p2-p3#p2"),
+                 (5, 16, "Moses 5:16–17", "p16-p17#p16")],
+             10: [(7, 43, "Moses 7:43", "p43#p43")]}
+    for n, (verse, refs) in enumerate(notes.items(), start=9000):
+        c.execute("INSERT INTO footnote (footnote_id, page_id, verse_id, note_key, marker) VALUES (?,?,?,?,?)",
+                  (n, page, verse_id[verse], f"note{n}", "a"))
+        for seq, (ch, v, label, anchor) in enumerate(refs):
+            c.execute("INSERT INTO footnote_ref (footnote_id, seq, category, ref_type, href, label, target_book_id, "
+                      "target_chapter, target_verse_start, target_verse_end) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                      (n, seq, "cross-ref", "scripture-ref", f"/study/scriptures/pgp/moses/{ch}?lang=eng&id={anchor}",
+                       label, moses, ch, v, v))
+    c.commit()
+    c.close()
+    return path
+
+
+@pytest.fixture()
+def moses_core(tmp_path, store, monkeypatch):
+    """A core.db with titled talks citing Moses verses (and JST Gen. 9:12, of the Moses passage):
+    1 Moses 6:21 and JST Gen. 9:12; 2 Moses 3:7 and 3:17; 3 Moses 5:3 (inside the bracket of Moses 5:2, not linked);
+    4 Moses 5:16 and 5:17; 5 Gen. 9:6 and Moses 3:7; 6 Moses 7:43; 7 Moses 6:22 (inside the bracket of 6:21);
+    8 JST Moses 6:21 (Flag='J', not a standard citation); 9 Moses 5:2; 10 Moses 1:10 and 6:21."""
+    gen = store.resolver.resolve("Genesis")[0]["core_book_id"]
+    moses = store.resolver.resolve("Moses")[0]["core_book_id"]
+    path = tmp_path / "core.db"
+    c = sqlite3.connect(path)
+    c.executescript("""
+        CREATE TABLE talk (ID INTEGER PRIMARY KEY, Corpus TEXT, Title TEXT, Date TEXT);
+        CREATE TABLE citation (ID INTEGER PRIMARY KEY, TalkID INT, BookID INT, Chapter INT, Flag TEXT);
+        CREATE TABLE citation_verse (CitationID INT, Verse INT);
+        CREATE TABLE conference_talk (TalkID INT, SessionID INT, Sequence INT);
+    """)
+    c.executemany("INSERT INTO talk VALUES (?,?,?,?)", [(i, "G", f"Talk {i}", f"20{i:02d}-04-01") for i in range(1, 11)])
+    rows = [(1, moses, 6, "", 21), (1, gen, 9, "J", 12), (2, moses, 3, "", 7), (2, moses, 3, "", 17),
+            (3, moses, 5, "", 3), (4, moses, 5, "", 16), (4, moses, 5, "", 17), (5, gen, 9, "", 6),
+            (5, moses, 3, "", 7), (6, moses, 7, "", 43), (7, moses, 6, "", 22), (8, moses, 6, "J", 21),
+            (9, moses, 5, "", 2), (10, moses, 1, "", 10), (10, moses, 6, "", 21)]
+    for n, (talk, book, ch, flag, verse) in enumerate(rows, start=1):
+        c.execute("INSERT INTO citation VALUES (?,?,?,?,?)", (n, talk, book, ch, flag))
+        c.execute("INSERT INTO citation_verse VALUES (?,?)", (n, verse))
+    c.commit()
+    c.close()
+    monkeypatch.setattr(db_pkg, "core_db", Database(str(path)))
+    return path
+
+
+def _by_id(page):
+    return {t["talk_id"]: t for t in page["citing_talks"]}
+
+
+def test_moses_ref_on_a_verse_of_the_moses_passage_finds_the_talks_citing_the_linked_verse(moses_store, moses_core):
+    r = get_citing_talks(moses_store, "Genesis", 9, 5)
+    assert _ids(r) == ["talk_10", "talk_1"]         # Moses 6:21 only: not 6:22 (talk 7), not Flag='J' (talk 8)
+    t = r["citing_talks"][1]
+    assert t["cites"] == ["Moses 6:21"]             # JST Gen. 9:12 is not followed: it is the Moses passage
+    assert t["via"] == ["Moses 6:21"]
+    assert get_verse(moses_store, "Genesis", 9, 5, include_citing_talks=True)["citing_talks_count"] == 2
+
+
+def test_only_the_main_verse_before_a_bracket_is_followed(moses_store, moses_core):
+    r = _by_id(get_citing_talks(moses_store, "Genesis", 9, 6))
+    assert "talk_3" not in r and "talk_9" in r      # "Moses 5:2 (2–3)" is Moses 5:2, not 5:3
+    assert r["talk_4"]["cites"] == ["Moses 5:16"]   # "Moses 5:16–17" is Moses 5:16, not 5:17
+    assert r["talk_9"]["via"] == ["Moses 5:2"]
+
+
+def test_via_lists_moses_verses_in_canonical_order_not_text_order(moses_store, moses_core):
+    r = _by_id(get_citing_talks(moses_store, "Genesis", 9, 6))
+    assert r["talk_2"]["via"] == ["Moses 3:7", "Moses 3:17"]    # as text "Moses 3:17" sorts first
+    assert r["talk_2"]["cites"] == ["Moses 3:7", "Moses 3:17"]
+    assert "via" not in r["talk_5"]                             # it cites Gen. 9:6 itself; listed once
+    assert r["talk_5"]["cites"] == ["Gen. 9:6", "Moses 3:7"]
+
+
+def test_moses_refs_are_followed_only_for_the_passage_with_the_moses_range(tmp_path, built_db, moses_store, moses_core):
+    assert _by_id(get_citing_talks(moses_store, "Genesis", 9, 5))["talk_1"]["via"] == ["Moses 6:21"]
+    other = ScriptureStore.open(open_scripture_db(str(_moses_copy_path(tmp_path, built_db, (9, 10, 9, 15)))))
+    r = _by_id(get_citing_talks(other, "Genesis", 9, 5))              # same passage, another range: followed instead
+    assert r["talk_1"]["via"] == ["JST Gen. 9:10–15"] and "talk_10" not in r
+
+
+def test_the_moses_passage_is_found_by_its_range_alone(tmp_path, built_db, moses_core):
+    """Changing the passage's title, section id and intro changes nothing; changing one end of its range does."""
+    path = _moses_copy_path(tmp_path, built_db, (1, 1, 8, 18))
+    c = sqlite3.connect(path)
+    c.execute("UPDATE jst_passage SET title = 'JST, Moses 1:1.', section_id = 'sec_x', intro = 'other' "
+              "WHERE verse_spec = '9:10–15'")
+    c.commit()
+    c.close()
+    renamed = ScriptureStore.open(open_scripture_db(str(path)))
+    assert _by_id(get_citing_talks(renamed, "Genesis", 9, 5))["talk_1"]["via"] == ["Moses 6:21"]
+    near = ScriptureStore.open(open_scripture_db(str(_moses_copy_path(tmp_path, built_db, (1, 1, 8, 17)))))
+    assert _by_id(get_citing_talks(near, "Genesis", 9, 5))["talk_1"]["via"] == ["JST Gen. 9:10–15"]
+
+
+def test_moses_refs_on_other_verses_are_not_followed(moses_store, moses_core):
+    assert _ids(get_citing_talks(moses_store, "Genesis", 9, 10)) == []       # Moses 7:43 on Gen. 9:10, outside 9:4–9
+    assert _ids(get_citing_talks(moses_store, "Genesis", 9, 3)) == []
+
+
+def test_moses_route_counts_each_genesis_verse_and_lists_a_talk_once(moses_store, moses_core):
+    r = get_verse(moses_store, "Genesis", 9, 4, 10, include_citing_talks=True)
+    assert {v["reference"]: v["count"] for v in r["citing_talks_by_verse"]} == {
+        "Gen. 9:4": 1, "Gen. 9:5": 2, "Gen. 9:6": 4, "Gen. 9:7": 0, "Gen. 9:8": 0, "Gen. 9:9": 0, "Gen. 9:10": 0}
+    assert r["citing_talks_count"] == 6             # talk 1 is on 9:4 (its JST footnote) and 9:5 (Moses 6:21): once
+    page = get_citing_talks(moses_store, "Genesis", 9, 4, 10)
+    assert page["total"] == 6 and len(set(_ids(page))) == 6
+
+
+def test_moses_input_is_unchanged(moses_store, moses_core):
+    r = get_citing_talks(moses_store, "Moses", 1, 10)
+    assert [(t["talk_id"], t["cites"]) for t in r["citing_talks"]] == [("talk_10", ["Moses 1:10"])]
+    assert all("via" not in t for t in r["citing_talks"])
+
+
+def test_via_orders_passages_of_one_book_by_chapter_not_as_text(tmp_path, store, compare_core):
+    """A second passage, JST Gen. 14:25–40, also compares Gen. 9:5; a talk citing it and JST Gen. 9:12 lists both,
+    chapter 9 first (as text "JST Gen. 14:..." would sort before "JST Gen. 9:...")."""
+    gen = store.resolver.resolve("Genesis")[0]["core_book_id"]
+    path = tmp_path / "scripture.db"
+    shutil.copy(store.db.path, path)
+    c = sqlite3.connect(path)
+    book, page = c.execute("SELECT book_id, page_id FROM jst_passage WHERE verse_spec = '9:10–15'").fetchone()
+    c.execute("INSERT INTO jst_verse (jst_verse_id, book_id, core_book_id, chapter, verse, text) "
+              "VALUES (99000, ?, ?, 14, 30, 'JST text')", (book, gen))
+    c.execute("INSERT INTO jst_passage (passage_id, page_id, seq, verse_spec, book_id, core_book_id, chapter_start, "
+              "verse_start, chapter_end, verse_end) VALUES (99000, ?, 99, '14:25–40', ?, ?, 14, 25, 14, 40)",
+              (page, book, gen))
+    c.execute("INSERT INTO jst_passage_verse VALUES (99000, 99000)")
+    c.execute("INSERT INTO jst_passage_ref (passage_id, seq, rel, target_book_id, target_chapter, "
+              "target_verse_start, target_verse_end) VALUES (99000, 0, 'compare', ?, 9, 5, 5)", (book,))
+    c.commit()
+    c.close()
+    both = ScriptureStore.open(open_scripture_db(str(path)))
+    core = sqlite3.connect(db_pkg.core_db.path)
+    core.execute("INSERT INTO citation VALUES (20, 3, ?, 14, 'J')", (gen,))
+    core.execute("INSERT INTO citation_verse VALUES (20, 30)")
+    core.execute("INSERT INTO citation VALUES (21, 3, ?, 9, 'J')", (gen,))
+    core.execute("INSERT INTO citation_verse VALUES (21, 12)")
+    core.commit()
+    core.close()
+    talk = _by_id(get_citing_talks(both, "Genesis", 9, 5))["talk_3"]
+    assert talk["via"] == ["JST Gen. 9:10–15", "JST Gen. 14:25–40"]
