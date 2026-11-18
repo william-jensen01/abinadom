@@ -37,8 +37,16 @@ _throttle_lock = threading.Lock()
 _last_network_request = 0.0
 
 
-def cached_session(cache_path: str = CACHE_PATH) -> requests.Session:
-    """Session whose responses are cached on disk forever (talk pages)."""
+def cached_session(cache_path: str | None = None) -> requests.Session:
+    """Session whose responses are cached on disk forever (talk pages).
+
+    The cache file is cache_path if given, else the path in the SCI_HTTP_CACHE
+    environment variable (when set and non-empty), else CACHE_PATH.
+    """
+    if cache_path is None:
+        cache_path = os.environ.get("SCI_HTTP_CACHE") or CACHE_PATH
+    parent = os.path.dirname(os.path.abspath(cache_path))
+    os.makedirs(parent, exist_ok=True)
     session = requests_cache.CachedSession(
         cache_path, backend="sqlite", expire_after=requests_cache.NEVER_EXPIRE
     )

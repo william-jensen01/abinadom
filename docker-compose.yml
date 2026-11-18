@@ -51,6 +51,8 @@ services:
     environment:
       SCI_DB_DIR: /data
       SCI_REPORT_DIR: /data/reports
+      # fetch.py's talk-page cache, on the host mount so it survives runs; /app stays read-only.
+      SCI_HTTP_CACHE: /data/http_cache.sqlite
       <<: *weaviate-env
     volumes:
       # Everything the scripts build or download lands here, on the host. Never mount at or under /app/db.

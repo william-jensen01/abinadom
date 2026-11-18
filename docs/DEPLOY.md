@@ -55,7 +55,7 @@ Both `mcp-server` and `tools` read `.env` (`env_file`).
 | `COMPOSE_FILE` | Which compose files `docker compose` uses; see "Compose files" below | `docker-compose.yml:docker-compose.proxy.yml` |
 | `HOST_UID`, `HOST_GID` | Owner of the files `tools` writes into `db/` (default `1000:1000`) | output of `id -u` and `id -g` |
 
-> **Set by compose, not by `.env`.** `docker-compose.yml` sets the data paths (`SCI_DB_DIR=/data`, `SCI_REPORT_DIR=/data/reports`) and the Weaviate address (`WEAVIATE_HOST=weaviate`, `WEAVIATE_PORT=8080`, `WEAVIATE_GRPC_PORT=50051`) for both containers under `environment:`. Those win over `.env`, so a stale value there cannot reach a container. The `WEAVIATE_*` lines in `.env.example` are only for developers running scripts directly on a host.
+> **Set by compose, not by `.env`.** `docker-compose.yml` sets the data paths (`SCI_DB_DIR=/data`, `SCI_REPORT_DIR=/data/reports`, and for `tools` `SCI_HTTP_CACHE=/data/http_cache.sqlite`) and the Weaviate address (`WEAVIATE_HOST=weaviate`, `WEAVIATE_PORT=8080`, `WEAVIATE_GRPC_PORT=50051`) for both containers under `environment:`. Those win over `.env`, so a stale value there cannot reach a container. The `WEAVIATE_*` lines in `.env.example` are only for developers running scripts directly on a host.
 
 ### File ownership: `HOST_UID` and `HOST_GID`
 
@@ -151,7 +151,7 @@ docker compose run --rm tools scripts/build_scriptures.py     # raw layer -> par
 
 ### About `scripts/fetch.py`
 
-`scripts/fetch.py` downloads Church conference data. It runs in the container like every other script (`docker compose run --rm tools scripts/fetch.py ...`), but its output is not kept: the Church JSON files (the ones the build reads and the topics index) are baked into the `tools` image from the repository, and what a container writes there vanishes with it. To refresh that JSON, run `fetch.py` on a development machine (see [update/HOW_UPDATES_WORK.md](update/HOW_UPDATES_WORK.md)), commit the result, and run `docker compose build tools` again.
+`scripts/fetch.py` downloads Church conference data. It runs in the container like every other script (`docker compose run --rm tools scripts/fetch.py ...`), but its output is not kept: the Church JSON files (the ones the build reads and the topics index) are baked into the `tools` image from the repository, and what a container writes there vanishes with it. Only its talk-page cache is kept: compose points `SCI_HTTP_CACHE` at `/data/http_cache.sqlite` (the `./db` mount), so later runs, including `fetch --all`, reuse downloaded talks instead of fetching them again. To refresh that JSON, run `fetch.py` on a development machine (see [update/HOW_UPDATES_WORK.md](update/HOW_UPDATES_WORK.md)), commit the result, and run `docker compose build tools` again.
 
 ---
 

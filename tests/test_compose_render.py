@@ -84,6 +84,7 @@ def test_environment(combo, configs):
         leaked = {k: v for k, v in env.items() if v in LEAK_ENV.values()}
         assert not leaked, f"{name}: .env values reached the container: {leaked}"
     assert envs["tools"].get("SCI_REPORT_DIR") == "/data/reports", f"tools SCI_REPORT_DIR={envs['tools'].get('SCI_REPORT_DIR')!r}"
+    assert envs["tools"].get("SCI_HTTP_CACHE") == "/data/http_cache.sqlite", f"tools SCI_HTTP_CACHE={envs['tools'].get('SCI_HTTP_CACHE')!r}"
 
 
 @pytest.mark.parametrize("combo", COMBOS)

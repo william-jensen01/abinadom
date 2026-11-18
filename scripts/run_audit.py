@@ -6,7 +6,10 @@ Reads talk_ids from config/audit_sample.json and runs each talk through
 every stage of the extraction pipeline, reporting any errors per talk per stage.
 
 Usage:
-    pipenv run py scripts/run_audit.py
+    pipenv run python scripts/run_audit.py
+
+Runs on the host only. The tools image leaves config/audit_sample.json
+out on purpose, so this script cannot run in the container.
 
 Before running, populate config/audit_sample.json with a list of talk_id
 integers, e.g.: [1059, 2345, 3012]
@@ -165,7 +168,12 @@ def _run_talk(talk_id: int) -> Dict[str, Any]:
 def main() -> None:
     # Load talk_ids from config
     if not AUDIT_CONFIG_PATH.exists():
-        logger.error("Audit config not found: %s", AUDIT_CONFIG_PATH)
+        print(
+            f"Audit config not found: {AUDIT_CONFIG_PATH}\n"
+            "run_audit.py runs on the host, where config/audit_sample.json lives: "
+            "pipenv run python scripts/run_audit.py",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     with open(AUDIT_CONFIG_PATH, encoding="utf-8") as f:
