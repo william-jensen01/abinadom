@@ -32,7 +32,7 @@ COPY loaders/ ./loaders/
 COPY models/ ./models/
 COPY utils/ ./utils/
 COPY db/scripture_schema.sql ./db/
-COPY db/one-off-migration/*.py db/one-off-migration/*.sql db/one-off-migration/talk_corrections.json ./db/one-off-migration/
+COPY db/one-off-migration/*.py db/one-off-migration/talk_corrections.json ./db/one-off-migration/
 
 # scripts/fetch.py rewrites these in place and runs as whatever uid compose passes, so they are writable by any uid.
 # Its HTTP cache lives under /data (SCI_HTTP_CACHE in compose), so /app itself stays read-only.
