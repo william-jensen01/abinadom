@@ -55,7 +55,7 @@ Both `mcp-server` and `tools` read `.env` (`env_file`).
 | `COMPOSE_FILE` | Which compose files `docker compose` uses; see "Compose files" below | `docker-compose.yml:docker-compose.proxy.yml` |
 | `HOST_UID`, `HOST_GID` | Owner of the files `tools` writes into `db/` (default `1000:1000`) | output of `id -u` and `id -g` |
 
-> **Set by compose, not by `.env`.** `docker-compose.yml` sets the data paths (`SCI_DB_DIR=/data`, `SCI_REPORT_DIR=/data/reports`) and the Weaviate address (`WEAVIATE_HOST=weaviate`, `WEAVIATE_PORT=8080`, `WEAVIATE_GRPC_PORT=50051`) for both containers under `environment:`. Those win over `.env`, so a stale value there cannot reach a container. The `WEAVIATE_*` lines in `.env.example` are only for developers running scripts directly on a host.
+> **Set by compose, not by `.env`.** `docker-compose.yml` sets the data paths (`SCI_DB_DIR=/data`, `SCI_REPORT_DIR=/data/reports`, and for `tools` `SCI_HTTP_CACHE=/data/http_cache.sqlite`) and the Weaviate address (`WEAVIATE_HOST=weaviate`, `WEAVIATE_PORT=8080`, `WEAVIATE_GRPC_PORT=50051`) for both containers under `environment:`. Those win over `.env`, so a stale value there cannot reach a container. The `WEAVIATE_*` lines in `.env.example` are only for developers running scripts directly on a host.
 
 ### File ownership: `HOST_UID` and `HOST_GID`
 
