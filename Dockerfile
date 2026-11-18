@@ -22,6 +22,8 @@ CMD ["python", "server.py"]
 # Build and load tools: run as `docker compose run --rm tools scripts/<script>.py ...`.
 FROM server AS tools
 
+# run_audit.py is left out on purpose: config/audit_sample.json stays out of the image, so the audit
+# runs on the host (`pipenv run python scripts/run_audit.py`) and the copy here only explains that.
 COPY scripts/ ./scripts/
 COPY api/ ./api/
 COPY process_topic_talks/ ./process_topic_talks/
