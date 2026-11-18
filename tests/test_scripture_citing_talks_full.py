@@ -217,7 +217,7 @@ def checked_verses():
 
 
 # ---------------------------------------------------------------------------
-# Tests
+# Gen. 14:18: the talks citing JST Gen. 14:25–40
 # ---------------------------------------------------------------------------
 
 GEN = 1                      # scripture.db book_id of Genesis
@@ -256,7 +256,7 @@ class TestGen14:
 
 
 # ---------------------------------------------------------------------------
-# Tests
+# Every Compare range, the verse on each side, and whole chapters
 # ---------------------------------------------------------------------------
 
 class TestCompareAll:
@@ -301,7 +301,7 @@ class TestCompareAll:
 
 
 # ---------------------------------------------------------------------------
-# Tests
+# Passages over the limit are not followed; whole chapters stay small and fast
 # ---------------------------------------------------------------------------
 
 MAX_SECONDS = 5.0            # seconds for a whole-chapter call (about 0.06 s in practice)
@@ -346,7 +346,7 @@ class TestBounded:
 
 
 # ---------------------------------------------------------------------------
-# Tests
+# via on talks found only through passages
 # ---------------------------------------------------------------------------
 
 class TestVia:

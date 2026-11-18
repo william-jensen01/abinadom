@@ -1089,7 +1089,7 @@ async def get_citing_talks(
     Matches what get_verse counts: the verses themselves (KJV or "JST ..." input), and for a KJV verse also the
     JST citations of the JST verses its footnotes name and of every JST verse of a JST appendix passage whose
     "Compare" range covers the verse (JST Gen. 14:25–40 compares Gen. 14:18–20, so talks citing it are listed for
-    Gen. 14:18). A passage whose Compare links cover more than 40 KJV verses in all is not followed (only
+    Gen. 14:18). A passage whose Compare links cover more than 40 KJV verses in all is not followed (such as
     JST Gen. 1:1–8:18, which compares Gen. 1:1–6:13). A talk found only through appendix passages (none of its
     matched citations is of a verse asked for or of a footnote's JST verse) has "via": the sorted references of
     those passages, written as get_verse(include_jst) prints them ("JST Gen. 14:25–40"); other talks have no "via".

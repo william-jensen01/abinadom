@@ -417,7 +417,7 @@ def get_citing_talks(store: ScriptureStore, book: str, chapter: int, verse_start
     with order="oldest"). Matching is get_verse's (KJV and JST input, `jst` footnote links, untitled talks left out
     and counted in untitled_talks_omitted when any). For a KJV verse it also follows the JST appendix passages whose
     "Compare" range covers the verse, except passages whose Compare links cover more than MAX_COMPARE_VERSES (40)
-    KJV verses in all (JST Gen. 1:1–8:18). A talk found only through such passages (none of its matched citations
+    KJV verses in all (such as JST Gen. 1:1–8:18). A talk found only through such passages (none of its matched citations
     is of a requested verse itself or of a `jst` footnote's JST verse) has "via": the sorted references of the
     passages that found it ("JST Gen. 14:25–40"); other talks have no "via". conference_only keeps the talks with
     get_talk_available=true; total counts the talks after that filter. limit is capped at 100. A talk's cites merge
