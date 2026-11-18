@@ -21,7 +21,9 @@ NOT_AVAILABLE = (
 
 TOP_CROSS_REFERENCES = 10
 _ALL = 10 ** 6          # "to the end of the chapter"
-MAX_COMPARE_VERSES = 40  # citing talks skip appendix passages whose Compare links cover more KJV verses in all
+# The one appendix passage whose text is published as the Book of Moses, named by its JST range: (book, first
+# chapter, first verse, last chapter, last verse). Citing talks do not follow it; the Moses footnotes stand in for it.
+MOSES_PASSAGE = ("Genesis", 1, 1, 8, 18)
 
 
 @dataclass
@@ -258,15 +260,11 @@ def _link_span(c: dict) -> tuple[tuple[int, int], tuple[int, int]]:
             (c["target_chapter_end"] or c["target_chapter"], c["target_verse_end"] or c["target_verse_start"] or _ALL))
 
 
-def _compare_size(store: ScriptureStore, passage_id: int) -> int:
-    """How many KJV verses the passage's Compare links cover in all (verses that exist; overlaps count once)."""
-    seen: set[int] = set()
-    for c in store.db.select("SELECT * FROM jst_passage_ref WHERE passage_id = ? AND rel = 'compare'", (passage_id,)):
-        first, last = _link_span(c)
-        seen.update(r["verse_id"] for r in store.db.select(
-            "SELECT verse_id FROM verse WHERE book_id = ? AND (chapter, verse) BETWEEN (?, ?) AND (?, ?)",
-            (c["target_book_id"], *first, *last)))
-    return len(seen)
+def _moses_passage_ids(store: ScriptureStore) -> set[int]:
+    """The passage_id(s) of the passage published as the Book of Moses, found by its JST range (MOSES_PASSAGE)."""
+    return {r["passage_id"] for r in store.db.select(
+        "SELECT p.passage_id FROM jst_passage p JOIN book b ON b.book_id = p.book_id WHERE b.name = ? "
+        "AND p.chapter_start = ? AND p.verse_start = ? AND p.chapter_end = ? AND p.verse_end = ?", MOSES_PASSAGE)}
 
 
 def _jst_passage(store: ScriptureStore, passage_id: int) -> Optional[tuple]:
@@ -293,9 +291,9 @@ def _citation_keys(store: ScriptureStore, b: dict, chapter: int, chapter_id: int
     """(keys, origin, via) for the core.db citations of these KJV verses. keys is {(flag, core BookID, chapter,
     verse): reference}: flag "" is an ordinary citation of the verse itself; flag "J" a JST citation of a JST verse
     that one of the verse's `jst` footnotes names, or of any JST verse of an appendix passage whose "Compare" range
-    covers the verse (core.db numbers those in JST chapters and verses). Passages whose Compare links cover more
-    than MAX_COMPARE_VERSES KJV verses in all are not followed: their talks would be listed against verses their
-    JST text barely touches. For the verses such a passage's Compare links cover (Gen. 1:1–6:13), flag "" also names
+    covers the verse (core.db numbers those in JST chapters and verses). The passage published as the Book of
+    Moses (JST Gen. 1:1–8:18) is not followed: its text is the Book of Moses, so its talks would be listed against
+    verses its JST text barely touches. For the verses its Compare link covers (Gen. 1:1–6:13), flag "" also names
     the Book of Moses verse each footnote ref on the verse links to (the `#pN` anchor of the ref's href, so "Moses
     6:21 (21–68)" is Moses 6:21 only); Moses refs on other verses are not followed. origin maps each key to the set
     of requested verse references it stands for. via maps each key reached only through passages or Moses refs to
@@ -316,9 +314,10 @@ def _citation_keys(store: ScriptureStore, b: dict, chapter: int, chapter_id: int
         origin.setdefault(key, set()).add(by_verse[r["src"]]["reference"])
     direct = set(keys)                          # the verses themselves and their `jst` footnote targets
     reached: dict[int, set[str]] = {}           # passage_id -> requested verse references its Compare links cover
-    skipped: set[int] = set()                   # requested KJV verses covered by a passage too large to follow
+    skipped: set[int] = set()                   # requested KJV verses covered by the Book of Moses passage
+    moses_passage = _moses_passage_ids(store)
     for pid, covered in _compare_links(store, b, chapter, by_verse):
-        if _compare_size(store, pid) > MAX_COMPARE_VERSES:
+        if pid in moses_passage:
             skipped.update(covered)
         else:
             reached.setdefault(pid, set()).update(by_verse[v]["reference"] for v in covered)
@@ -334,9 +333,9 @@ def _citation_keys(store: ScriptureStore, b: dict, chapter: int, chapter_id: int
             origin.setdefault(key, set()).update(refs)
             if key not in direct:
                 via.setdefault(key, set()).add((order, passage[0]))
-    # Why Moses: the only passage skipped above is JST Gen. 1:1–8:18 (Compare Gen. 1:1–6:13). The appendix prints
-    # no verses for it: its intro says the text is published as the Book of Moses (docs/scriptures/AUDIT.md). The
-    # Genesis footnotes' Moses refs stand in for it, matching each Genesis verse to the Moses verses it points to.
+    # Why Moses: the passage skipped above prints no verses in the appendix; its text is published as the Book of
+    # Moses (docs/scriptures/AUDIT.md). The footnotes' Moses refs on the verses its Compare link covers stand in
+    # for it, matching each Genesis verse to the Moses verses it points to.
     moses = store.db.select("SELECT book_id, sort, cite_abbr, core_book_id FROM book WHERE name = 'Moses'")
     if skipped and moses and moses[0]["core_book_id"] is not None:
         m = moses[0]
@@ -456,12 +455,12 @@ def get_citing_talks(store: ScriptureStore, book: str, chapter: int, verse_start
     page), citing_talks: [{talk_id, title, date, cites, get_talk_available, via?}]}, newest first (or oldest first
     with order="oldest"). Matching is get_verse's (KJV and JST input, `jst` footnote links, untitled talks left out
     and counted in untitled_talks_omitted when any). For a KJV verse it also follows the JST appendix passages whose
-    "Compare" range covers the verse, except passages whose Compare links cover more than MAX_COMPARE_VERSES (40)
-    KJV verses in all (such as JST Gen. 1:1–8:18). For the verses that skipped passage's Compare link covers (Gen.
-    1:1–6:13), it instead follows each footnote ref on the verse into the Book of Moses, to the verse the ref links
-    to ("Moses 6:21 (21–68)" is Moses 6:21 only); a non-JST citation of that Moses verse counts for the Genesis
-    verse, and the talk's cites show the Moses verse. Moses refs on other verses (Gen. 9:1) are not
-    followed; input "Moses" itself is unchanged. A talk found only through such passages or Moses refs (none of its
+    "Compare" range covers the verse, whatever its size, except JST Gen. 1:1–8:18, whose text is published as the
+    Book of Moses, and its Compare range goes through the Moses footnotes instead: for the verses that passage's
+    Compare link covers (Gen. 1:1–6:13), it follows each footnote ref on the verse into the Book of Moses, to the
+    verse the ref links to ("Moses 6:21 (21–68)" is Moses 6:21 only); a non-JST citation of that Moses verse
+    counts for the Genesis verse, and the talk's cites show the Moses verse. Moses refs on other verses (Gen. 9:1)
+    are not followed; input "Moses" itself is unchanged. A talk found only through such passages or Moses refs (none of its
     matched citations is of a requested verse itself or of a `jst` footnote's JST verse) has "via": the references of
     the passages and Moses verses that found it ("JST Gen. 14:25–40", "Moses 6:59"), one entry per Moses
     verse, in canonical order (book, then chapter, then first verse: "JST Gen. 9:10–15" before "JST Gen. 14:25–40",

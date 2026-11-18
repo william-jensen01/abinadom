@@ -1055,10 +1055,11 @@ async def get_verse(
         numbering: "standard" (default) or "jst" (same as a "JST ..." book).
         include_citing_talks: Add citing_talks_count (distinct titled talks in core.db that cite these verses,
             conference or not; a verse's JST citations count through the JST verses its footnotes name and through
-            the JST appendix passages whose Compare range covers it, except passages comparing more than 40 KJV
-            verses in all, such as JST Gen. 1:1–8:18. Separately, for Gen. 1:1–6:13 only, a non-JST citation of a
-            Book of Moses verse that one of the verse's footnotes links to also counts, the main verse before any
-            bracket ("Moses 6:21 (21–68)" is Moses 6:21); Moses refs on other verses are not followed.
+            the JST appendix passages whose Compare range covers it, whatever their size. JST Gen. 1:1–8:18 is not
+            followed: its text is published as the Book of Moses, and its Compare range (Gen. 1:1–6:13) goes through
+            the Moses footnotes instead: for those verses a non-JST citation of a Book of Moses verse that one of
+            the verse's footnotes links to also counts, the main verse before any bracket ("Moses 6:21 (21–68)" is
+            Moses 6:21); Moses refs on other verses are not followed.
             get_citing_talks lists the same talks), for more
             than one verse citing_talks_by_verse [{reference, count}], and untitled_talks_omitted when untitled
             citing talks were left out. No list of talks: page through them with get_citing_talks.
@@ -1092,9 +1093,9 @@ async def get_citing_talks(
     Matches what get_verse counts: the verses themselves (KJV or "JST ..." input), and for a KJV verse also the
     JST citations of the JST verses its footnotes name and of every JST verse of a JST appendix passage whose
     "Compare" range covers the verse (JST Gen. 14:25–40 compares Gen. 14:18–20, so talks citing it are listed for
-    Gen. 14:18). A passage whose Compare links cover more than 40 KJV verses in all is not followed (such as
-    JST Gen. 1:1–8:18, which compares Gen. 1:1–6:13). For those skipped verses (Gen. 1:1–6:13 only) each footnote
-    ref into the Book of Moses is followed instead, to the verse the ref links to ("Moses 6:21 (21–68)" is Moses
+    Gen. 14:18), whatever the passage's size. JST Gen. 1:1–8:18 is not followed: its text is published as the
+    Book of Moses, and its Compare range (Gen. 1:1–6:13) goes through the Moses footnotes instead: for those verses
+    each footnote ref into the Book of Moses is followed, to the verse the ref links to ("Moses 6:21 (21–68)" is Moses
     6:21 only): a non-JST citation of that Moses verse counts for the Genesis verse and shows in the talk's cites
     ("Moses 6:59"). Moses refs on other verses (Gen. 9:1 → Moses 5:2) are not followed; input "Moses" itself is
     unchanged. A talk found only through appendix passages or Moses verses (none of its matched citations is of a

@@ -7,10 +7,11 @@ independent of tools/scripture_tools.py. A KJV verse's citing talks are the titl
   (1) a non-JST citation (Flag != 'J') of the verse itself, or
   (2) a JST citation (Flag = 'J') of a JST verse that one of the verse's `jst` footnotes names, or
   (3) a JST citation of any JST verse of an appendix passage that has a rel='compare' heading link whose range
-      covers the verse (only 'compare'; 'similar' and 'see-also' are not followed), unless the passage's Compare
-      links cover more than MAX_COMPARE_VERSES KJV verses in all (today only JST Gen. 1:1-8:18, Compare Gen. 1:1-6:13).
+      covers the verse (only 'compare'; 'similar' and 'see-also' are not followed), whatever the passage's size,
+      except the passage published as the Book of Moses (JST Gen. 1:1-8:18, Compare Gen. 1:1-6:13), which is
+      recognized by its JST range.
 
-  (4) for a verse that a passage over the limit covers (Gen. 1:1-6:13), a non-JST citation of the Book of Moses verse
+  (4) for a verse that the Book of Moses passage's Compare link covers (Gen. 1:1-6:13), a non-JST citation of the Book of Moses verse
       that each footnote ref on the verse links to (the `#pN` anchor of the ref's href: the main verse before any
       bracket, so "Moses 6:21 (21-68)" is Moses 6:21 only). Moses refs on other verses are not followed.
 
@@ -34,7 +35,10 @@ from tests.scripture_world import core_select, need_core_db
 from tools.scripture_tools import ScriptureStore, get_citing_talks, get_verse
 
 ALL = 10**6
-MAX_COMPARE_VERSES = 40      # Compare ranges over 40 KJV verses are not followed; today that skips only Gen. 1:1-6:13 (151), next largest is 34
+MOSES_PASSAGE = ("Genesis", 1, 1, 8, 18)    # the passage published as the Book of Moses: book, JST first ch:v, last ch:v
+# No passage but the Moses one compares more than this many KJV verses (next largest today: John 1:1-34, 34). A future
+# release adding one should be a decision, not followed silently: the warning test below fails until it is made.
+WARN_COMPARE_VERSES = 40
 
 _STATE = {}
 
@@ -135,16 +139,20 @@ def _reach_all(rel):
 
 @lru_cache(maxsize=None)
 def _reach(rel="compare"):
-    """_reach_all without the passages whose Compare links cover more than MAX_COMPARE_VERSES verses (compare only)."""
+    """_reach_all without the Book of Moses passage (compare only)."""
     out, size = _reach_all(rel)
     if rel != "compare":
         return out
-    big = {p for p, n in size.items() if n > MAX_COMPARE_VERSES}
+    big = moses_passages()
     return {k: ps - big for k, ps in out.items() if ps - big}
 
 
-def big_passages():
-    return {p for p, n in _reach_all("compare")[1].items() if n > MAX_COMPARE_VERSES}
+def moses_passages():
+    """The passage_id(s) of the passage published as the Book of Moses, found by its JST range."""
+    book, c0, v0, c1, v1 = MOSES_PASSAGE
+    return {r["passage_id"] for r in S().select(
+        "SELECT p.passage_id FROM jst_passage p JOIN book b ON b.book_id = p.book_id WHERE b.name = ? "
+        "AND p.chapter_start = ? AND p.verse_start = ? AND p.chapter_end = ? AND p.verse_end = ?", (book, c0, v0, c1, v1))}
 
 
 @lru_cache(maxsize=None)
@@ -162,9 +170,9 @@ def _moses_book():
 
 @lru_cache(maxsize=None)
 def _moses():
-    """{(book_id, ch, v): {(Moses ch, Moses v)}}: the verse each footnote ref into Moses links to, on the verses a
-    passage over the limit covers."""
-    covered = {k for k, ps in _reach_all("compare")[0].items() if ps & big_passages()}
+    """{(book_id, ch, v): {(Moses ch, Moses v)}}: the verse each footnote ref into Moses links to, on the verses the
+    Book of Moses passage's Compare link covers."""
+    covered = {k for k, ps in _reach_all("compare")[0].items() if ps & moses_passages()}
     out = defaultdict(set)
     for r in S().select("SELECT v.book_id, v.chapter, v.verse, r.href, r.target_chapter FROM footnote_ref r "
                         "JOIN footnote f ON f.footnote_id = r.footnote_id JOIN verse v ON v.verse_id = f.verse_id "
@@ -351,7 +359,7 @@ class TestCompareAll:
 
 
 # ---------------------------------------------------------------------------
-# Passages over the limit are not followed; whole chapters stay small and fast
+# The Moses passage is not followed; whole chapters stay small and fast
 # ---------------------------------------------------------------------------
 
 MAX_SECONDS = 5.0            # seconds for a whole-chapter call (about 0.06 s in practice)
@@ -359,8 +367,13 @@ MAX_PAGE_BYTES = 100_000     # bytes for a 100-talk page (about 15 KB in practic
 
 
 class TestBounded:
-    def test_only_gen_1_to_6_is_over_the_limit(self):
-        assert {passage_reference(p) for p in big_passages()} == {"JST Gen. 1:1–8:18"}
+    def test_only_the_moses_passage_compares_more_than_the_warning_size(self):
+        """Fails if a release adds another passage whose Compare links cover many KJV verses: following it (as the
+        code does for every passage but the Moses one) should then be a decision."""
+        assert {passage_reference(p) for p in moses_passages()} == {"JST Gen. 1:1–8:18"}
+        over = {passage_reference(p): n for p, n in _reach_all("compare")[1].items()
+                if n > WARN_COMPARE_VERSES and p not in moses_passages()}
+        assert not over, f"passages comparing more than {WARN_COMPARE_VERSES} KJV verses: {over}"
 
     @pytest.mark.parametrize("ch", [1, 3, 6])
     def test_gen_1_to_6_follow_moses_not_the_big_passage(self, store, ch):
@@ -370,7 +383,7 @@ class TestBounded:
         for x in counts["citing_talks_by_verse"]:
             v = int(x["reference"].split(":")[1])
             assert x["count"] == len(oracle(GEN, ch, v)), x
-        big_only = set().union(*(set(_core()[2].get(key, ())) for key in _passage_jst()[next(iter(big_passages()))]))
+        big_only = set().union(*(set(_core()[2].get(key, ())) for key in _passage_jst()[next(iter(moses_passages()))]))
         listed = all_talks(store, "Genesis", ch)
         direct = set().union(*(oracle(GEN, ch, v, passages=False, moses=False) for v in _chapter_verses()[(GEN, ch)]))
         assert not {t for t in big_only & listed.keys() if t not in direct and not _reached_by_moses(ch, t)}
@@ -420,7 +433,7 @@ class TestBounded:
             assert len(t_.get("via", ())) <= (25 if book == "Genesis" else 5), (t_["talk_id"], t_["via"])
 
     def test_john_1_largest_followed_range(self, store):
-        """John 1:1–34 (34 verses) is under the limit, so it is followed, edges included."""
+        """John 1:1–34 (34 verses, the largest passage after the Moses one) is followed, edges included."""
         john = next(k for k, x in _books().items() if x["name"] == "John")
         assert passage_only(john, 1, 2) and passage_only(john, 1, 34) and not passage_only(john, 1, 35)
         for v in (1, 2, 34, 35):

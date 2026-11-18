@@ -301,17 +301,30 @@ def test_compare_link_across_chapters_and_no_similar_or_see_also(linked_store, c
     assert [v["count"] for v in r["citing_talks_by_verse"]] == [1, 0, 0]   # 9:18–19 only similar / see-also
 
 
-def test_passage_comparing_more_than_the_limit_is_not_followed(store, compare_core, monkeypatch):
-    import tools.scripture_tools as st
-    pid = store.db.scalar("SELECT passage_id FROM jst_passage WHERE verse_spec = '9:10–15'", (), None)
-    assert st._compare_size(store, pid) == 6                           # Gen. 9:4–9
-    monkeypatch.setattr(st, "MAX_COMPARE_VERSES", 6)                   # at the limit: followed
-    assert _ids(get_citing_talks(store, "Genesis", 9, 5, order="oldest")) == ["talk_1", "talk_2"]
-    monkeypatch.setattr(st, "MAX_COMPARE_VERSES", 5)                   # over it: not followed, in lists or counts
-    r = get_citing_talks(store, "Genesis", 9, 5)
-    assert [(t["talk_id"], t["cites"]) for t in r["citing_talks"]] == [("talk_2", ["Gen. 9:5"])]
-    assert get_verse(store, "Genesis", 9, 6, 9, include_citing_talks=True)["citing_talks_count"] == 0
-    assert _ids(get_citing_talks(store, "Genesis", 9, 16)) == ["talk_3"]   # a 2-verse passage is still followed
+def test_passage_comparing_many_verses_is_followed(tmp_path, built_db, compare_core):
+    """JST Gen. 9:10–15 gets a second Compare link over Gen. 1:1–9:9 (every Genesis verse the fixture has before
+    it): it is still followed, on every verse the links cover, however many that is."""
+    path = tmp_path / "scripture.db"
+    shutil.copy(built_db, path)
+    c = sqlite3.connect(path)
+    pid, gen = c.execute("SELECT passage_id, book_id FROM jst_passage WHERE verse_spec = '9:10–15'").fetchone()
+    c.execute("INSERT INTO jst_passage_ref (passage_id, seq, rel, target_book_id, target_chapter, "
+              "target_chapter_end, target_verse_start, target_verse_end) VALUES (?, 10, 'compare', ?, 1, 9, 1, 9)",
+              (pid, gen))
+    c.commit()
+    covered = c.execute("SELECT COUNT(*) FROM verse WHERE book_id = ? AND (chapter, verse) <= (9, 9)",
+                        (gen,)).fetchone()[0]
+    c.close()
+    wide = ScriptureStore.open(open_scripture_db(str(path)))
+    assert covered > 40                       # more verses than any size limit the code once had
+    first = wide.db.select("SELECT chapter, verse FROM verse WHERE book_id = ? ORDER BY chapter, verse LIMIT 1",
+                           (gen,))[0]
+    assert (first["chapter"], first["verse"]) < (9, 4)
+    talks = get_citing_talks(wide, "Genesis", first["chapter"], first["verse"], order="oldest")
+    assert [(t["talk_id"], t["via"]) for t in talks["citing_talks"]] == [
+        ("talk_1", ["JST Gen. 9:10–15"]), ("talk_2", ["JST Gen. 9:10–15"])]    # talks 1 and 2 cite its JST verses
+    r = get_verse(wide, "Genesis", first["chapter"], first["verse"], include_citing_talks=True)
+    assert r["citing_talks_count"] == 2
 
 
 def test_talk_found_only_through_a_passage_names_it_in_via(store, compare_core):
@@ -337,20 +350,26 @@ def test_no_via_through_a_jst_footnote_or_for_jst_input(store, compare_core):
 
 
 # ---------------------------------------------------------------------------
-# Passages over the limit: their verses follow the Book of Moses refs in their footnotes
+# The passage published as the Book of Moses: its verses follow the Moses refs in their footnotes
 # ---------------------------------------------------------------------------
 
 @pytest.fixture()
-def moses_store(tmp_path, built_db, monkeypatch):
-    """A copy of the fixture store with footnote refs into Moses on Gen. 9:5, 9:6 and 9:10, and the size limit set so
-    that JST Gen. 9:10–15 (Compare Gen. 9:4–9, six verses) is a passage too large to follow. Gen. 9:5 links "Moses
-    6:21 (21–68)"; Gen. 9:6 links Moses 3:17 and 3:7, and "Moses 5:2 (2–3), 16–17" as two refs; Gen. 9:10 is outside
-    the passage's Compare range and links Moses 7:43."""
-    import tools.scripture_tools as st
-    monkeypatch.setattr(st, "MAX_COMPARE_VERSES", 5)
-    path = tmp_path / "scripture.db"
+def moses_store(tmp_path, built_db):
+    """A copy of the fixture store with footnote refs into Moses on Gen. 9:5, 9:6 and 9:10, and JST Gen. 9:10–15
+    (Compare Gen. 9:4–9) given the JST range Genesis 1:1–8:18, so it is the passage published as the Book of Moses.
+    Gen. 9:5 links "Moses 6:21 (21–68)"; Gen. 9:6 links Moses 3:17 and 3:7, and "Moses 5:2 (2–3), 16–17" as two
+    refs; Gen. 9:10 is outside the passage's Compare range and links Moses 7:43."""
+    return ScriptureStore.open(open_scripture_db(str(_moses_copy_path(tmp_path, built_db, (1, 1, 8, 18)))))
+
+
+def _moses_copy_path(tmp_path, built_db, jst_range):
+    """A copy of the fixture store's file with the Moses footnote refs, and the passage JST Gen. 9:10–15 carrying
+    this (first chapter, first verse, last chapter, last verse) JST range."""
+    path = tmp_path / f"scripture_{'_'.join(map(str, jst_range))}.db"
     shutil.copy(built_db, path)
     c = sqlite3.connect(path)
+    c.execute("UPDATE jst_passage SET chapter_start = ?, verse_start = ?, chapter_end = ?, verse_end = ? "
+              "WHERE verse_spec = '9:10–15'", jst_range)
     moses = c.execute("SELECT book_id FROM book WHERE name = 'Moses'").fetchone()[0]
     verse_id = {v: i for v, i in c.execute("SELECT verse, verse_id FROM verse WHERE book_id = 1 AND chapter = 9")}
     page = c.execute("SELECT page_id FROM chapter WHERE book_id = 1 AND number = 9").fetchone()[0]
@@ -368,12 +387,12 @@ def moses_store(tmp_path, built_db, monkeypatch):
                        label, moses, ch, v, v))
     c.commit()
     c.close()
-    return ScriptureStore.open(open_scripture_db(str(path)))
+    return path
 
 
 @pytest.fixture()
 def moses_core(tmp_path, store, monkeypatch):
-    """A core.db with titled talks citing Moses verses (and JST Gen. 9:12, of the too-large passage):
+    """A core.db with titled talks citing Moses verses (and JST Gen. 9:12, of the Moses passage):
     1 Moses 6:21 and JST Gen. 9:12; 2 Moses 3:7 and 3:17; 3 Moses 5:3 (inside the bracket of Moses 5:2, not linked);
     4 Moses 5:16 and 5:17; 5 Gen. 9:6 and Moses 3:7; 6 Moses 7:43; 7 Moses 6:22 (inside the bracket of 6:21);
     8 JST Moses 6:21 (Flag='J', not a standard citation); 9 Moses 5:2; 10 Moses 1:10 and 6:21."""
@@ -405,11 +424,11 @@ def _by_id(page):
     return {t["talk_id"]: t for t in page["citing_talks"]}
 
 
-def test_moses_ref_on_a_verse_of_a_too_large_passage_finds_the_talks_citing_the_linked_verse(moses_store, moses_core):
+def test_moses_ref_on_a_verse_of_the_moses_passage_finds_the_talks_citing_the_linked_verse(moses_store, moses_core):
     r = get_citing_talks(moses_store, "Genesis", 9, 5)
     assert _ids(r) == ["talk_10", "talk_1"]         # Moses 6:21 only: not 6:22 (talk 7), not Flag='J' (talk 8)
     t = r["citing_talks"][1]
-    assert t["cites"] == ["Moses 6:21"]             # JST Gen. 9:12 is not followed: the passage is too large
+    assert t["cites"] == ["Moses 6:21"]             # JST Gen. 9:12 is not followed: it is the Moses passage
     assert t["via"] == ["Moses 6:21"]
     assert get_verse(moses_store, "Genesis", 9, 5, include_citing_talks=True)["citing_talks_count"] == 2
 
@@ -429,12 +448,25 @@ def test_via_lists_moses_verses_in_canonical_order_not_text_order(moses_store, m
     assert r["talk_5"]["cites"] == ["Gen. 9:6", "Moses 3:7"]
 
 
-def test_moses_refs_are_followed_only_while_the_passage_is_too_large(moses_store, moses_core, monkeypatch):
-    import tools.scripture_tools as st
+def test_moses_refs_are_followed_only_for_the_passage_with_the_moses_range(tmp_path, built_db, moses_store, moses_core):
     assert _by_id(get_citing_talks(moses_store, "Genesis", 9, 5))["talk_1"]["via"] == ["Moses 6:21"]
-    monkeypatch.setattr(st, "MAX_COMPARE_VERSES", 6)            # JST Gen. 9:10–15 is followed instead
-    r = _by_id(get_citing_talks(moses_store, "Genesis", 9, 5))
+    other = ScriptureStore.open(open_scripture_db(str(_moses_copy_path(tmp_path, built_db, (9, 10, 9, 15)))))
+    r = _by_id(get_citing_talks(other, "Genesis", 9, 5))              # same passage, another range: followed instead
     assert r["talk_1"]["via"] == ["JST Gen. 9:10–15"] and "talk_10" not in r
+
+
+def test_the_moses_passage_is_found_by_its_range_alone(tmp_path, built_db, moses_core):
+    """Changing the passage's title, section id and intro changes nothing; changing one end of its range does."""
+    path = _moses_copy_path(tmp_path, built_db, (1, 1, 8, 18))
+    c = sqlite3.connect(path)
+    c.execute("UPDATE jst_passage SET title = 'JST, Moses 1:1.', section_id = 'sec_x', intro = 'other' "
+              "WHERE verse_spec = '9:10–15'")
+    c.commit()
+    c.close()
+    renamed = ScriptureStore.open(open_scripture_db(str(path)))
+    assert _by_id(get_citing_talks(renamed, "Genesis", 9, 5))["talk_1"]["via"] == ["Moses 6:21"]
+    near = ScriptureStore.open(open_scripture_db(str(_moses_copy_path(tmp_path, built_db, (1, 1, 8, 17)))))
+    assert _by_id(get_citing_talks(near, "Genesis", 9, 5))["talk_1"]["via"] == ["JST Gen. 9:10–15"]
 
 
 def test_moses_refs_on_other_verses_are_not_followed(moses_store, moses_core):
