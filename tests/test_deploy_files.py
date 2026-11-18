@@ -220,3 +220,8 @@ def test_claude_md_keeps_pipenv_commands():
     c = (ROOT / "CLAUDE.md").read_text()
     assert "pipenv run python -m pytest" in c and "pipenv requirements > requirements.txt" in c, \
         "CLAUDE.md must keep the pipenv developer commands"
+
+
+def test_updates_guide_names_the_http_cache_setting():
+    text = (ROOT / "docs" / "update" / "HOW_UPDATES_WORK.md").read_text()
+    assert "SCI_HTTP_CACHE" in text, "docs/update/HOW_UPDATES_WORK.md describes the HTTP cache but not SCI_HTTP_CACHE"
