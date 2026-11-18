@@ -21,6 +21,7 @@ NOT_AVAILABLE = (
 
 TOP_CROSS_REFERENCES = 10
 _ALL = 10 ** 6          # "to the end of the chapter"
+MAX_COMPARE_VERSES = 40  # citing talks skip appendix passages whose Compare links cover more KJV verses in all
 
 
 @dataclass
@@ -141,7 +142,7 @@ def _read_verses(store: ScriptureStore, book: str, chapter: int, verse_start: Op
         if want_scope and isinstance(result, dict) and b["core_book_id"] is not None:
             # core.db numbers Flag='J' citations in JST chapters and verses, as read here
             keys = {("J", b["core_book_id"], chapter, v["verse"]): v["reference"] for v in result["verses"]}
-            scope = ([v["reference"] for v in result["verses"]], keys, {k: {ref} for k, ref in keys.items()})
+            scope = ([v["reference"] for v in result["verses"]], keys, {k: {ref} for k, ref in keys.items()}, {})
         return result, scope
 
     ch = _chapter(store, b, chapter)
@@ -175,8 +176,8 @@ def _read_verses(store: ScriptureStore, book: str, chapter: int, verse_start: Op
     result = {"reference": reference, "chapter_summary": ch["summary"] or "", "verses": list(by_verse.values())}
     scope = None
     if want_scope:
-        keys, origin = _citation_keys(store, b, chapter, ch["chapter_id"], lo, hi, by_verse)
-        scope = ([row["reference"] for row in by_verse.values()], keys, origin)
+        keys, origin, via = _citation_keys(store, b, chapter, ch["chapter_id"], lo, hi, by_verse)
+        scope = ([row["reference"] for row in by_verse.values()], keys, origin, via)
     return result, scope
 
 
@@ -212,27 +213,21 @@ def _attach_jst(store: ScriptureStore, b: dict, chapter: int, chapter_id: int, l
         found.setdefault(r["kjv_verse"], {}).setdefault(r["jst_verse_id"], r)
     out = {v: [{"reference": _jst_reference(j), "text": j["text"]} for j in rows.values()] for v, rows in found.items()}
 
-    passages: dict[int, Optional[tuple]] = {}   # passage_id -> (reference, text, jst ids), built once
+    passages: dict[int, Optional[tuple]] = {}   # passage_id -> (reference, text, jst rows), built once
     holders: dict[int, str] = {}                 # passage_id -> the verse carrying its full text
     carried: dict[int, set[int]] = {}            # KJV verse -> passage_ids already attached to it
-    for c in store.db.select(
-            "SELECT * FROM jst_passage_ref WHERE rel = 'compare' AND target_book_id = ? AND target_chapter <= ? "
-            "AND COALESCE(target_chapter_end, target_chapter) >= ? ORDER BY passage_id, seq",
-            (b["book_id"], chapter, chapter)):
-        pid = c["passage_id"]
-        first = (c["target_chapter"], c["target_verse_start"] or 0)
-        last = (c["target_chapter_end"] or c["target_chapter"], c["target_verse_end"] or c["target_verse_start"] or _ALL)
-        covered = [v for v in by_verse if first <= (chapter, v) <= last and pid not in carried.get(v, ())]
+    for pid, linked in _compare_links(store, b, chapter, by_verse):
+        covered = [v for v in linked if pid not in carried.get(v, ())]
         if not covered:
             continue
         if pid not in passages:
             passages[pid] = _jst_passage(store, pid)
         if passages[pid] is None:
             continue
-        reference, text, ids = passages[pid]
+        reference, text, rows = passages[pid]
         for v in covered:
             carried.setdefault(v, set()).add(pid)
-            if ids <= set(found.get(v, ())):     # the verse's footnotes already carry all of it
+            if {j["jst_verse_id"] for j in rows} <= set(found.get(v, ())):   # its footnotes already carry all of it
                 continue
             holder = holders.setdefault(pid, by_verse[v]["reference"])
             out.setdefault(v, []).append({"reference": reference, "text": text if holder == by_verse[v]["reference"]
@@ -241,9 +236,43 @@ def _attach_jst(store: ScriptureStore, b: dict, chapter: int, chapter_id: int, l
         by_verse[verse]["jst"] = entries
 
 
+def _compare_links(store: ScriptureStore, b: dict, chapter: int, verses) -> list[tuple[int, list[int]]]:
+    """(passage_id, covered) for each "Compare" heading link of a JST appendix passage that covers some of these
+    verses of the KJV chapter, in passage and link order; covered lists those verses. A link may cross chapters, and
+    a passage with several links covers only the verses under them. Similar and see-also links are not Compare."""
+    out = []
+    for c in store.db.select(
+            "SELECT * FROM jst_passage_ref WHERE rel = 'compare' AND target_book_id = ? AND target_chapter <= ? "
+            "AND COALESCE(target_chapter_end, target_chapter) >= ? ORDER BY passage_id, seq",
+            (b["book_id"], chapter, chapter)):
+        first, last = _link_span(c)
+        covered = [v for v in verses if first <= (chapter, v) <= last]
+        if covered:
+            out.append((c["passage_id"], covered))
+    return out
+
+
+def _link_span(c: dict) -> tuple[tuple[int, int], tuple[int, int]]:
+    """The first and last KJV (chapter, verse) a jst_passage_ref link covers; no verse means the whole chapter."""
+    return ((c["target_chapter"], c["target_verse_start"] or 0),
+            (c["target_chapter_end"] or c["target_chapter"], c["target_verse_end"] or c["target_verse_start"] or _ALL))
+
+
+def _compare_size(store: ScriptureStore, passage_id: int) -> int:
+    """How many KJV verses the passage's Compare links cover in all (verses that exist; overlaps count once)."""
+    seen: set[int] = set()
+    for c in store.db.select("SELECT * FROM jst_passage_ref WHERE passage_id = ? AND rel = 'compare'", (passage_id,)):
+        first, last = _link_span(c)
+        seen.update(r["verse_id"] for r in store.db.select(
+            "SELECT verse_id FROM verse WHERE book_id = ? AND (chapter, verse) BETWEEN (?, ?) AND (?, ?)",
+            (c["target_book_id"], *first, *last)))
+    return len(seen)
+
+
 def _jst_passage(store: ScriptureStore, passage_id: int) -> Optional[tuple]:
-    """(reference, text, jst_verse_ids) of an appendix passage. The reference is the passage's printed verse spec in
-    cite form ("JST Gen. 9:10–15", "JST Matt. 4:1, 5–6, 8–9"); its text is its JST verses joined in order."""
+    """(reference, text, rows) of an appendix passage: rows are its jst_verse rows in order. The reference is the
+    passage's printed verse spec in cite form ("JST Gen. 9:10–15", "JST Matt. 4:1, 5–6, 8–9"); its text is its JST
+    verses joined in order."""
     rows = store.db.select("SELECT jv.* FROM jst_passage_verse pv JOIN jst_verse jv USING (jst_verse_id) "
                            "WHERE pv.passage_id = ? ORDER BY jv.chapter, jv.verse", (passage_id,))
     if not rows:
@@ -256,15 +285,18 @@ def _jst_passage(store: ScriptureStore, passage_id: int) -> Optional[tuple]:
         if (rows[0]["chapter"], rows[0]["verse"]) != (rows[-1]["chapter"], rows[-1]["verse"]):
             tail = (f"{rows[-1]['chapter']}:" if rows[-1]["chapter"] != rows[0]["chapter"] else "") + str(rows[-1]["verse"])
             reference += f"–{tail}"
-    return reference, " ".join(j["text"] for j in rows), {j["jst_verse_id"] for j in rows}
+    return reference, " ".join(j["text"] for j in rows), rows
 
 
 def _citation_keys(store: ScriptureStore, b: dict, chapter: int, chapter_id: int, lo: int, hi: int,
-                   by_verse: dict) -> tuple[dict, dict]:
-    """(keys, origin) for the core.db citations of these KJV verses. keys is {(flag, core BookID, chapter, verse):
-    reference}: flag "" is an ordinary citation of the verse itself; flag "J" a JST citation of a JST verse that one
-    of the verse's `jst` footnotes names (core.db numbers those in JST chapters and verses). origin maps each key to
-    the set of requested verse references it stands for."""
+                   by_verse: dict) -> tuple[dict, dict, dict]:
+    """(keys, origin, via) for the core.db citations of these KJV verses. keys is {(flag, core BookID, chapter,
+    verse): reference}: flag "" is an ordinary citation of the verse itself; flag "J" a JST citation of a JST verse
+    that one of the verse's `jst` footnotes names, or of any JST verse of an appendix passage whose "Compare" range
+    covers the verse (core.db numbers those in JST chapters and verses). Passages whose Compare links cover more
+    than MAX_COMPARE_VERSES KJV verses in all are not followed: their talks would be listed against verses their
+    JST text barely touches. origin maps each key to the set of requested verse references it stands for. via maps
+    each J key reached only through passages to the references of those passages, as _jst_passage prints them."""
     keys, origin = {}, {}
     if b["core_book_id"] is not None:
         for v, row in by_verse.items():
@@ -278,16 +310,33 @@ def _citation_keys(store: ScriptureStore, b: dict, chapter: int, chapter_id: int
         key = ("J", r["core_book_id"], r["chapter"], r["verse"])
         keys[key] = _jst_reference(r)
         origin.setdefault(key, set()).add(by_verse[r["src"]]["reference"])
-    return keys, origin
+    direct = set(keys)                          # the verses themselves and their `jst` footnote targets
+    reached: dict[int, set[str]] = {}           # passage_id -> requested verse references its Compare links cover
+    for pid, covered in _compare_links(store, b, chapter, by_verse):
+        reached.setdefault(pid, set()).update(by_verse[v]["reference"] for v in covered)
+    via: dict = {}
+    for pid, refs in reached.items():
+        passage = _jst_passage(store, pid) if _compare_size(store, pid) <= MAX_COMPARE_VERSES else None
+        if passage is None:
+            continue
+        for r in passage[2]:
+            key = ("J", r["core_book_id"], r["chapter"], r["verse"])
+            keys.setdefault(key, _jst_reference(r))
+            origin.setdefault(key, set()).update(refs)
+            if key not in direct:
+                via.setdefault(key, set()).add(passage[0])
+    return keys, origin, via
 
 
-def _find_citing_talks(keys: dict, origin: dict) -> tuple[dict, set]:
+def _find_citing_talks(keys: dict, origin: dict, via: dict) -> tuple[dict, set]:
     """({TalkID: entry}, untitled TalkIDs) for the core.db citations matching `keys` (see _citation_keys). An entry is
     {talk_id ("talk_N"), title, date, cites (the references it cites), get_talk_available} plus "verses", the
-    requested verse references it reaches. Every titled talk is included, conference or not; get_talk serves only
-    conference talks, so get_talk_available is true exactly for talks with a conference_talk row. Untitled talks (no
-    title, no date) are only counted. A citation names its verses in citation_verse, so a range citation
-    (John 3:14–16) matches each verse it names. Raises OSError, sqlite3.Error or SchemaError if core.db cannot be read."""
+    requested verse references it reaches. When every citation a talk matched is in `via` (reached only through
+    appendix passages), the entry also has "via": the sorted references of those passages. Every titled talk is
+    included, conference or not; get_talk serves only conference talks, so get_talk_available is true exactly for
+    talks with a conference_talk row. Untitled talks (no title, no date) are only counted. A citation names its
+    verses in citation_verse, so a range citation (John 3:14–16) matches each verse it names. Raises OSError,
+    sqlite3.Error or SchemaError if core.db cannot be read."""
     by_chapter: dict[tuple, list[int]] = {}
     for flag, book_id, ch, v in keys:
         by_chapter.setdefault((flag, book_id, ch), []).append(v)
@@ -312,6 +361,8 @@ def _find_citing_talks(keys: dict, origin: dict) -> tuple[dict, set]:
             t["verses"] |= origin[key]
     for talk_id, t in talks.items():
         t["cites"] = _merged_cites(cited[talk_id], keys)
+        if cited[talk_id] <= via.keys():
+            t["via"] = sorted(set().union(*(via[k] for k in cited[talk_id])))
     return talks, untitled - talks.keys()
 
 
@@ -340,9 +391,9 @@ def _attach_citing_counts(result, scope) -> None:
     says why; the verses are returned either way."""
     if not isinstance(result, dict):
         return
-    refs, keys, origin = scope
+    refs, keys, origin, via = scope
     try:
-        talks, untitled = _find_citing_talks(keys, origin)
+        talks, untitled = _find_citing_talks(keys, origin, via)
     except (OSError, sqlite3.Error, sci_db.SchemaError) as exc:
         result["citing_talks_count"] = 0
         result["citing_talks_note"] = f"core.db citations are not available on this server ({type(exc).__name__})."
@@ -362,12 +413,17 @@ def get_citing_talks(store: ScriptureStore, book: str, chapter: int, verse_start
                      verse_end: Optional[int] = None, limit: int = 25, offset: int = 0,
                      conference_only: bool = False, order: str = "newest"):
     """One page of the talks citing these verses: {reference, total, offset, limit, next_offset (None on the last
-    page), citing_talks: [{talk_id, title, date, cites, get_talk_available}]}, newest first (or oldest first with
-    order="oldest"). Matching is get_verse's (KJV and JST input, `jst` footnote links, untitled talks left out and
-    counted in untitled_talks_omitted when any). conference_only keeps the talks with get_talk_available=true;
-    total counts the talks after that filter. limit is capped at 100. A talk's cites merge consecutive verses of one
-    book and chapter into a range ("John 3:14–17"; JST references stay separate from standard ones); this is
-    intentional, to keep the response small, since core.db stores each verse of a range separately."""
+    page), citing_talks: [{talk_id, title, date, cites, get_talk_available, via?}]}, newest first (or oldest first
+    with order="oldest"). Matching is get_verse's (KJV and JST input, `jst` footnote links, untitled talks left out
+    and counted in untitled_talks_omitted when any). For a KJV verse it also follows the JST appendix passages whose
+    "Compare" range covers the verse, except passages whose Compare links cover more than MAX_COMPARE_VERSES (40)
+    KJV verses in all (JST Gen. 1:1–8:18). A talk found only through such passages (none of its matched citations
+    is of a requested verse itself or of a `jst` footnote's JST verse) has "via": the sorted references of the
+    passages that found it ("JST Gen. 14:25–40"); other talks have no "via". conference_only keeps the talks with
+    get_talk_available=true; total counts the talks after that filter. limit is capped at 100. A talk's cites merge
+    consecutive verses of one book and chapter into a range ("John 3:14–17"; JST references stay separate from
+    standard ones); this is intentional, to keep the response small, since core.db stores each verse of a range
+    separately."""
     if (order or "").lower() not in ("newest", "oldest"):
         return f'order must be "newest" or "oldest", not {order!r}.'
     result, scope = _read_verses(store, book, chapter, verse_start, verse_end, False, False, "standard", True)
@@ -380,7 +436,7 @@ def get_citing_talks(store: ScriptureStore, book: str, chapter: int, verse_start
     if scope is None:
         return page
     try:
-        talks, untitled = _find_citing_talks(scope[1], scope[2])
+        talks, untitled = _find_citing_talks(*scope[1:])
     except (OSError, sqlite3.Error, sci_db.SchemaError) as exc:
         page["citing_talks_note"] = f"core.db citations are not available on this server ({type(exc).__name__})."
         return page

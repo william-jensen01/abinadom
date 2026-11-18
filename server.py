@@ -1054,7 +1054,9 @@ async def get_verse(
         include_jst: Attach the JST verses the Church links to each verse (its JST footnotes and appendix).
         numbering: "standard" (default) or "jst" (same as a "JST ..." book).
         include_citing_talks: Add citing_talks_count (distinct titled talks in core.db that cite these verses,
-            conference or not; a verse's JST citations count through the JST verses its footnotes name), for more
+            conference or not; a verse's JST citations count through the JST verses its footnotes name and through
+            the JST appendix passages whose Compare range covers it, except passages comparing more than 40 KJV
+            verses in all, such as JST Gen. 1:1–8:18; get_citing_talks lists the same talks), for more
             than one verse citing_talks_by_verse [{reference, count}], and untitled_talks_omitted when untitled
             citing talks were left out. No list of talks: page through them with get_citing_talks.
 
@@ -1085,11 +1087,17 @@ async def get_citing_talks(
     """List the talks in core.db that cite a scripture, one page at a time. No embedding needed.
 
     Matches what get_verse counts: the verses themselves (KJV or "JST ..." input), and for a KJV verse also the
-    JST citations of the JST verses its footnotes name. Every titled talk is listed, conference or not; untitled
-    talks are left out and counted in untitled_talks_omitted when there are any. get_talk fetches only the
-    entries with get_talk_available=true. A talk's cites merge consecutive verses of one book and chapter into a
-    range ("John 3:14–17", "JST Gen. 14:17–40"); this is intentional, to keep the response small, since core.db
-    stores each verse of a range separately. Standard and JST references are never merged together.
+    JST citations of the JST verses its footnotes name and of every JST verse of a JST appendix passage whose
+    "Compare" range covers the verse (JST Gen. 14:25–40 compares Gen. 14:18–20, so talks citing it are listed for
+    Gen. 14:18). A passage whose Compare links cover more than 40 KJV verses in all is not followed (only
+    JST Gen. 1:1–8:18, which compares Gen. 1:1–6:13). A talk found only through appendix passages (none of its
+    matched citations is of a verse asked for or of a footnote's JST verse) has "via": the sorted references of
+    those passages, written as get_verse(include_jst) prints them ("JST Gen. 14:25–40"); other talks have no "via".
+    Every titled talk is listed, conference or not; untitled talks are left out and counted in
+    untitled_talks_omitted when there are any. get_talk fetches only the entries with get_talk_available=true.
+    A talk's cites merge consecutive verses of one book and chapter into a range ("John 3:14–17", "JST Gen.
+    14:17–40"); this is intentional, to keep the response small, since core.db stores each verse of a range
+    separately. Standard and JST references are never merged together.
 
     Args:
         book: Book name or abbreviation, as for get_verse ("John", "D&C", "JST Genesis").
@@ -1102,7 +1110,7 @@ async def get_citing_talks(
         order: "newest" (default) or "oldest" by date.
 
     Returns JSON {reference, total, offset, limit, next_offset (null on the last page),
-    citing_talks: [{talk_id, title, date, cites, get_talk_available}]}.
+    citing_talks: [{talk_id, title, date, cites, get_talk_available, via?}]}.
     """
     app: AppContext = ctx.lifespan_context["app"]
     if app.scripture is None:
