@@ -151,7 +151,7 @@ docker compose run --rm tools scripts/build_scriptures.py     # raw layer -> par
 
 ### About `scripts/fetch.py`
 
-`scripts/fetch.py` downloads Church conference data. It runs in the container like every other script (`docker compose run --rm tools scripts/fetch.py ...`), but its output is not kept: the Church JSON files (the ones the build reads and the topics index) are baked into the `tools` image from the repository, and what a container writes there vanishes with it. To refresh that JSON, run `fetch.py` on a development machine (see [update/HOW_UPDATES_WORK.md](update/HOW_UPDATES_WORK.md)), commit the result, and run `docker compose build tools` again.
+`scripts/fetch.py` downloads Church conference data. It runs in the container like every other script (`docker compose run --rm tools scripts/fetch.py ...`), but its output is not kept: the Church JSON files (the ones the build reads and the topics index) are baked into the `tools` image from the repository, and what a container writes there vanishes with it. Only its talk-page cache is kept: compose points `SCI_HTTP_CACHE` at `/data/http_cache.sqlite` (the `./db` mount), so later runs, including `fetch --all`, reuse downloaded talks instead of fetching them again. To refresh that JSON, run `fetch.py` on a development machine (see [update/HOW_UPDATES_WORK.md](update/HOW_UPDATES_WORK.md)), commit the result, and run `docker compose build tools` again.
 
 ---
 
