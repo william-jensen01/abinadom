@@ -334,6 +334,9 @@ def _citation_keys(store: ScriptureStore, b: dict, chapter: int, chapter_id: int
             origin.setdefault(key, set()).update(refs)
             if key not in direct:
                 via.setdefault(key, set()).add((order, passage[0]))
+    # Why Moses: the only passage skipped above is JST Gen. 1:1–8:18 (Compare Gen. 1:1–6:13). The appendix prints
+    # no verses for it: its intro says the text is published as the Book of Moses (docs/scriptures/AUDIT.md). The
+    # Genesis footnotes' Moses refs stand in for it, matching each Genesis verse to the Moses verses it points to.
     moses = store.db.select("SELECT book_id, sort, cite_abbr, core_book_id FROM book WHERE name = 'Moses'")
     if skipped and moses and moses[0]["core_book_id"] is not None:
         m = moses[0]
