@@ -96,7 +96,7 @@ The report counts expected items by kind, and lists only the **unexpected** ones
 
 ## Being polite to the Church's servers
 
-`fetch` sends one request at a time, at most two per second, and names itself in its User-Agent. Talk pages are cached locally (`http_cache.sqlite`), so a talk is downloaded once and then reused. Topic pages and conference contents are always downloaded fresh, because those are what change.
+`fetch` sends one request at a time, at most two per second, and names itself in its User-Agent. Talk pages are cached locally (`http_cache.sqlite` in the repo folder, or the file named by the `SCI_HTTP_CACHE` environment variable when it is set and not empty; its folder is created if missing), so a talk is downloaded once and then reused. Topic pages and conference contents are always downloaded fresh, because those are what change.
 
 A run for one conference takes a few minutes, mostly for re-reading the ~335 topic pages. `fetch --all` takes longer the first time on a machine without the cache.
 

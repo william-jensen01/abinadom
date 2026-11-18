@@ -212,3 +212,33 @@ class TestTopics:
             process_topics(topics, _session({"/t/a": 500}), {"a": [{"uri": "/gc/1"}]})
         with pytest.raises(requests.exceptions.ConnectionError):
             process_topics(topics, _session({"/t/a": requests.exceptions.ConnectionError()}))
+
+
+class TestCachePath:
+    def _db_path(self, **kwargs):
+        session = church_api.cached_session(**kwargs)
+        return session.cache.responses.db_path
+
+    def test_env_var_sets_the_cache_file_and_creates_its_folder(self, monkeypatch, tmp_path):
+        target = tmp_path / "new" / "dir" / "talks.sqlite"
+        monkeypatch.setenv("SCI_HTTP_CACHE", str(target))
+        assert self._db_path() == target
+        assert target.parent.is_dir()
+
+    def test_unset_uses_the_default(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("SCI_HTTP_CACHE", raising=False)
+        monkeypatch.setattr(church_api, "CACHE_PATH", str(tmp_path / "http_cache"))
+        assert self._db_path() == tmp_path / "http_cache.sqlite"
+
+    def test_empty_uses_the_default(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("SCI_HTTP_CACHE", "")
+        monkeypatch.setattr(church_api, "CACHE_PATH", str(tmp_path / "http_cache"))
+        assert self._db_path() == tmp_path / "http_cache.sqlite"
+
+    def test_default_is_the_code_root(self):
+        assert church_api.CACHE_PATH == str(church_api.ROOT_DIR + "/http_cache")
+
+    def test_explicit_argument_wins(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("SCI_HTTP_CACHE", str(tmp_path / "env.sqlite"))
+        explicit = tmp_path / "arg.sqlite"
+        assert self._db_path(cache_path=str(explicit)) == explicit
