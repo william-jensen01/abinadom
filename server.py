@@ -1054,15 +1054,15 @@ async def get_verse(
         include_jst: Attach the JST verses the Church links to each verse (its JST footnotes and appendix).
         numbering: "standard" (default) or "jst" (same as a "JST ..." book).
         include_citing_talks: Add citing_talks_count (distinct titled talks in core.db that cite these verses,
-            conference or not; a verse's JST citations count through the JST verses its footnotes name and through
-            the JST appendix passages whose Compare range covers it, whatever their size. JST Gen. 1:1–8:18 is not
-            followed: its text is published as the Book of Moses, and its Compare range (Gen. 1:1–6:13) goes through
-            the Moses footnotes instead: for those verses a non-JST citation of a Book of Moses verse that one of
-            the verse's footnotes links to also counts, the main verse before any bracket ("Moses 6:21 (21–68)" is
-            Moses 6:21); Moses refs on other verses are not followed.
-            get_citing_talks lists the same talks), for more
-            than one verse citing_talks_by_verse [{reference, count}], and untitled_talks_omitted when untitled
-            citing talks were left out. No list of talks: page through them with get_citing_talks.
+            conference or not; get_citing_talks lists the same talks), for more than one verse
+            citing_talks_by_verse [{reference, count}], and untitled_talks_omitted when untitled citing talks were
+            left out. No list of talks: page through them with get_citing_talks. A verse's JST citations count
+            through the JST verses its footnotes name and through the JST appendix passages whose Compare range
+            covers it, whatever their size. JST Gen. 1:1–8:18 is not followed: its text is published as the Book of
+            Moses, and its Compare range (Gen. 1:1–6:13) goes through the Moses footnotes instead: for those verses a
+            non-JST citation of a Book of Moses verse that one of the verse's footnotes links to also counts, the
+            main verse before any bracket ("Moses 6:21 (21–68)" is Moses 6:21); Moses refs on other verses are not
+            followed.
 
     Returns JSON {reference, chapter_summary, verses: [{reference, verse, text, jst?, footnotes?}],
     citing_talks_count?, citing_talks_by_verse?, untitled_talks_omitted?}.
