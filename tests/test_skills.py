@@ -75,7 +75,7 @@ MAX_COMPATIBILITY = 500
 MAX_SKILL_MD_LINES = 500
 MAX_SKILL_MD_CHARS = 20000          # about 5000 tokens of body
 COPIED_RUN_WORDS = 10               # this many identical consecutive words is copying, not paraphrase
-MAX_INSTRUCTIONS_CHARS = 1600
+MAX_INSTRUCTIONS_CHARS = 2000
 
 
 def _files_of(folder: Path) -> dict:
