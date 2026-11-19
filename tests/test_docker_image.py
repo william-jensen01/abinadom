@@ -131,6 +131,37 @@ def test_server_imports_in_server_image(server_tree):
     assert r.returncode == 0, f"import server in the server image tree:\n{(r.stdout + r.stderr)[-900:]}"
 
 
+def test_server_image_serves_every_skill_byte_for_byte(server_tree):
+    """Started from the server image's file tree, the server lists each skill in skills/ with identical files."""
+    probe = r'''
+import asyncio, base64, json
+from unittest.mock import MagicMock, patch
+import server
+from fastmcp import Client
+from fastmcp.skills import SkillsClientExtension
+async def go():
+    out = {}
+    async with Client(server.mcp, extensions=[SkillsClientExtension()]) as c:
+        for e in await c.list_skills():
+            sk = await c.read_skill(e.uri)
+            out[str(e.frontmatter.name)] = {k: base64.b64encode(v.content if hasattr(v, "content") else bytes(v)).decode()
+                                            for k, v in sk.files.items()}
+    return out
+with patch("server._startup", return_value=server.AppContext(client=MagicMock())):
+    print("@@" + json.dumps(asyncio.run(go())))
+'''
+    r = run([PY, "-s", "-c", probe], cwd=server_tree, env=clean_env())
+    line = [l for l in r.stdout.splitlines() if l.startswith("@@")]
+    assert r.returncode == 0 and line, f"serving skills from the server image tree:\n{(r.stdout + r.stderr)[-900:]}"
+    import base64
+    got = {n: {k: base64.b64decode(v) for k, v in files.items()} for n, files in json.loads(line[-1][2:]).items()}
+    want = {}
+    for skill_md in (CODE_DIR / "skills").glob("*/SKILL.md"):
+        folder = skill_md.parent
+        want[folder.name] = {p.relative_to(folder).as_posix(): p.read_bytes() for p in folder.rglob("*") if p.is_file()}
+    assert got == want
+
+
 def test_church_json_is_the_committed_copy(tools_tree):
     for j in CHURCH_JSON:
         a, b = tools_tree / "db" / "one-off-migration" / j, CODE_DIR / "db" / "one-off-migration" / j
