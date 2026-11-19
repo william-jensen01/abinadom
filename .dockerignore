@@ -22,6 +22,9 @@ __pycache__/
 !db/one-off-migration/talk_previews.json
 !db/one-off-migration/conference_topics.json
 !db/one-off-migration/talk_corrections.json
+# The skills the server serves ship whole, including any .txt or .json reference files
+!skills/**/*.json
+!skills/**/*.txt
 db/sci/
 data/
 output/

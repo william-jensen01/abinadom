@@ -31,7 +31,7 @@ curl -f https://mcp.yourdomain.com/health
 ```json
 {
   "mcpServers": {
-    "lds-scripture-index": {
+    "abinadom": {
       "url": "https://mcp.yourdomain.com/mcp"
     }
   }

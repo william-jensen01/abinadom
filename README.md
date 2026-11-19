@@ -13,6 +13,18 @@ An MCP (Model Context Protocol) server that exposes the BYU Scripture Citation I
 - **`find_by_scripture`** — Find which talks cite a given scripture by book (required), chapter, and verses. No embedding required.
 - **`corpus_stats`** — Aggregate counts across a collection, optionally grouped by a field (e.g. speaker, year).
 
+## Skills
+
+The server ships three Agent Skills from `skills/` (`gospel-research`, `study-scripture-passage`, `prepare-talk-or-lesson`). MCP clients with skills support get them from the server automatically; nothing to install.
+
+To use them in claude.ai, which loads skills by upload, make one zip per skill and upload each:
+
+```bash
+python scripts/package_skills.py dist/skills   # writes dist/skills/<name>.zip (stdlib only)
+```
+
+Then in claude.ai open Settings → Capabilities → Skills, choose Upload skill, and select each zip.
+
 ## Guides
 
 | Guide | Description |

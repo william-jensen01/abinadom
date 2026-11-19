@@ -87,3 +87,12 @@ def test_secrets_data_and_planning_are_excluded_at_any_depth():
                  "db/reports/failed_talks.json", "db/one-off-migration/other.json", "docs/topics.json", "db/topics.json",
                  "scripts/__pycache__/build.cpython-312.pyc", "db/one-off-migration/__pycache__/x.pyc"):
         assert _excluded(path, rules), f"{path} would be sent in the build context"
+
+
+def test_every_skill_file_is_in_the_context():
+    """The server serves skills/ from the image, so .txt and .json reference files must get through too."""
+    rules = _rules()
+    for needed in ("skills/gospel-research/SKILL.md", "skills/study-scripture-passage/references/jst.md",
+                   "skills/x/references/list.txt", "skills/x/references/table.json"):
+        assert not _excluded(needed, rules), f"{needed} must be in the build context"
+    assert _excluded("skills/x/__pycache__/a.pyc", rules)

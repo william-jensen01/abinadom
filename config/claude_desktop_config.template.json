@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "lds-scripture-index": {
+    "abinadom": {
       "command": "C:\\Users\\wbjen\\.virtualenvs\\LDS_MCP-4gXzNxfn\\Scripts\\python.exe",
       "args": [
         "C:\\Users\\wbjen\\OneDrive\\Documents\\LDS MCP\\server.py"
