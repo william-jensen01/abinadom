@@ -25,7 +25,7 @@ CHURCH_JSON = ["talk_metadata.json", "talk_previews.json", "conference_topics.js
 # Scripts of the Docker deploy path, plus fetch.py, process_topics.py and the db helper: all must start in the image.
 RUNNABLE = ["build.py", "fetch.py", "fetch_scriptures.py", "build_scriptures.py", "run_pipeline.py",
             "run_scripture_pipeline.py", "verify_weaviate_pipeline.py", "verify_weaviate_scripture.py",
-            "field_coverage.py", "process_topics.py", "db_schema_extractor.py", "verify_chromadb_pipeline.py"]
+            "field_coverage.py", "process_topics.py", "db_schema_extractor.py"]
 NEVER = re.compile(r"(\.db|\.db-shm|\.db-wal|\.sqlite)$|^\.env$|(^|/)\.env$|^data/|^db/sci/|^\.git/|^\.goal/")
 NOT_IN_SERVER = re.compile(r"^(scripts|db/one-off-migration|api|process_topic_talks|tests|docs|data|benchmark|"
                            r"\.planning|tasks|output)/|\.json$")
@@ -81,11 +81,13 @@ def test_no_data_or_secrets_in_any_stage(target, stages):
 
 def test_tools_stage_has_scripts_and_church_json(stages):
     files = _rel(stages["tools"])
-    want = {f"scripts/{p.name}" for p in (CODE_DIR / "scripts").glob("*.py")}
+    # verify_chromadb_pipeline.py stays out: chromadb is a dev package, so the script could not start in the image
+    want = {f"scripts/{p.name}" for p in (CODE_DIR / "scripts").glob("*.py")} - {"scripts/verify_chromadb_pipeline.py"}
     want |= {f"db/one-off-migration/{p.name}" for p in (CODE_DIR / "db" / "one-off-migration").glob("*.py")}
     want |= {f"db/one-off-migration/{j}" for j in CHURCH_JSON} | {"db/scripture_schema.sql", "server.py"}
     missing = sorted(want - files)
     assert not missing, f"tools stage misses {missing[:15]}"
+    assert "scripts/verify_chromadb_pipeline.py" not in files, "the tools image has no chromadb for this script"
 
 
 @pytest.fixture(scope="module")
