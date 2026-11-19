@@ -28,7 +28,7 @@ RUNNABLE = ["build.py", "fetch.py", "fetch_scriptures.py", "build_scriptures.py"
             "field_coverage.py", "process_topics.py", "db_schema_extractor.py"]
 NEVER = re.compile(r"(\.db|\.db-shm|\.db-wal|\.sqlite)$|^\.env$|(^|/)\.env$|^data/|^db/sci/|^\.git/|^\.goal/")
 NOT_IN_SERVER = re.compile(r"^(scripts|db/one-off-migration|api|process_topic_talks|tests|docs|data|benchmark|"
-                           r"\.planning|tasks|output)/|\.json$")
+                           r"\.planning|tasks|output)/|^(?!skills/).*\.json$")
 
 
 # Files a deploy machine may hold that this checkout does not (infra/.env on the hosted server, finished dbs,
@@ -71,6 +71,25 @@ def test_server_stage_is_lean(stages):
     assert "server.py" in files and "db/__init__.py" in files and "db/scripture.py" in files, "server stage misses server code"
     extra = sorted(f for f in files if NOT_IN_SERVER.search(f))
     assert not extra, f"server stage carries tool or data files: {extra[:10]}"
+
+
+def test_server_stage_carries_every_skill_file(stages):
+    files = _rel(stages["server"])
+    repo = {p.relative_to(CODE_DIR).as_posix() for p in (CODE_DIR / "skills").rglob("*")
+            if p.is_file() and "__pycache__" not in p.parts}
+    assert repo, "skills/ holds no files"
+    missing = sorted(repo - files)
+    assert not missing, f"server stage misses skill files: {missing}"
+
+
+def test_skill_json_and_txt_reach_the_lean_server_stage():
+    """Reference files a skill adds later (.json, .txt) pass .dockerignore and are not flagged as tool or data files."""
+    rules = ignore_rules()
+    extra = {"skills/x/references/table.json", "skills/x/references/list.txt"}
+    assert not any(excluded(p, rules) for p in extra), "skill .json/.txt files would be dropped from the context"
+    files = _rel(stage_filesystems(ctx=context_files() | extra)["server"])
+    assert extra <= {f"skills/{p[len('skills/'):]}" for p in files if p.startswith("skills/")}
+    assert not sorted(f for f in files if NOT_IN_SERVER.search(f)), "a skill file trips the lean server check"
 
 
 @pytest.mark.parametrize("target", ["server", "tools"])

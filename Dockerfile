@@ -13,6 +13,8 @@ COPY server.py ./
 COPY config/*.py ./config/
 COPY tools/*.py ./tools/
 COPY db/__init__.py db/scripture.py ./db/
+# The Agent Skills the server hands to clients, read from skills/ next to server.py.
+COPY skills/ ./skills/
 
 EXPOSE 7363
 
