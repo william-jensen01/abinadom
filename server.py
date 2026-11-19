@@ -781,18 +781,25 @@ def _build_scripture_filter(
     chapter: int | None,
     verse_start: int | None,
     verse_end: int | None,
+    resolver=None,
 ):
     """
     Build a combined Weaviate Filter for scripture citation lookup.
 
-    Stored `book` values are assumed title-case (best-effort; casing must match
-    what the pipeline loader writes — e.g. "Romans", "1 Nephi").
+    A citation's `book` is core.db's FullName ("Sections" for the D&C, "First Nephi", "The Epistle to the Romans")
+    and its `book_id` is core.db's BookID. When `resolver` (scripture.db's BookResolver) knows the book ("D&C",
+    "1 Ne.", "romans"), the filter matches its core book id. Otherwise (no scripture.db, a JST name, or a book the
+    resolver lacks such as "Old Testament") `book` is title-cased and matched as written.
     chapter and verse range are ANDed when provided.
     Verse overlap: citation [vs, ve] overlaps query [qs, qe] when vs <= qe AND ve >= qs.
     """
-    # book always required; normalize input to title-case to match stored values
-    normalized_book = _normalize_book(book)
-    f = Filter.by_property("book").equal(normalized_book)
+    found = resolver.resolve(book) if resolver is not None else None
+    # A JST name keeps the name match: core.db has no separate JST books, so the book id would match every citation.
+    core_book_id = found[0].get("core_book_id") if found and not found[1] else None
+    if core_book_id is not None:
+        f = Filter.by_property("book_id").equal(int(core_book_id))
+    else:
+        f = Filter.by_property("book").equal(_normalize_book(book))
 
     if chapter is not None:
         f = f & Filter.by_property("chapter").equal(chapter)
@@ -823,8 +830,8 @@ async def find_by_scripture(
     embedding server is unavailable or down.
 
     Args:
-        book: Scripture book name (required). Case-insensitive; e.g. "romans",
-            "1 nephi", "D&C". Stored values are assumed title-case.
+        book: Book name or abbreviation (required), as for get_verse ("Romans", "1 Ne.", "D&C").
+            Without scripture.db, or for a name it does not know, the name is matched as core.db spells it.
         chapter: Optional chapter number to narrow results.
         verse_start: Optional starting verse. When combined with verse_end, finds
             citations whose verse range overlaps [verse_start, verse_end].
@@ -837,7 +844,8 @@ async def find_by_scripture(
     citations_col = app.client.collections.use(WEAVIATE_COLLECTION_NAMES["citations"])
     talks_col = app.client.collections.use(WEAVIATE_COLLECTION_NAMES["talks"])
 
-    scripture_filter = _build_scripture_filter(book, chapter, verse_start, verse_end)
+    resolver = app.scripture.resolver if app.scripture is not None else None
+    scripture_filter = _build_scripture_filter(book, chapter, verse_start, verse_end, resolver)
 
     # Pure filter query — no vector / no embedding call
     citation_result = citations_col.query.fetch_objects(

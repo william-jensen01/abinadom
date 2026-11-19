@@ -1561,6 +1561,44 @@ class TestFindByScripture:
         assert _normalize_book("1 nephi") == "1 Nephi"
         assert _normalize_book("  john  ") == "John"
 
+    @staticmethod
+    def _filter_leaves(f):
+        """[(property, value)] of a Weaviate filter's leaves."""
+        if getattr(f, "filters", None):
+            return [leaf for sub in f.filters for leaf in TestFindByScripture._filter_leaves(sub)]
+        return [(f.target, f.value)]
+
+    def _book_leaves(self, book, store):
+        """The book_id / book leaves of the citations filter find_by_scripture sends for `book`."""
+        from server import find_by_scripture
+
+        ctx, citations_col, _ = self._make_ctx([], [])
+        ctx.lifespan_context["app"].scripture = store
+        asyncio.run(find_by_scripture(book=book, chapter=3, ctx=ctx))
+        leaves = self._filter_leaves(citations_col.query.fetch_objects.call_args.kwargs["filters"])
+        return [leaf for leaf in leaves if leaf[0] in ("book", "book_id")]
+
+    def test_abbreviations_match_core_book_id(self, built_db):
+        """#25: citations store core.db's FullName ("Sections", "First Nephi"), so "D&C" and "1 Ne." resolve
+        through scripture.db to core.db's book id (302, 205) and filter on book_id."""
+        from db.scripture import open_scripture_db
+        from tools.scripture_tools import ScriptureStore
+
+        store = ScriptureStore.open(open_scripture_db(str(built_db)))
+        assert self._book_leaves("D&C", store) == [("book_id", 302)]
+        assert self._book_leaves("1 Ne.", store) == [("book_id", 205)]
+        assert self._book_leaves("first nephi", store) == [("book_id", 205)]
+
+    def test_unresolved_books_match_the_name_as_written(self, built_db):
+        """No scripture.db, a book the resolver lacks, or a JST name: the title-cased name is matched as before."""
+        from db.scripture import open_scripture_db
+        from tools.scripture_tools import ScriptureStore
+
+        store = ScriptureStore.open(open_scripture_db(str(built_db)))
+        assert self._book_leaves("old testament", store) == [("book", "Old Testament")]
+        assert self._book_leaves("JST Genesis", store) == [("book", "Jst Genesis")]
+        assert self._book_leaves("D&C", None) == [("book", "D&c")]
+
     def test_result_has_exactly_six_fields(self):
         """Each result item has exactly the 6 expected public fields."""
         from server import find_by_scripture
