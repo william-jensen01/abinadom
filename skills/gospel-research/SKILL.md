@@ -54,9 +54,7 @@ study-scripture-passage skill; for helping someone prepare their own talk or les
 
 Traps that the descriptions do not spell out:
 
-- `find_by_scripture` compares the book with the stored full name, so an abbreviation such as "1 Ne." misses the
-  citations stored as "1 Nephi". It returns
-  one row per citation, so a talk citing the verse twice shows twice, in no particular order, with no `total` and
+- `find_by_scripture` returns one row per citation, so a talk citing the verse twice shows twice, in no particular order, with no `total` and
   no paging. It reads only conference talks. Its rows carry `speaker_name` and `context_window`; `get_citing_talks`
   rows carry neither, so pair them: `get_citing_talks` for the complete list, then `get_talk` (whose header names the
   speaker) for the ones that matter. `get_citing_talks` also lists talks outside General Conference; `get_talk` opens
