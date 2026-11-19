@@ -101,7 +101,7 @@ cites exactly their verse).
    situation), quoting the talk with speaker, title, month and year. Then compare it with what the verse said in
    step 2, and note where the talk goes beyond the text.
 
-To see the citing sentence across several talks at once, with speakers, `find_by_scripture` gives one row per
+To see the words around the citation across several talks at once, with speakers, `find_by_scripture` gives one row per
 citation with `speaker_name` and `context_window`. Pass the book's full name ("Alma", "1 Nephi"; abbreviations
 miss), expect at most `limit` rows in no set order, and for the Doctrine and Covenants use the route above: it may
 find nothing there.

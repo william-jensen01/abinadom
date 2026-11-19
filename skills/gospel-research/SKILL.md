@@ -6,7 +6,8 @@ description: How to research General Conference talks and the standard works wit
 # Gospel research
 
 The server holds the General Conference talks since 1942 and the standard works (verses, chapter summaries,
-footnotes, the JST). Every answer about what a talk or a scripture says starts from a tool call.
+footnotes, the JST); talk text is conference only, though `get_citing_talks` also lists titled talks from
+outside conference. Every answer about what a talk or a scripture says starts from a tool call.
 
 ## Ground rules
 
@@ -42,7 +43,7 @@ study-scripture-passage skill; for helping someone prepare their own talk or les
 |---|---|---|
 | Wording or an idea inside talks | `search` on `paragraphs` | `collection="talks"`: a talk is indexed by its title, preview and topics, never its text, and before about 1971 by its title alone |
 | Every talk by a speaker, or how many | `search(query="", speaker="...", collection="talks", sort_by="date_asc")`: `total` is the exact count, `offset` pages | `corpus_stats`, which has no filters |
-| Who cited a verse, with the sentence around the citation | `find_by_scripture` | |
+| Who cited a verse, with the words around the citation | `find_by_scripture` | |
 | Every talk citing a verse, with a count | `get_citing_talks` | `find_by_scripture`, which stops at `limit` hits |
 | The scriptures one talk uses, in order | `get_talk_citations` | |
 | A talk's full text | `get_talk` | |

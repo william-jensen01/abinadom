@@ -63,7 +63,7 @@ conference passages, each with its citation and one line on why it fits. Then as
 - **Scriptures on the idea:** `search(query="<the message in a sentence>", collection="scripture_verses")`; for
   wording they half-remember, `alpha=0.0`; for a chapter about the theme, `collection="scripture_chapters"`. The
   page fills whether or not a row is on point, so read each verse and keep the ones that fit. Read a verse in context
-  with `get_verse` (the verses around it, its footnotes) before offering it.
+  with `get_verse` (pass a range around it; it returns its footnotes) before offering it.
 - **Talk passages:** search `paragraphs` with the message as a sentence and `group_by_talk=true`, so one talk does
   not fill the page. A paragraph's snippet is the whole paragraph, so it can be quoted as returned. Before you say how
   a speaker used it, open the talk with `get_talk`: the paragraph may quote someone else or set up a view the
@@ -76,7 +76,8 @@ conference passages, each with its citation and one line on why it fits. Then as
 - **A key word:** when the message turns on one word (grace, meek, endure), a word study shows how the scriptures use
   it: see [references/word-study.md](references/word-study.md).
 
-This server holds conference talks and the standard works only: no hymns, lesson manuals, Come, Follow Me, or
+This server holds conference talk text and the standard works only (`get_citing_talks` may list other titled talks,
+but `get_talk` opens conference talks only): no hymns, lesson manuals, Come, Follow Me, or
 Topical Guide and Bible Dictionary text. Say so when the user asks for one, rather than supplying it from memory.
 
 ### 5. The outline
