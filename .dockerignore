@@ -29,5 +29,7 @@ tasks/
 docs/
 tests/
 benchmark/
+# chromadb is a dev package, not in the image, so its script would not start there
+scripts/verify_chromadb_pipeline.py
 **/.env
 **/.env.*

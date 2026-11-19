@@ -10,7 +10,7 @@ requests-cache = "*"
 html5lib = "*"
 weaviate-client = "==4.20.5"
 tqdm = "*"
-fastmcp = "==3.2.4"
+fastmcp = ">=4.2,<5"
 psutil = "*"
 
 [dev-packages]
