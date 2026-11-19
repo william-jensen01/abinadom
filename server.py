@@ -57,10 +57,12 @@ import sys
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from pathlib import Path
 
 import weaviate
 import requests as http_requests
 from fastmcp import FastMCP, Context
+from fastmcp.skills.provider import SkillsDirectoryProvider
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from weaviate.classes.query import Filter, MetadataQuery, GroupBy, Sort
@@ -398,6 +400,10 @@ async def _lifespan(server: FastMCP):
 
 
 mcp = FastMCP("lds-scripture-index", instructions=MCP_INSTRUCTIONS, auth=_auth, lifespan=_lifespan)
+
+# Agent Skills live in skills/ next to this file, so the path holds from any cwd and in the image.
+SKILLS_DIR = Path(__file__).resolve().parent / "skills"
+mcp.add_provider(SkillsDirectoryProvider(SKILLS_DIR))
 
 @mcp.custom_route("/health", methods=["GET"])
 async def health_handler(request: Request) -> JSONResponse:
