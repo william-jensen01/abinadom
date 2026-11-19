@@ -1947,3 +1947,12 @@ class TestGetTalkCitations:
         with patch("server.get_embedding_function") as mock_gef:
             asyncio.run(get_talk_citations(talk_id="talk_8820", ctx=ctx))
             mock_gef.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Server name: the name the MCP server is created with
+# ---------------------------------------------------------------------------
+
+def test_server_reports_name_abinadom():
+    import server
+    assert server.mcp.name == "abinadom"

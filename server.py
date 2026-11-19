@@ -378,7 +378,7 @@ async def _lifespan(server: FastMCP):
             app_ctx.client.close()
 
 
-mcp = FastMCP("lds-scripture-index", instructions=MCP_INSTRUCTIONS, auth=_auth, lifespan=_lifespan)
+mcp = FastMCP("abinadom", instructions=MCP_INSTRUCTIONS, auth=_auth, lifespan=_lifespan)
 
 # Agent Skills live in skills/ next to this file, so the path holds from any cwd and in the image.
 SKILLS_DIR = Path(__file__).resolve().parent / "skills"
