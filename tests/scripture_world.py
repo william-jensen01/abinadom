@@ -1,8 +1,9 @@
 """Shared harness for the scripture tests: a fake Church API, in-process CLI runs, and real-store guards.
 
 Fixture tests never touch the network: requests' HTTPAdapter.send is patched to serve the recorded Church API
-pages in tests/fixtures/scriptures/. Tests of the real store (db/scripture.db) and of anything that needs the
-user-built db/core.<version>.db skip when those files are missing or empty.
+pages in tests/fixtures/scriptures/. Tests of the real dbs (scripture.db, core.<version>.db, content.<version>.db) read
+them from the checkout's db/, or from SCI_TEST_DB_DIR when it is set, and fail when they are missing or empty;
+SCI_TEST_SKIP_REAL_DB=1 skips them instead.
 """
 import contextlib
 import hashlib
@@ -26,10 +27,12 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 API_DIR = Path(__file__).parent / "fixtures" / "scriptures"
-FULL_DB = ROOT / "db" / "scripture.db"
-
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+from db import DB_DIR  # noqa: E402  (tests/conftest.py points it at SCI_TEST_DB_DIR, when set)
+
+FULL_DB = Path(DB_DIR) / "scripture.db"
 
 API_HOST = "www.churchofjesuschrist.org"
 CONTENT_PATH = "/study/api/v3/language-pages/type/content"
@@ -202,19 +205,30 @@ def q1(db: Path, sql: str, params=()):
 
 
 # ---------------------------------------------------------------------------
-# core.db (read only through db.Database) and the real store: skip when absent
+# The real dbs (core, content, scripture.db): fail when missing or empty, skip only on SCI_TEST_SKIP_REAL_DB=1
 # ---------------------------------------------------------------------------
 
-def _present(p: Path) -> bool:
-    return p.exists() and p.stat().st_size > 0
+def need_real_db(p, what):
+    """The real db at p, for a test that reads it. A missing or 0-byte db fails the test: it means a broken
+    environment, not a reason to skip. SCI_TEST_SKIP_REAL_DB=1 skips every real-db test on purpose."""
+    p = Path(p)
+    if os.environ.get("SCI_TEST_SKIP_REAL_DB") == "1":
+        pytest.skip("real-db test skipped (SCI_TEST_SKIP_REAL_DB=1)")
+    if not p.exists():
+        pytest.fail(f"{what} not found at {p}", pytrace=False)
+    if p.stat().st_size == 0:
+        pytest.fail(f"{what} at {p} is empty", pytrace=False)
+    return p
 
 
 def need_core_db():
     from db import CORE_DB_PATH
-    p = Path(CORE_DB_PATH)
-    if not _present(p):
-        pytest.skip(f"{p} is missing or empty (build it with `pipenv run python scripts/build.py --version 55`)")
-    return p
+    return need_real_db(CORE_DB_PATH, "core db")
+
+
+def need_content_db():
+    from db import CONTENT_DB_PATH
+    return need_real_db(CONTENT_DB_PATH, "content db")
 
 
 def core_scalar(sql: str, params=()):
@@ -230,9 +244,7 @@ def core_select(sql: str, params=()):
 
 
 def need_full_db():
-    if not _present(FULL_DB):
-        pytest.skip(f"{FULL_DB} is missing or empty (the real Church API store; run scripts/fetch_scriptures.py)")
-    return FULL_DB
+    return need_real_db(FULL_DB, "scripture db")
 
 
 # ---------------------------------------------------------------------------

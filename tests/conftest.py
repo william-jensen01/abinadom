@@ -19,6 +19,14 @@ from urllib.parse import urlparse
 
 sys.path.append(str(Path(__file__).parent.parent))
 
+# SCI_TEST_DB_DIR is the deliberate, test-only way to run the real-db tests against dbs kept elsewhere (a git
+# worktree has no db/*.db). `db` computes its paths from it once, here; SCI_DB_DIR is dropped again right after,
+# so scripts and subprocesses that read it themselves never default to that (real) directory.
+if os.environ.get("SCI_TEST_DB_DIR"):
+    os.environ["SCI_DB_DIR"] = os.environ["SCI_TEST_DB_DIR"]
+    import db  # noqa: E402,F401
+    os.environ.pop("SCI_DB_DIR")
+
 import pytest
 from models.talk_metadata import TalkMetadata
 from models.paragraph_data import ParagraphData, TalkParagraphs
