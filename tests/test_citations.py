@@ -732,15 +732,14 @@ class TestValidation:
 
 
 class TestIntegration:
-    """Integration tests using the real core.52.db database."""
+    """Integration tests using the real core and content dbs."""
 
     @pytest.fixture(autouse=True)
     def check_db(self):
-        """Skip integration tests if DB is not accessible."""
-        try:
-            core_db.select("SELECT 1")
-        except Exception:
-            pytest.skip("core.52.db not accessible")
+        """Fail when the real dbs are missing or empty."""
+        from tests.scripture_world import need_core_db, need_content_db
+        need_core_db()
+        need_content_db()
 
     def test_fetch_all_books(self):
         book_cache = fetch_all_books(core_db)
@@ -768,18 +767,11 @@ class TestIntegration:
         )
         from db import content_db
 
-        # Try to fetch talk HTML; skip if not available
-        try:
-            html = fetch_talk_html(content_db, 1059)
-        except Exception:
-            pytest.skip("Talk HTML not available for talk 1059")
-
-        if not html:
-            pytest.skip("Talk 1059 HTML is empty")
+        html = fetch_talk_html(content_db, 1059)
+        assert html, "talk 1059 has no HTML in the content db"
 
         talk_paragraphs = extract_paragraphs(1059, html, PARAGRAPH_CONFIG)
-        if not talk_paragraphs.extraction_success:
-            pytest.skip("Paragraph extraction failed for talk 1059")
+        assert talk_paragraphs.extraction_success, "paragraph extraction failed for talk 1059"
 
         book_cache = fetch_all_books(core_db)
         talk_citations, warnings = process_talk_citations(
@@ -807,17 +799,11 @@ class TestIntegration:
             "SELECT ID FROM talk WHERE ID NOT IN "
             "(SELECT DISTINCT TalkID FROM citation) LIMIT 1"
         )
-        if not zero_talk_rows:
-            pytest.skip("No zero-citation talks found in DB")
+        assert zero_talk_rows, "no zero-citation talk in the core db"
 
         talk_id = zero_talk_rows[0]["ID"]
-        try:
-            html = fetch_talk_html(content_db, talk_id)
-        except Exception:
-            pytest.skip(f"HTML not available for talk {talk_id}")
-
-        if not html:
-            pytest.skip(f"Talk {talk_id} HTML is empty")
+        html = fetch_talk_html(content_db, talk_id)
+        assert html, f"talk {talk_id} has no HTML in the content db"
 
         talk_paragraphs = extract_paragraphs(talk_id, html, PARAGRAPH_CONFIG)
         book_cache = fetch_all_books(core_db)
@@ -835,13 +821,8 @@ class TestIntegration:
         )
         from db import content_db
 
-        try:
-            html = fetch_talk_html(content_db, 1059)
-        except Exception:
-            pytest.skip("Talk HTML not available for talk 1059")
-
-        if not html:
-            pytest.skip("Talk 1059 HTML is empty")
+        html = fetch_talk_html(content_db, 1059)
+        assert html, "talk 1059 has no HTML in the content db"
 
         talk_paragraphs = extract_paragraphs(1059, html, PARAGRAPH_CONFIG)
         book_cache = fetch_all_books(core_db)

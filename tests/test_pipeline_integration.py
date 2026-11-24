@@ -1,10 +1,9 @@
 """
 Integration tests: Full pipeline end-to-end (metadata through validation) over 5 real talks.
 
-Validates phase-to-phase data contracts at every boundary. Tests skip
-gracefully when DB files are not present.
+Validates phase-to-phase data contracts at every boundary. Tests fail when
+the real core or content db is missing or empty.
 """
-import os
 import sys
 import pytest
 from pathlib import Path
@@ -15,12 +14,7 @@ from db import Database, CORE_DB_PATH, CONTENT_DB_PATH
 from extractors.pipeline import process_talk_pipeline, TalkPipelineResult
 from extractors.validation import validate_talk
 
-# Skip the entire module when DB files are not present
-DB_AVAILABLE = os.path.exists(CORE_DB_PATH) and os.path.exists(CONTENT_DB_PATH)
-pytestmark = pytest.mark.skipif(
-    not DB_AVAILABLE,
-    reason="DB files not present (core.52.db / content.52.db)",
-)
+from tests.scripture_world import need_core_db, need_content_db
 
 # =============================================================================
 # Hardcoded talk IDs (D-02 — researched from actual DB)
@@ -42,11 +36,13 @@ INTEGRATION_TALK_IDS = [
 
 @pytest.fixture(scope="module")
 def core_db():
+    need_core_db()
     return Database(CORE_DB_PATH)
 
 
 @pytest.fixture(scope="module")
 def content_db():
+    need_content_db()
     return Database(CONTENT_DB_PATH)
 
 

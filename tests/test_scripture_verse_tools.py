@@ -183,11 +183,10 @@ def test_server_chapter_overview(loaded):
 
 @pytest.fixture(scope="module")
 def real_store():
-    """The real built store, opened read-only by the tools; skipped when missing or not built."""
+    """The real built store, opened read-only by the tools; fails when missing, empty or not built."""
     need_full_db()
     db = open_scripture_db(str(FULL_DB))
-    if db is None:
-        pytest.skip(f"{FULL_DB} is not a built scripture store")
+    assert db is not None, f"{FULL_DB} is not a built scripture store"
     return ScriptureStore.open(db)
 
 

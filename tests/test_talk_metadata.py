@@ -429,35 +429,26 @@ class TestEdgeCases(unittest.TestCase):
 
 
 class TestTalkMetadataDDL(unittest.TestCase):
-    """Validate talk_metadata table DDL in core.52.db."""
+    """Validate the talk_metadata table DDL in the real core db (opened read-only)."""
 
-    @classmethod
-    def setUpClass(cls):
-        try:
-            from db import CORE_DB_PATH
-            cls.db_path = CORE_DB_PATH
-            cls.db_available = True
-        except Exception:
-            cls.db_available = False
+    def setUp(self):
+        from tests.scripture_world import need_core_db
+        self.db_path = need_core_db()
 
     def test_talk_metadata_table_exists(self):
-        """talk_metadata table should exist in core.52.db after DDL runs."""
-        if not self.db_available:
-            self.skipTest("Database not available")
-        conn = sqlite3.connect(self.db_path)
+        """talk_metadata table should exist in the core db after DDL runs."""
+        conn = sqlite3.connect(self.db_path.resolve().as_uri() + "?mode=ro", uri=True)
         try:
             result = conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='talk_metadata'"
             ).fetchone()
-            self.assertIsNotNone(result, "talk_metadata table does not exist in core.52.db")
+            self.assertIsNotNone(result, "talk_metadata table does not exist in the core db")
         finally:
             conn.close()
 
     def test_talk_metadata_has_expected_columns(self):
         """talk_metadata should have 7 columns: talk_id, speaker_role_id, uri_l, uri_gc, kicker, talk_preview, data_aid."""
-        if not self.db_available:
-            self.skipTest("Database not available")
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path.resolve().as_uri() + "?mode=ro", uri=True)
         try:
             rows = conn.execute("PRAGMA table_info(talk_metadata)").fetchall()
             col_names = [row[1] for row in rows]
@@ -469,9 +460,7 @@ class TestTalkMetadataDDL(unittest.TestCase):
 
     def test_talk_metadata_has_indexes(self):
         """talk_metadata should have indexes on data_aid and uri_gc."""
-        if not self.db_available:
-            self.skipTest("Database not available")
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path.resolve().as_uri() + "?mode=ro", uri=True)
         try:
             rows = conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='talk_metadata'"
@@ -600,40 +589,34 @@ class TestTopicTablesUnchanged(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Load DB counts and the expected counts from the JSON once for the class."""
-        try:
-            import json
-            import os
-            import sys
-            from db import Database, CORE_DB_PATH
-            migration_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "db", "one-off-migration")
-            sys.path.insert(0, migration_dir)
-            from create_talk_metadata_table import find_talk_by_uri, load_talk_uri_index
+        from tests.scripture_world import need_core_db
+        need_core_db()
+        import json
+        import os
+        import sys
+        from db import Database, CORE_DB_PATH
+        migration_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "db", "one-off-migration")
+        sys.path.insert(0, migration_dir)
+        from create_talk_metadata_table import find_talk_by_uri, load_talk_uri_index
 
-            db = Database(CORE_DB_PATH)
-            cls.conference_topic_count = db.scalar("SELECT COUNT(*) FROM conference_topic")
-            cls.talk_topic_count = db.scalar("SELECT COUNT(*) FROM talk_topic")
-            with open(os.path.join(migration_dir, "conference_topics.json"), encoding="utf-8") as f:
-                topics = json.load(f)
-            index = load_talk_uri_index(db)
-            cls.expected_topics = len(topics)
-            cls.expected_links = sum(
-                len({e["uri"] for e in t["entries"] if find_talk_by_uri(index, e["uri"])})
-                for t in topics
-            )
-            cls.db_available = True
-        except Exception:
-            cls.db_available = False
+        db = Database(CORE_DB_PATH)
+        cls.conference_topic_count = db.scalar("SELECT COUNT(*) FROM conference_topic")
+        cls.talk_topic_count = db.scalar("SELECT COUNT(*) FROM talk_topic")
+        with open(os.path.join(migration_dir, "conference_topics.json"), encoding="utf-8") as f:
+            topics = json.load(f)
+        index = load_talk_uri_index(db)
+        cls.expected_topics = len(topics)
+        cls.expected_links = sum(
+            len({e["uri"] for e in t["entries"] if find_talk_by_uri(index, e["uri"])})
+            for t in topics
+        )
 
     def test_conference_topic_count_unchanged(self):
         """One conference_topic row per topic in conference_topics.json."""
-        if not self.db_available:
-            self.skipTest("Database not available")
         self.assertEqual(self.conference_topic_count, self.expected_topics)
 
     def test_talk_topic_count_unchanged(self):
         """One talk_topic row per topic entry whose URI resolves to an SCI talk."""
-        if not self.db_available:
-            self.skipTest("Database not available")
         self.assertGreater(self.talk_topic_count, 0)
         self.assertEqual(self.talk_topic_count, self.expected_links)
 

@@ -26,8 +26,7 @@ BUILD_ID = "SELECT value FROM build_meta WHERE key='build_id'"
 
 @pytest.fixture(scope="module")
 def db(full_store):
-    if not q1(full_store, BUILD_ID):
-        pytest.skip("db/scripture.db has not been built (build_scriptures.py)")
+    assert q1(full_store, BUILD_ID), "the real scripture.db has not been built (build_scriptures.py)"
     return full_store
 
 

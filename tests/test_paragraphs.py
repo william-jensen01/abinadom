@@ -807,31 +807,25 @@ class TestRealDataIntegration:
     """Test extraction on real talk data."""
 
     def test_extract_real_talk(self):
-        """Test extraction on a real talk from database.
-
-        Regression: BUG-12 — no skip guard when database file absent in test environment.
-        """
-        import os
-        if not os.path.exists(content_db.path):
-            pytest.skip("Database not available in this environment")
-        # Test on talk ID 1
+        """Test extraction on a real talk from the content db."""
+        from tests.scripture_world import need_content_db
+        need_content_db()
         html = fetch_talk_html(content_db, 1)
+        assert html, "talk 1 has no HTML in the content db"
+        result = extract_paragraphs(1, html, PARAGRAPH_CONFIG)
 
-        if html:  # Only test if we have data
-            result = extract_paragraphs(1, html, PARAGRAPH_CONFIG)
+        # Basic sanity checks
+        assert result.talk_id == 1
+        assert result.total_paragraphs >= 0
+        assert result.total_words >= 0
 
-            # Basic sanity checks
-            assert result.talk_id == 1
-            assert result.total_paragraphs >= 0
-            assert result.total_words >= 0
+        # If extraction succeeded, verify structure
+        if result.extraction_success:
+            assert len(result.paragraphs) == result.total_paragraphs
 
-            # If extraction succeeded, verify structure
-            if result.extraction_success:
-                assert len(result.paragraphs) == result.total_paragraphs
-
-                # Check paragraph numbering is sequential
-                numbers = [p.paragraph_number for p in result.paragraphs]
-                assert numbers == list(range(1, result.total_paragraphs + 1))
+            # Check paragraph numbering is sequential
+            numbers = [p.paragraph_number for p in result.paragraphs]
+            assert numbers == list(range(1, result.total_paragraphs + 1))
 
 
 # =============================================================================
